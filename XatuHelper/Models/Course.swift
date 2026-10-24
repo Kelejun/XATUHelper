@@ -217,7 +217,11 @@ extension String {
     }
 
     func firstMatch(_ pattern: String) -> String? {
-        regexGroups(pattern).first?.first
+        if let group = regexGroups(pattern).first?.first, !group.isEmpty {
+            return group
+        }
+        // 没写括号的正则也认，返回整段匹配
+        return range(of: pattern, options: .regularExpression).map { String(self[$0]) }
     }
 
     var strippingTags: String {

@@ -115,7 +115,7 @@ struct PayService {
 
     /// 从换票页里把 "jzcas/casLogin/学号/1" 这种真正的登录地址抠出来
     static func jzcasURL(from html: String) -> URL? {
-        guard let path = html.firstMatch(#"jzcas/casLogin/[0-9]+/[0-9]+"#) else { return nil }
+        guard let path = html.firstMatch(#"jzcas/casLogin/([0-9]+/[0-9]+)"#) else { return nil }
         return URL(string: "https://jfpay.xatu.edu.cn/api/pay/web/" + path)
     }
 
