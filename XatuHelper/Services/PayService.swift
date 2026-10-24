@@ -81,15 +81,29 @@ struct PayService {
 
         // 拿到票之后平台会给一个跳 js 的页面，里面写着真正的换票地址
         if token() == nil, let jump = Self.jzcasURL(from: html) {
-            let (jumpData, jumpResponse) = try await Net.session.data(from: jump)
-            let jumpHTML = String(data: jumpData, encoding: .utf8) ?? ""
+            do {
+                let (jumpData, jumpResponse) = try await Net.session.data(from: jump)
+                let jumpHTML = String(data: jumpData, encoding: .utf8) ?? ""
+                Self.lastLogin = (Self.lastLogin ?? "") + """
+
+                换票：GET \(jump.absoluteString)
+                → \(jumpResponse.url?.absoluteString ?? "?")
+                status：\((jumpResponse as? HTTPURLResponse)?.statusCode ?? 0)
+                cookie 里 token：\(token() == nil ? "没有" : "有")
+                cookie 名：\(HTTPCookieStorage.shared.cookies?.filter { $0.domain.contains("xatu") }.map(\.name).joined(separator: ",") ?? "-")
+                内容开头：\(jumpHTML.prefix(400))
+                """
+            } catch {
+                Self.lastLogin = (Self.lastLogin ?? "") + """
+
+                换票：GET \(jump.absoluteString)
+                请求本身失败：\(Net.describe(error))
+                """
+            }
+        } else if token() == nil {
             Self.lastLogin = (Self.lastLogin ?? "") + """
 
-            换票：GET \(jump.absoluteString)
-            → \(jumpResponse.url?.absoluteString ?? "?")
-            status：\((jumpResponse as? HTTPURLResponse)?.statusCode ?? 0)
-            cookie 里 token：\(token() == nil ? "没有" : "有")
-            内容开头：\(jumpHTML.prefix(400))
+            没在页面里找到 jzcas 换票地址
             """
         }
 
