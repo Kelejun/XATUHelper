@@ -192,7 +192,9 @@ struct PayService {
         return options(data, idKey: "roomid", nameKey: "roomname")
     }
 
-    /// 剩余电费（元），接口字段叫 oddl
+    /// 剩余电费（元）
+    /// 平台前端有两种口径：多数项目直接显示 oddl，但部分项目显示 suml - oddl。
+    /// 实测本校：oddl=9183.18 是累计已用电金额，suml=9237.05 是累计充值，差 53.87 才是余额。
     func balance(projectID: String, dorm: DormSelection) async throws -> String {
         let data = try await post("pay/web/payEleCostController/querySydl", [
             "projectId": projectID,
@@ -203,10 +205,28 @@ struct PayService {
         guard let first = Self.array(data).first else {
             throw AppError.loginFailed("余额接口没数据（\(Self.preview(data))）")
         }
-        guard let value = text(first["oddl"]) else {
-            throw AppError.loginFailed("余额字段对不上（\(Self.preview(first))）")
+        let oddl = Self.number(first["oddl"])
+        let suml = Self.number(first["suml"])
+        if let oddl, let suml {
+            return Self.format(suml - oddl)
         }
-        return value
+        if let oddl {
+            return Self.format(oddl)
+        }
+        throw AppError.loginFailed("余额字段对不上（\(Self.preview(first))）")
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        case let s as String: return Double(s.trimmingCharacters(in: .whitespaces))
+        default: return nil
+        }
+    }
+
+    private static func format(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 
     // MARK: - 底层
