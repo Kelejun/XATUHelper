@@ -18,7 +18,7 @@ enum AppError: LocalizedError {
         case .parseFailed:
             return "页面结构和预期不一样，可能学校又改版了"
         case .needCaptcha:
-            return "这次登录需要验证码，请在浏览器里登录一次再回来"
+            return "这次登录要验证码或者手机动态码，跟着弹出来的网页登一次就好"
         case .sessionExpired:
             return "登录已过期，请重新登录"
         case .loginFailed(let message):
@@ -74,13 +74,20 @@ enum Net {
 
 /// 金智 CAS 统一身份认证
 struct CASService {
-    private let loginPage = "https://authserver.xatu.edu.cn/authserver/login"
-    private let service = "http://jwgl2018.xatu.edu.cn/eams/homeExt.action"
+    private static let loginPage = "https://authserver.xatu.edu.cn/authserver/login"
+    private static let service = "http://jwgl2018.xatu.edu.cn/eams/homeExt.action"
+
+    /// 网页兜底登录用的地址，和 API 登录走同一个 service
+    static func loginURL() -> URL {
+        var components = URLComponents(string: loginPage)
+        components?.queryItems = [URLQueryItem(name: "service", value: service)]
+        return components?.url ?? URL(string: loginPage)!
+    }
 
     /// 用学号密码登录，成功后 cookie 落在共享存储里，jwgl2018 那边就能用了。
     func login(username: String, password: String) async throws {
-        guard var components = URLComponents(string: loginPage) else { throw AppError.badURL }
-        components.queryItems = [URLQueryItem(name: "service", value: service)]
+        guard var components = URLComponents(string: Self.loginPage) else { throw AppError.badURL }
+        components.queryItems = [URLQueryItem(name: "service", value: Self.service)]
         guard let url = components.url else { throw AppError.badURL }
 
         let (pageData, pageResponse) = try await fetch(url)
@@ -91,6 +98,11 @@ struct CASService {
         let landedHost = pageResponse.url?.host ?? ""
         if !landedHost.contains("authserver"), !html.contains("pwdEncryptSalt") {
             return
+        }
+
+        // captchaSwitch = "1" 表示这次一定要填验证码，纯 API 过不去，直接交给网页
+        if html.firstMatch(#"var\s+captchaSwitch\s*=\s*"([^"]*)""#) == "1" {
+            throw AppError.needCaptcha
         }
 
         guard let salt = html.firstMatch(#"id="pwdEncryptSalt"[^>]*value="([^"]*)""#),
@@ -122,7 +134,7 @@ struct CASService {
         let finalHTML = String(data: responseData, encoding: .utf8) ?? ""
 
         if finalHost.contains("authserver") || finalHTML.contains("id=\"pwdEncryptSalt\"") {
-            if finalHTML.contains("captcha") && finalHTML.contains("验证码") {
+            if finalHTML.contains("验证码") || finalHTML.contains("动态码") || finalHTML.contains("dynamicCode") {
                 throw AppError.needCaptcha
             }
             throw AppError.loginFailed(errorMessage(from: finalHTML))

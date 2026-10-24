@@ -60,6 +60,16 @@ struct LoginView: View {
                     }
                 }
 
+                Section {
+                    Button("需要验证码？用网页登录") {
+                        focused = nil
+                        app.showsWebLogin = true
+                    }
+                    .disabled(app.isLoading)
+                } footer: {
+                    Text("网页里可以输验证码，也可以用手机动态码。")
+                }
+
             }
             .navigationTitle("XATU Helper")
             .navigationBarTitleDisplayMode(.large)
@@ -74,6 +84,9 @@ struct LoginView: View {
             }
             .sheet(isPresented: $showAbout) {
                 AboutSheet()
+            }
+            .sheet(isPresented: $app.showsWebLogin) {
+                CASWebLoginSheet()
             }
         }
         .onAppear {

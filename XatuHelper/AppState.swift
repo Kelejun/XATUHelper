@@ -21,6 +21,8 @@ final class AppState: ObservableObject {
     @Published var kind: TableKind = .student
 
     @Published var weekOneMonday: Date = AppState.fallStart
+    /// 需要验证码/动态码时弹出网页登录
+    @Published var showsWebLogin = false
 
     /// 2026-09-07 是第 1 周周一
     static let fallStart: Date = {
@@ -35,6 +37,8 @@ final class AppState: ObservableObject {
     private var classTableID: String?
     private var semesterTagID = "semesterCalendar_target"
     private var projectID = ""
+    /// 登录页填的账号密码，网页兜底登录成功后存进 Keychain
+    private var pendingCredentials: (student: String, password: String)?
 
     private let store = TimetableStore()
     private let cas = CASService()
@@ -139,6 +143,7 @@ final class AppState: ObservableObject {
     func login(student: String, password: String) async {
         isLoading = true
         errorMessage = nil
+        pendingCredentials = (student, password)
         do {
             try await cas.login(username: student, password: password)
             Keychain.savePassword(password, account: student)
@@ -148,6 +153,33 @@ final class AppState: ObservableObject {
             selectedSemesterID = currentSemesterID
             await calibrateFromServer()
             try await loadTable()
+            isLoggedIn = true
+            pendingCredentials = nil
+        } catch {
+            handle(error)
+        }
+        isLoading = false
+    }
+
+    /// 网页登录成功后，cookie 已经落进共享存储，这里把该拉的都拉一遍
+    func completeWebLogin() async {
+        showsWebLogin = false
+        isLoading = true
+        errorMessage = nil
+        do {
+            try await bootstrap()
+            if selectedSemesterID.isEmpty {
+                selectedSemesterID = currentSemesterID
+            }
+            await calibrateFromServer()
+            try await loadTable()
+
+            if let credentials = pendingCredentials {
+                Keychain.savePassword(credentials.password, account: credentials.student)
+                Preferences.studentID = credentials.student
+                studentID = credentials.student
+                pendingCredentials = nil
+            }
             isLoggedIn = true
         } catch {
             handle(error)
@@ -353,6 +385,12 @@ final class AppState: ObservableObject {
 
     private func handle(_ error: Error) {
         if let appError = error as? AppError {
+            if case .needCaptcha = appError {
+                // 这种错不该在界面上干挂着，直接开网页
+                errorMessage = nil
+                showsWebLogin = true
+                return
+            }
             errorMessage = appError.errorDescription
             switch appError {
             case .sessionExpired, .reloginFailed:
