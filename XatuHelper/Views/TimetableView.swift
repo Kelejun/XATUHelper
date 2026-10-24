@@ -246,7 +246,7 @@ struct TimetableView: View {
                 if app.occurrences.isEmpty {
                     await app.refresh()
                 } else if let fetchedAt = app.fetchedAt,
-                          Date().timeIntervalSince(fetchedAt) > 6 * 3600 {
+                          Date().timeIntervalSince(fetchedAt) > 144 * 3600 {
                     await app.refresh()
                 }
             }
