@@ -20,6 +20,15 @@ struct TimetableView: View {
         return weeks.min() ?? 1
     }
 
+    /// 左右滑动切前后周，边界卡在 1...30
+    private func stepWeek(_ delta: Int) {
+        let target = min(max(week + delta, 1), 30)
+        guard target != week else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selectedWeek = target
+        }
+    }
+
     private var blocks: [CourseBlock] {
         app.occurrences(in: week).courseBlocks()
     }
@@ -121,6 +130,19 @@ struct TimetableView: View {
                     monday: mondayDate,
                     showWeekend: !hideWeekend,
                     onSelect: { detail = $0 }
+                )
+                .gesture(
+                    DragGesture(minimumDistance: 30)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            guard abs(dx) > abs(dy) else { return }
+                            if dx < -60 {
+                                stepWeek(1)
+                            } else if dx > 60 {
+                                stepWeek(-1)
+                            }
+                        }
                 )
                 .overlay {
                     if app.isLoading && blocks.isEmpty {
