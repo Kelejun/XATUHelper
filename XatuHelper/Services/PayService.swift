@@ -79,10 +79,30 @@ struct PayService {
         内容开头：\(html.prefix(3000))
         """
 
+        // 拿到票之后平台会给一个跳 js 的页面，里面写着真正的换票地址
+        if token() == nil, let jump = Self.jzcasURL(from: html) {
+            let (jumpData, jumpResponse) = try await Net.session.data(from: jump)
+            let jumpHTML = String(data: jumpData, encoding: .utf8) ?? ""
+            Self.lastLogin = (Self.lastLogin ?? "") + """
+
+            换票：GET \(jump.absoluteString)
+            → \(jumpResponse.url?.absoluteString ?? "?")
+            status：\((jumpResponse as? HTTPURLResponse)?.statusCode ?? 0)
+            cookie 里 token：\(token() == nil ? "没有" : "有")
+            内容开头：\(jumpHTML.prefix(400))
+            """
+        }
+
         // 没抠到 token 就当这次登录不算数，交给上层重新过一遍 CAS 再试
         if token() == nil {
             throw AppError.sessionExpired
         }
+    }
+
+    /// 从换票页里把 "jzcas/casLogin/学号/1" 这种真正的登录地址抠出来
+    static func jzcasURL(from html: String) -> URL? {
+        guard let path = html.firstMatch(#"jzcas/casLogin/[0-9]+/[0-9]+"#) else { return nil }
+        return URL(string: "https://jfpay.xatu.edu.cn/api/pay/web/" + path)
     }
 
     /// 把 token 写进 cookie，后面的请求才能带 X-Token
