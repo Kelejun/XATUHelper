@@ -3,16 +3,15 @@ import UIKit
 
 struct TimetableView: View {
     @EnvironmentObject var app: AppState
-    @State private var selectedWeek = 0
     @State private var showSettings = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
-    /// 拖动时三页整体横向位移，松手后归零
-    @State private var dragOffset: CGFloat = 0
+    /// 横向翻页停在第几周，绑定 ScrollView 的 scrollPosition
+    @State private var visibleWeek: Int?
 
     /// 0 表示"跟着今天走"。非当前学期没有"本周"，落到这学期第一门有课的周。
     private var week: Int {
-        if selectedWeek != 0 { return selectedWeek }
+        if let visibleWeek { return visibleWeek }
         return app.isCurrentSemester ? app.currentWeek : firstWeekWithCourses
     }
 
@@ -63,8 +62,8 @@ struct TimetableView: View {
             ?? candidates.min { $0.id < $1.id }
         guard let target, target.id != app.selectedSemesterID else { return }
         Task {
-            selectedWeek = 0
             await app.selectSemester(target.id)
+            jump(to: week, animated: false)
         }
     }
 
@@ -73,8 +72,8 @@ struct TimetableView: View {
             ?? app.semesters.first { $0.termName == term }
         guard let target, target.id != app.selectedSemesterID else { return }
         Task {
-            selectedWeek = 0
             await app.selectSemester(target.id)
+            jump(to: week, animated: false)
         }
     }
 
@@ -98,67 +97,39 @@ struct TimetableView: View {
             set: { on in
                 guard on, kind != app.kind else { return }
                 Task {
-                    selectedWeek = 0
                     await app.selectKind(kind)
+                    jump(to: week, animated: false)
                 }
             }
         )
     }
 
-    // MARK: - 跟着手指滑动的周视图
+    // MARK: - 周视图翻页
 
-    /// 前后周并排摆着，拖动时整块跟着手指走，松手再滑到位
-    private func pager(width: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            weekPage(week - 1, width: width)
-            weekPage(week, width: width)
-            weekPage(week + 1, width: width)
+    /// 系统的分页滚动：手势、惯性、边缘回弹都交给 ScrollView 自己管
+    private func pager(width: CGFloat, height: CGFloat) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 0) {
+                ForEach(Self.weekRange, id: \.self) { target in
+                    weekPage(target, width: width)
+                        .frame(width: width, height: height)
+                        .id(target)
+                }
+            }
+            .scrollTargetLayout()
         }
-        .frame(width: width * 3, alignment: .leading)
-        .offset(x: -width + dragOffset)
-        .frame(width: width, alignment: .leading)
-        .clipped()
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 10)
-                .onChanged { value in
-                    let dx = value.translation.width
-                    guard abs(dx) > abs(value.translation.height) else { return }
-                    dragOffset = rubberBand(dx)
-                }
-                .onEnded { value in
-                    let dx = value.translation.width
-                    guard abs(dx) > abs(value.translation.height) else {
-                        settle(to: 0, week: nil)
-                        return
-                    }
-                    if dx < -width * 0.25, week < Self.weekRange.upperBound {
-                        settle(to: -width, week: week + 1)
-                    } else if dx > width * 0.25, week > Self.weekRange.lowerBound {
-                        settle(to: width, week: week - 1)
-                    } else {
-                        settle(to: 0, week: nil)
-                    }
-                }
-        )
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: $visibleWeek)
+        .scrollIndicators(.hidden)
     }
 
-    /// 到头了给一点阻尼，别让页面整块飞出去
-    private func rubberBand(_ dx: CGFloat) -> CGFloat {
-        if week <= Self.weekRange.lowerBound && dx > 0 { return dx / 3 }
-        if week >= Self.weekRange.upperBound && dx < 0 { return dx / 3 }
-        return dx
-    }
-
-    /// 滑到目标位置再换周，两件事同一帧完成，看不出跳
-    private func settle(to offset: CGFloat, week target: Int?) {
-        withAnimation(.easeOut(duration: 0.22)) {
-            dragOffset = offset
-        } completion: {
-            if let target {
-                selectedWeek = target
-            }
-            dragOffset = 0
+    /// 点箭头、选周次时滚过去；不传动画就走系统的定位
+    private func jump(to target: Int, animated: Bool = true) {
+        let clamped = min(max(target, Self.weekRange.lowerBound), Self.weekRange.upperBound)
+        if animated {
+            withAnimation(.easeInOut(duration: 0.25)) { visibleWeek = clamped }
+        } else {
+            visibleWeek = clamped
         }
     }
 
@@ -190,6 +161,7 @@ struct TimetableView: View {
         }
     }
 
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -205,8 +177,11 @@ struct TimetableView: View {
                 }
 
                 GeometryReader { proxy in
-                    pager(width: proxy.size.width)
+                    pager(width: proxy.size.width, height: proxy.size.height)
                 }
+            }
+            .onAppear {
+                if visibleWeek == nil { visibleWeek = week }
             }
             .navigationTitle(app.semesterName)
             .navigationBarTitleDisplayMode(.inline)
@@ -246,8 +221,8 @@ struct TimetableView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task {
-                            selectedWeek = 0
                             await app.refresh()
+                            jump(to: week, animated: false)
                         }
                     } label: {
                         if app.isLoading {
@@ -281,20 +256,20 @@ struct TimetableView: View {
     private var weekBar: some View {
         HStack(spacing: 4) {
             Button {
-                selectedWeek = max(1, week - 1)
+                jump(to: week - 1)
             } label: {
                 Image(systemName: "chevron.left")
                     .frame(width: 40, height: 32)
             }
             .buttonStyle(.borderless)
-            .disabled(week <= 1)
+            .disabled(week <= Self.weekRange.lowerBound)
 
             Menu {
-                ForEach(1...26, id: \.self) { value in
+                ForEach(Self.weekRange, id: \.self) { value in
                     Toggle("第 \(value) 周", isOn: Binding(
                         get: { value == week },
                         set: { on in
-                            if on, value != week { selectedWeek = value }
+                            if on, value != week { jump(to: value) }
                         }
                     ))
                 }
@@ -309,23 +284,25 @@ struct TimetableView: View {
             }
 
             Button {
-                selectedWeek = min(26, week + 1)
+                jump(to: week + 1)
             } label: {
                 Image(systemName: "chevron.right")
                     .frame(width: 40, height: 32)
             }
             .buttonStyle(.borderless)
-            .disabled(week >= 26)
+            .disabled(week >= Self.weekRange.upperBound)
 
             Spacer()
 
-            if app.isCurrentSemester, selectedWeek != 0 {
-                Button("回到本周") { selectedWeek = 0 }
+            if app.isCurrentSemester, week != app.currentWeek {
+                Button("回到本周") { jump(to: app.currentWeek) }
                     .font(.footnote)
             } else if !app.isCurrentSemester {
                 Button("回到现在") {
-                    selectedWeek = 0
-                    Task { await app.selectSemester(app.currentSemesterID) }
+                    Task {
+                        await app.selectSemester(app.currentSemesterID)
+                        jump(to: app.currentWeek, animated: false)
+                    }
                 }
                 .font(.footnote)
             }
@@ -376,12 +353,14 @@ struct SettingsSheet: View {
     @State private var draftWeek = 1
     @AppStorage("hideWeekend") private var hideWeekend = false
 
+    private static let weekRange = 1...30
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Picker("现在实际是第几周", selection: $draftWeek) {
-                        ForEach(1...26, id: \.self) { value in
+                        ForEach(Self.weekRange, id: \.self) { value in
                             Text("第 \(value) 周").tag(value)
                         }
                     }
