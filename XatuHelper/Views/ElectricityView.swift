@@ -115,6 +115,12 @@ struct DormPickerView: View {
                 Section {
                     Text(error).font(.footnote).foregroundStyle(.red)
                     Button("重试") { Task { await loadSchools() } }
+                    Button("复制电费诊断数据") {
+                        UIPasteboard.general.string = [
+                            PayService.lastRaw ?? "(没有接口返回)",
+                            PayService.lastError ?? "(没有错误记录)"
+                        ].joined(separator: "\n\n")
+                    }
                 }
             }
 

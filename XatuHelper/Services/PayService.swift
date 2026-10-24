@@ -9,6 +9,8 @@ struct PayService {
 
     /// 出错时留一份原始响应，方便设置页复制
     static var lastError: String?
+    /// 最近一次请求的原始返回，诊断用
+    static var lastRaw: String?
 
     // MARK: - 会话
 
@@ -39,7 +41,10 @@ struct PayService {
     /// 找出"电费"这个收费项目
     func electricProjects() async throws -> [PayProject] {
         let data = try await request(path: "pay/project/getAllProjectList", method: "GET", body: nil)
-        guard let list = data as? [[String: Any]] else { throw AppError.parseFailed }
+        let list = Self.array(data)
+        guard !list.isEmpty else {
+            throw AppError.loginFailed("项目列表是空的（\(Self.preview(data))）")
+        }
 
         return list.compactMap { dict -> PayProject? in
             guard let model = text(dict["proModelUrl"]),
@@ -78,8 +83,12 @@ struct PayService {
             "buildid": dorm.buildID,
             "roomid": dorm.roomID
         ])
-        guard let first = (data as? [[String: Any]])?.first else { throw AppError.parseFailed }
-        guard let value = text(first["oddl"]) else { throw AppError.parseFailed }
+        guard let first = Self.array(data).first else {
+            throw AppError.loginFailed("余额接口没数据（\(Self.preview(data))）")
+        }
+        guard let value = text(first["oddl"]) else {
+            throw AppError.loginFailed("余额字段对不上（\(Self.preview(first))）")
+        }
         return value
     }
 
@@ -105,13 +114,14 @@ struct PayService {
         let (data, response) = try await Net.session.data(for: request)
         let host = response.url?.host ?? ""
         let raw = String(data: data, encoding: .utf8) ?? ""
+        Self.lastRaw = "\(method) \(path)\n→ \(raw.prefix(1500))"
         if host.contains("authserver") || raw.contains("pwdEncryptSalt") {
             throw AppError.sessionExpired
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             Self.lastError = "\(path) 返回的不是 JSON：\(raw.prefix(500))"
-            throw AppError.parseFailed
+            throw AppError.loginFailed("返回的不是 JSON（\(raw.prefix(80))）")
         }
 
         let code = text(json["messageCode"]) ?? ""
@@ -129,8 +139,31 @@ struct PayService {
         }
     }
 
+    /// 后端有的接口直接给数组，有的包一层对象，两种都认
+    static func array(_ data: Any) -> [[String: Any]] {
+        if let list = data as? [[String: Any]] { return list }
+        if let dict = data as? [String: Any] {
+            for value in dict.values {
+                if let list = value as? [[String: Any]] { return list }
+            }
+            return [dict]
+        }
+        return []
+    }
+
+    static func preview(_ value: Any) -> String {
+        let text: String
+        if let data = try? JSONSerialization.data(withJSONObject: value),
+           let json = String(data: data, encoding: .utf8) {
+            text = json
+        } else {
+            text = String(describing: value)
+        }
+        return String(text.prefix(120))
+    }
+
     private func options(_ data: Any, idKey: String, nameKey: String) -> [DormOption] {
-        guard let list = data as? [[String: Any]] else { return [] }
+        let list = Self.array(data)
         var seen = Set<String>()
         var result: [DormOption] = []
         for dict in list {
