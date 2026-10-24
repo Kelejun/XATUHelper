@@ -18,7 +18,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if app.isLoggedIn {
-                TimetableView()
+                MainTabView()
             } else {
                 LoginView()
             }
