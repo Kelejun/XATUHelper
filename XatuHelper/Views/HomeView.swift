@@ -25,20 +25,32 @@ struct HomeView: View {
 
     // MARK: - 今天的课
 
+    /// 0 点到 5 点还挂在昨天：课表继续显示前一天那张卡片
+    private var isLateNight: Bool {
+        Calendar.current.component(.hour, from: now) < 5
+    }
+
+    /// 卡片按哪一天算。深夜时回退一天，看的是刚过去那天
+    private var baseDate: Date {
+        guard isLateNight else { return now }
+        return Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
+    }
+
     /// 周一 = 1 … 周日 = 7
-    private var todayWeekday: Int { isoWeekday(of: now) }
+    private var todayWeekday: Int { isoWeekday(of: baseDate) }
 
     private var todayBlocks: [CourseBlock] {
         guard app.isCurrentSemester else { return [] }
-        return app.occurrences(in: app.currentWeek)
+        return app.occurrences(in: app.week(of: baseDate))
             .filter { $0.day == todayWeekday }
             .courseBlocks()
             .sorted { $0.startPeriod < $1.startPeriod }
     }
 
-    /// 这会儿正在上的课
+    /// 这会儿正在上的课（深夜不算，那天已经过完了）
     private var currentBlock: CourseBlock? {
-        todayBlocks.first {
+        guard !isLateNight else { return nil }
+        return todayBlocks.first {
             PeriodSchedule.startMinutes($0.startPeriod) <= nowMinutes
                 && nowMinutes < PeriodSchedule.endMinutes($0.endPeriod)
         }
@@ -46,7 +58,8 @@ struct HomeView: View {
 
     /// 还没开始的课
     private var remainingToday: [CourseBlock] {
-        todayBlocks.filter { PeriodSchedule.startMinutes($0.startPeriod) > nowMinutes }
+        guard !isLateNight else { return [] }
+        return todayBlocks.filter { PeriodSchedule.startMinutes($0.startPeriod) > nowMinutes }
     }
 
     /// 今天没有正在上的、也没有剩下的，就翻到明天
@@ -102,8 +115,9 @@ struct HomeView: View {
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
-    /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课
+    /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课 / 深夜回看前一天
     private var cardTitle: String {
+        if isLateNight { return "今天上了这些课：" }
         if showingTomorrow {
             return tomorrowBlocks.isEmpty ? "明天没有课，好好休息下吧" : "今天没课了，明天要上这些课："
         }
@@ -118,12 +132,17 @@ struct HomeView: View {
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
-                Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
+                Text(showingTomorrow && !isLateNight ? tomorrowWeekdayLabel : todayWeekdayLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            if showingTomorrow {
+            if isLateNight {
+                ForEach(todayBlocks) { row($0) }
+                Text("早点睡吧，已经很晚了")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if showingTomorrow {
                 if !tomorrowBlocks.isEmpty {
                     ForEach(tomorrowBlocks) { row($0) }
                 }
