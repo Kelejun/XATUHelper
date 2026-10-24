@@ -117,6 +117,7 @@ struct DormPickerView: View {
                     Button("重试") { Task { await loadSchools() } }
                     Button("复制电费诊断数据") {
                         UIPasteboard.general.string = [
+                            PayService.lastLogin ?? "(没有登录记录)",
                             PayService.lastRaw ?? "(没有接口返回)",
                             PayService.lastError ?? "(没有错误记录)"
                         ].joined(separator: "\n\n")

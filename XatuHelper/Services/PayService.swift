@@ -13,6 +13,8 @@ struct PayService {
     static var lastRaw: String?
     /// CAS 回来带的 idserial，后面有的接口可能要用
     static var idserial: String?
+    /// 登录这一跳的现场，出问题时打出来
+    static var lastLogin: String?
 
     // MARK: - 会话
 
@@ -32,8 +34,10 @@ struct PayService {
             throw AppError.sessionExpired
         }
 
+        var tokenInURL: String?
         if let finalURL = response.url,
            let items = URLComponents(url: finalURL, resolvingAgainstBaseURL: false)?.queryItems {
+            tokenInURL = items.first(where: { $0.name == "token" })?.value
             if let token = items.first(where: { $0.name == "token" })?.value, !token.isEmpty {
                 storeToken(token)
             }
@@ -41,6 +45,15 @@ struct PayService {
                 Self.idserial = serial
             }
         }
+
+        Self.lastLogin = """
+        GET \(url.absoluteString)
+        → \(response.url?.absoluteString ?? "?")
+        URL 里带 token：\(tokenInURL.map { "有（\($0.prefix(8))…）" } ?? "没有")
+        cookie 里 token：\(token() == nil ? "没有" : "有")
+        status：\((response as? HTTPURLResponse)?.statusCode ?? 0)
+        内容开头：\(html.prefix(160))
+        """
 
         // 没抠到 token 就当这次登录不算数，交给上层重新过一遍 CAS 再试
         if token() == nil {
