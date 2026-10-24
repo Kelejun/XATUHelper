@@ -22,7 +22,7 @@ struct MainTabView: View {
                 .tag(Tab.timetable)
 
             InfoView()
-                .tabItem { Label("学业", systemImage: "graduationcap") }
+                .tabItem { Label("校园", systemImage: "building.columns") }
                 .tag(Tab.info)
         }
         .sheet(isPresented: $app.showsWebLogin) {
