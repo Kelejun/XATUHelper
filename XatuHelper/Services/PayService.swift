@@ -1,5 +1,20 @@
 import Foundation
 
+/// 把 CAS 到 jfpay 之间的每一次 302 都记下来
+private final class RedirectTracer: NSObject, URLSessionTaskDelegate {
+    private(set) var hops: [String] = []
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        let target = request.url?.absoluteString ?? "?"
+        hops.append("\(response.statusCode) → \(target)")
+        completionHandler(request)
+    }
+}
+
 /// 缴费平台（jfpay）的只读接口。
 /// 只做查询，不碰下单，所以不用管金额和支付渠道。
 struct PayService {
@@ -27,7 +42,14 @@ struct PayService {
         components?.queryItems = [URLQueryItem(name: "service", value: Self.casService)]
         guard let url = components?.url else { throw AppError.badURL }
 
-        let (data, response) = try await Net.session.data(from: url)
+        // 自己跟一遍 302，把每一跳都记下来，出问题时能直接看到 token 是在哪一步给的
+        let tracer = RedirectTracer()
+        let config = URLSessionConfiguration.default
+        config.httpCookieStorage = HTTPCookieStorage.shared
+        config.httpShouldSetCookies = true
+        config.timeoutIntervalForRequest = 20
+        let session = URLSession(configuration: config, delegate: tracer, delegateQueue: nil)
+        let (data, response) = try await session.data(from: url)
         let host = response.url?.host ?? ""
         let html = String(data: data, encoding: .utf8) ?? ""
         if host.contains("authserver") || html.contains("pwdEncryptSalt") {
@@ -47,6 +69,8 @@ struct PayService {
         }
 
         Self.lastLogin = """
+        跳转链：
+        \(tracer.hops.isEmpty ? "（没有跳转）" : tracer.hops.joined(separator: "\n"))
         GET \(url.absoluteString)
         → \(response.url?.absoluteString ?? "?")
         URL 里带 token：\(tokenInURL.map { "有（\($0.prefix(8))…）" } ?? "没有")
