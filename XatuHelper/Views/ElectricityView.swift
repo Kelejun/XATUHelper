@@ -92,22 +92,17 @@ struct ElectricityView: View {
     }
 }
 
-/// 三级选择：校区 → 楼栋 → 房间
+/// 选宿舍：校区只有一个就自动选掉，楼栋和房间各自一页
 struct DormPickerView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
 
     @State private var schools: [DormOption] = []
     @State private var buildings: [DormOption] = []
-    @State private var rooms: [DormOption] = []
-
     @State private var area: DormOption?
-    @State private var build: DormOption?
-    @State private var room: DormOption?
 
     @State private var loading = false
     @State private var error: String?
-    @State private var search = ""
 
     var body: some View {
         List {
@@ -125,78 +120,40 @@ struct DormPickerView: View {
                 }
             }
 
-            Section("校区") {
-                if loading && schools.isEmpty {
-                    ProgressView()
-                }
-                ForEach(schools) { option in
-                    row(option, selected: area == option) {
-                        area = option
-                        build = nil
-                        room = nil
-                        buildings = []
-                        rooms = []
-                        Task { await loadBuildings(area: option) }
-                    }
-                }
-            }
-
-            if let area {
-                Section("楼栋") {
-                    if loading && buildings.isEmpty { ProgressView() }
-                    ForEach(buildings) { option in
-                        row(option, selected: build == option) {
-                            build = option
-                            room = nil
-                            rooms = []
-                            Task { await loadRooms(area: area, build: option) }
+            if area == nil {
+                Section("校区") {
+                    if loading && schools.isEmpty { ProgressView() }
+                    ForEach(schools) { option in
+                        Button(option.name) {
+                            area = option
+                            buildings = []
+                            Task { await loadBuildings(area: option) }
                         }
                     }
                 }
-            }
-
-            if let area, let build {
-                Section("房间") {
-                    if loading && rooms.isEmpty { ProgressView() }
-                    ForEach(filteredRooms) { option in
-                        row(option, selected: room == option) {
-                            room = option
+            } else {
+                Section("楼栋") {
+                    if loading && buildings.isEmpty {
+                        ProgressView()
+                    }
+                    ForEach(buildings) { option in
+                        NavigationLink(option.name) {
+                            RoomPickerPage(area: area!, build: option) { room in
+                                save(area: area!, build: option, room: room)
+                            }
                         }
                     }
                 }
             }
         }
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜房间号")
         .navigationTitle("选择宿舍")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") { dismiss() }
             }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") { save() }
-                    .disabled(room == nil)
-            }
         }
         .task { await loadSchools() }
-    }
-
-    private var filteredRooms: [DormOption] {
-        let keyword = search.trimmingCharacters(in: .whitespaces)
-        guard !keyword.isEmpty else { return rooms }
-        return rooms.filter { $0.name.localizedCaseInsensitiveContains(keyword) }
-    }
-
-    private func row(_ option: DormOption, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(option.name).foregroundStyle(.primary)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark").foregroundStyle(.tint)
-                }
-            }
-        }
     }
 
     private func loadSchools() async {
@@ -204,9 +161,10 @@ struct DormPickerView: View {
         error = nil
         do {
             schools = try await app.loadSchools()
-            if let first = schools.first, area == nil {
-                area = first
-                await loadBuildings(area: first)
+            // 只有一个校区就直接选掉，别让用户多点一步
+            if schools.count == 1, let only = schools.first {
+                area = only
+                await loadBuildings(area: only)
             }
         } catch {
             self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
@@ -224,18 +182,7 @@ struct DormPickerView: View {
         loading = false
     }
 
-    private func loadRooms(area: DormOption, build: DormOption) async {
-        loading = true
-        do {
-            rooms = try await app.loadRooms(areaID: area.id, buildID: build.id)
-        } catch {
-            self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
-        }
-        loading = false
-    }
-
-    private func save() {
-        guard let area, let build, let room else { return }
+    private func save(area: DormOption, build: DormOption, room: DormOption) {
         let selection = DormSelection(
             areaID: area.id,
             areaName: area.name,
@@ -249,8 +196,59 @@ struct DormPickerView: View {
     }
 }
 
-#Preview {
-    NavigationStack {
-        ElectricityView().environmentObject(AppState())
+/// 房间列表，选中就直接存
+private struct RoomPickerPage: View {
+    @EnvironmentObject var app: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    let area: DormOption
+    let build: DormOption
+    let onPick: (DormOption) -> Void
+
+    @State private var rooms: [DormOption] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var search = ""
+
+    private var filtered: [DormOption] {
+        let keyword = search.trimmingCharacters(in: .whitespaces)
+        guard !keyword.isEmpty else { return rooms }
+        return rooms.filter { $0.name.localizedCaseInsensitiveContains(keyword) }
+    }
+
+    var body: some View {
+        List {
+            if let error {
+                Section {
+                    Text(error).font(.footnote).foregroundStyle(.red)
+                    Button("重试") { Task { await load() } }
+                }
+            }
+            if loading && rooms.isEmpty {
+                Section { ProgressView() }
+            }
+            ForEach(filtered) { option in
+                Button {
+                    onPick(option)
+                    dismiss()
+                } label: {
+                    Text(option.name).foregroundStyle(.primary)
+                }
+            }
+        }
+        .navigationTitle(build.name)
+        .searchable(text: $search, prompt: "搜房间号")
+        .task { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        error = nil
+        do {
+            rooms = try await app.loadRooms(areaID: area.id, buildID: build.id)
+        } catch {
+            self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
+        loading = false
     }
 }
