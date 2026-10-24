@@ -394,7 +394,9 @@ final class AppState: ObservableObject {
             let project = try await self.electricProjectOrLoad()
             value = try await operation(project)
         }
-        guard let result = value else { throw AppError.parseFailed }
+        guard let result = value else {
+            throw AppError.loginFailed(PayService.lastError ?? "缴费平台没返回数据")
+        }
         return result
     }
 

@@ -119,9 +119,15 @@ struct PayService {
             throw AppError.sessionExpired
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else {
             Self.lastError = "\(path) 返回的不是 JSON：\(raw.prefix(500))"
             throw AppError.loginFailed("返回的不是 JSON（\(raw.prefix(80))）")
+        }
+        // 有的接口外层包一层 {messageCode,message,data}，有的直接甩数组
+        if let array = object as? [[String: Any]] { return array }
+        guard let json = object as? [String: Any] else {
+            Self.lastError = "\(path) 返回结构不认识：\(raw.prefix(500))"
+            throw AppError.loginFailed("返回结构不认识（\(raw.prefix(80))）")
         }
 
         let code = text(json["messageCode"]) ?? ""
