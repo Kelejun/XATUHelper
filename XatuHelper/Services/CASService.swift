@@ -134,10 +134,12 @@ struct CASService {
         let finalHTML = String(data: responseData, encoding: .utf8) ?? ""
 
         if finalHost.contains("authserver") || finalHTML.contains("id=\"pwdEncryptSalt\"") {
-            if finalHTML.contains("验证码") || finalHTML.contains("动态码") || finalHTML.contains("dynamicCode") {
+            // 登录失败回到的页面本身就带验证码/动态码字样，只能看错误提示里说了什么
+            let message = errorMessage(from: finalHTML)
+            if message.contains("验证码") || message.contains("动态码") {
                 throw AppError.needCaptcha
             }
-            throw AppError.loginFailed(errorMessage(from: finalHTML))
+            throw AppError.loginFailed(message)
         }
     }
 
