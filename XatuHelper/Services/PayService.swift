@@ -76,7 +76,7 @@ struct PayService {
         URL 里带 token：\(tokenInURL.map { "有（\($0.prefix(8))…）" } ?? "没有")
         cookie 里 token：\(token() == nil ? "没有" : "有")
         status：\((response as? HTTPURLResponse)?.statusCode ?? 0)
-        内容开头：\(html.prefix(160))
+        内容开头：\(html.prefix(3000))
         """
 
         // 没抠到 token 就当这次登录不算数，交给上层重新过一遍 CAS 再试
