@@ -25,6 +25,9 @@ struct MainTabView: View {
                 .tabItem { Label("校园", systemImage: "building.columns") }
                 .tag(Tab.info)
         }
+        .task {
+            await app.refreshElectricityIfNeeded()
+        }
         .sheet(isPresented: $app.showsWebLogin) {
             CASWebLoginSheet()
         }

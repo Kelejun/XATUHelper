@@ -20,6 +20,13 @@ final class AppState: ObservableObject {
     /// 学生课表 / 班级课表
     @Published var kind: TableKind = .student
 
+    /// 电费：选好的宿舍 + 上次查到的余额
+    @Published var dorm: DormSelection?
+    @Published var electricityBalance: String?
+    @Published var electricityCheckedAt: Date?
+    @Published var electricityLoading = false
+    @Published var electricityError: String?
+
     @Published var weekOneMonday: Date = AppState.fallStart
     /// 需要验证码/动态码时弹出网页登录
     @Published var showsWebLogin = false
@@ -43,9 +50,12 @@ final class AppState: ObservableObject {
     private let store = TimetableStore()
     private let cas = CASService()
     private let eams = EamsService()
+    private let pay = PayService()
+    private var electricProject: PayProject?
 
     init() {
         studentID = Preferences.studentID ?? ""
+        dorm = Preferences.dorm
         if let snapshot = store.load() {
             occurrences = snapshot.occurrences
             unitCount = snapshot.unitCount
@@ -315,6 +325,87 @@ final class AppState: ObservableObject {
         } catch {
             throw AppError.network(Net.describe(error))
         }
+    }
+
+    // MARK: - 电费
+
+    /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做
+    func refreshElectricityIfNeeded() async {
+        guard dorm != nil, electricityBalance == nil else { return }
+        await refreshElectricity()
+    }
+
+    func refreshElectricity() async {
+        guard let dorm, !electricityLoading else { return }
+        electricityLoading = true
+        electricityError = nil
+        do {
+            let balance = try await withPay { project -> String in
+                try await self.pay.balance(projectID: project.id, dorm: dorm)
+            }
+            electricityBalance = balance
+            electricityCheckedAt = Date()
+        } catch {
+            electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
+        electricityLoading = false
+    }
+
+    /// 余额低于十块就当快没电了，用橙色提醒一下
+    var isLowBalance: Bool {
+        guard let text = electricityBalance else { return false }
+        let cleaned = text.replacingOccurrences(of: "¥", with: "").trimmingCharacters(in: .whitespaces)
+        return (Double(cleaned) ?? .infinity) < 10
+    }
+
+    func saveDorm(_ selection: DormSelection) async {
+        dorm = selection
+        Preferences.dorm = selection
+        electricityBalance = nil
+        electricityCheckedAt = nil
+        await refreshElectricity()
+    }
+
+    func clearDorm() {
+        dorm = nil
+        Preferences.dorm = nil
+        electricityBalance = nil
+        electricityCheckedAt = nil
+        electricityError = nil
+    }
+
+    func loadSchools() async throws -> [DormOption] {
+        try await withPay { try await self.pay.schools(projectID: $0.id) }
+    }
+
+    func loadBuildings(areaID: String) async throws -> [DormOption] {
+        try await withPay { try await self.pay.buildings(projectID: $0.id, areaID: areaID) }
+    }
+
+    func loadRooms(areaID: String, buildID: String) async throws -> [DormOption] {
+        try await withPay { try await self.pay.rooms(projectID: $0.id, areaID: areaID, buildID: buildID) }
+    }
+
+    /// 借统一认证的登录态进 jfpay，顺手找到电费项目；会话过期会走一次自动重登
+    private func withPay<T>(_ operation: (PayProject) async throws -> T) async throws -> T {
+        var value: T?
+        try await withRelogin {
+            try await self.pay.loginWithExistingSession()
+            let project = try await self.electricProjectOrLoad()
+            value = try await operation(project)
+        }
+        guard let result = value else { throw AppError.parseFailed }
+        return result
+    }
+
+    private func electricProjectOrLoad() async throws -> PayProject {
+        if let project = electricProject { return project }
+        let list = try await pay.electricProjects()
+        guard let first = list.first else {
+            throw AppError.loginFailed("缴费平台里没找到电费项目，可能学校还没开这个入口")
+        }
+        electricProject = first
+        return first
     }
 
     /// 冷启动后补一次外壳信息：学生/班级记录 ID、学期 tagId，顺便刷新学期列表

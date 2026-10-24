@@ -88,17 +88,29 @@ struct InfoView: View {
 
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(entries) { entry in
-                    card(entry)
+                    if entry == .bill {
+                        NavigationLink {
+                            ElectricityView()
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Button { pending = entry } label: { card(entry) }
+                            .buttonStyle(.plain)
+                    }
                 }
             }
         }
     }
 
+    private func subtitle(for entry: Entry) -> String {
+        guard entry == .bill, let balance = app.electricityBalance else { return entry.subtitle }
+        return "剩 ¥\(balance)"
+    }
+
     private func card(_ entry: Entry) -> some View {
-        Button {
-            pending = entry
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: entry.icon)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(entry.tint)
@@ -109,7 +121,7 @@ struct InfoView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text(entry.subtitle)
+                Text(subtitle(for: entry))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -120,8 +132,6 @@ struct InfoView: View {
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
     }
 }
 
