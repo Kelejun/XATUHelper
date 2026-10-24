@@ -108,6 +108,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     scheduleCard
+                    electricityCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, titleGap)
@@ -117,6 +118,7 @@ struct HomeView: View {
             .navigationTitle(greeting)
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+        .task { await app.refreshElectricityIfNeeded() }
     }
 
     /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课
@@ -162,6 +164,64 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(.secondarySystemGroupedBackground))
         )
+    }
+
+    /// 电费卡片：余额低于 10 元变黄
+    private var electricityCard: some View {
+        NavigationLink {
+            ElectricityView()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("电费")
+                        .font(.headline)
+                    Spacer(minLength: 8)
+                    if app.electricityLoading {
+                        ProgressView().controlSize(.small)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                }
+
+                if let balance = app.electricityBalance {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("¥")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(balance)
+                            .font(.system(size: 30, weight: .semibold, design: .rounded))
+                            .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
+                    }
+                    HStack(spacing: 6) {
+                        if let dorm = app.dorm {
+                            Text(dorm.displayName)
+                        }
+                        if let checked = app.electricityCheckedAt {
+                            Text("·")
+                            Text(checked.formatted(date: .omitted, time: .shortened) + " 更新")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else if app.dorm != nil {
+                    Text(app.electricityError ?? "还没查到余额")
+                        .font(.subheadline)
+                        .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("还没选宿舍，点一下选")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func row(_ block: CourseBlock) -> some View {

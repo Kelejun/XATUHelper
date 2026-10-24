@@ -330,8 +330,14 @@ final class AppState: ObservableObject {
     // MARK: - 电费
 
     /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做
+    /// 每天第一次打开 app 才自动查一次，其余情况只靠用户手动刷新
     func refreshElectricityIfNeeded() async {
-        guard dorm != nil, electricityBalance == nil else { return }
+        guard dorm != nil else { return }
+        if let checked = electricityCheckedAt,
+           Calendar.current.isDateInToday(checked),
+           electricityBalance != nil {
+            return
+        }
         await refreshElectricity()
     }
 
