@@ -102,21 +102,29 @@ struct HomeView: View {
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
+    /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课
+    private var cardTitle: String {
+        if showingTomorrow {
+            return tomorrowBlocks.isEmpty ? "明天没有课，好好休息下吧" : "今天没课了，明天要上这些课："
+        }
+        if currentBlock != nil { return "今天还有这些课：" }
+        return remainingToday.count == todayBlocks.count ? "今天要上这些课：" : "今天还有这些课："
+    }
+
     private var scheduleCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(showingTomorrow ? "明天" : "今天")
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(cardTitle)
                     .font(.headline)
-                Spacer()
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
                 Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
             if showingTomorrow {
-                if tomorrowBlocks.isEmpty {
-                    emptyRow("明天没课")
-                } else {
+                if !tomorrowBlocks.isEmpty {
                     ForEach(tomorrowBlocks) { row($0) }
                 }
             } else {
@@ -124,11 +132,6 @@ struct HomeView: View {
                     currentRow(currentBlock)
                 }
                 ForEach(remainingToday) { row($0) }
-                if currentBlock != nil && remainingToday.isEmpty {
-                    Text("今天的课就这些了")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
         .padding(16)
@@ -185,12 +188,6 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.accentColor.opacity(0.08))
         )
-    }
-
-    private func emptyRow(_ text: String) -> some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
     }
 
     private func timeText(_ block: CourseBlock) -> String {
