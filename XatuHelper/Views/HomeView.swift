@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject var app: AppState
@@ -73,6 +74,11 @@ struct HomeView: View {
 
     private let weekdayNames = ["一", "二", "三", "四", "五", "六", "日"]
 
+    /// 标题和卡片之间留两个标题那么高（会跟着动态字体缩放）
+    private var titleGap: CGFloat {
+        UIFont.preferredFont(forTextStyle: .largeTitle).lineHeight * 2
+    }
+
     private func isoWeekday(of date: Date) -> Int {
         let weekday = Calendar.current.component(.weekday, from: date)
         return weekday == 1 ? 7 : weekday - 1
@@ -87,7 +93,7 @@ struct HomeView: View {
                     scheduleCard
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, titleGap)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .background(Color(.systemGroupedBackground))
