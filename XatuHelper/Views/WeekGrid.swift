@@ -10,6 +10,17 @@ enum PeriodSchedule {
     static func startTime(_ period: Int) -> String { value(start, period - 1) }
     static func endTime(_ period: Int) -> String { value(end, period - 1) }
 
+    /// 从零点算起的分钟数，用来判断"现在上的是哪一节"
+    static func startMinutes(_ period: Int) -> Int { minutes(startTime(period)) }
+    static func endMinutes(_ period: Int) -> Int { minutes(endTime(period)) }
+
+    private static func minutes(_ hm: String) -> Int {
+        let parts = hm.split(separator: ":")
+        guard parts.count == 2,
+              let hour = Int(parts[0]), let minute = Int(parts[1]) else { return 0 }
+        return hour * 60 + minute
+    }
+
     static func range(from: Int, to: Int) -> String {
         "\(startTime(from))-\(endTime(to))"
     }
