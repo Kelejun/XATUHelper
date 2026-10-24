@@ -89,7 +89,7 @@ struct EamsService {
             throw AppError.sessionExpired
         }
 
-        // searchTable() 里两个分支：学生走 "ids","113840"，班级走 "ids","4339"
+        // searchTable() 里两个分支：学生课表传学生记录 ID，班级课表传班级 ID，顺序固定
         let ids = html.regexGroups(#""ids"\s*,\s*"(\d+)""#).compactMap { $0.first }
         guard let studentID = ids.first else { throw AppError.parseFailed }
         let classID = ids.count > 1 ? ids[1] : nil
