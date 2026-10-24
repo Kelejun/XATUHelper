@@ -57,15 +57,11 @@ struct PayService {
         }
 
         var tokenInURL: String?
-        if let finalURL = response.url,
-           let items = URLComponents(url: finalURL, resolvingAgainstBaseURL: false)?.queryItems {
-            tokenInURL = items.first(where: { $0.name == "token" })?.value
-            if let token = items.first(where: { $0.name == "token" })?.value, !token.isEmpty {
-                storeToken(token)
-            }
-            if let serial = items.first(where: { $0.name == "idserial" })?.value, !serial.isEmpty {
-                Self.idserial = serial
-            }
+        if let finalURL = response.url?.absoluteString {
+            let parsed = Self.parseLoginURL(finalURL)
+            tokenInURL = parsed.token
+            if let token = parsed.token { storeToken(token) }
+            if let serial = parsed.serial { Self.idserial = serial }
         }
 
         Self.lastLogin = """
@@ -84,6 +80,12 @@ struct PayService {
             do {
                 let (jumpData, jumpResponse) = try await Net.session.data(from: jump)
                 let jumpHTML = String(data: jumpData, encoding: .utf8) ?? ""
+                // 换完票的 token 藏在 #/middle_page?token=… 这种片段里，query 是取不到的
+                if let jumpURL = jumpResponse.url?.absoluteString {
+                    let parsed = Self.parseLoginURL(jumpURL)
+                    if let token = parsed.token { storeToken(token) }
+                    if let serial = parsed.serial { Self.idserial = serial }
+                }
                 Self.lastLogin = (Self.lastLogin ?? "") + """
 
                 换票：GET \(jump.absoluteString)
@@ -111,6 +113,13 @@ struct PayService {
         if token() == nil {
             throw AppError.sessionExpired
         }
+    }
+
+    /// token 可能挂在 query，也可能挂在 #/middle_page?token=… 这种片段里，两种都抠
+    static func parseLoginURL(_ urlString: String) -> (token: String?, serial: String?) {
+        let token = urlString.firstMatch(#"[?#&]token=([^&#]+)"#)
+        let serial = urlString.firstMatch(#"[?#&]idserial=([^&#]+)"#)
+        return (token, serial)
     }
 
     /// 从换票页里把 "jzcas/casLogin/学号/1" 这种真正的登录地址抠出来
