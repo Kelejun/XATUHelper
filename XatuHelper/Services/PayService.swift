@@ -11,11 +11,15 @@ struct PayService {
     static var lastError: String?
     /// 最近一次请求的原始返回，诊断用
     static var lastRaw: String?
+    /// CAS 回来带的 idserial，后面有的接口可能要用
+    static var idserial: String?
 
     // MARK: - 会话
 
-    /// 借统一认证那边的登录态换一份 jfpay 的 cookie。
-    /// TGC 还活着就是一路 302 到 jfpay；过期了会停在 authserver 的登录页。
+    /// 借统一认证那边的登录态换一份 jfpay 的 token。
+    /// CAS 回来会跳到 /casLogin/?token=xxx&idserial=xxx，SPA 自己把这个 token 写进
+    /// datalook_reimbursement_token 这个 cookie，再拿它当 X-Token 发请求。
+    /// 我们不走浏览器，所以得自己把 token 从最终 URL 里抠出来存成 cookie。
     func loginWithExistingSession() async throws {
         var components = URLComponents(string: "https://authserver.xatu.edu.cn/authserver/login")
         components?.queryItems = [URLQueryItem(name: "service", value: Self.casService)]
@@ -26,6 +30,39 @@ struct PayService {
         let html = String(data: data, encoding: .utf8) ?? ""
         if host.contains("authserver") || html.contains("pwdEncryptSalt") {
             throw AppError.sessionExpired
+        }
+
+        if let finalURL = response.url,
+           let items = URLComponents(url: finalURL, resolvingAgainstBaseURL: false)?.queryItems {
+            if let token = items.first(where: { $0.name == "token" })?.value, !token.isEmpty {
+                storeToken(token)
+            }
+            if let serial = items.first(where: { $0.name == "idserial" })?.value, !serial.isEmpty {
+                Self.idserial = serial
+            }
+        }
+
+        // 没抠到 token 就当这次登录不算数，交给上层重新过一遍 CAS 再试
+        if token() == nil {
+            throw AppError.sessionExpired
+        }
+    }
+
+    /// 把 token 写进 cookie，后面的请求才能带 X-Token
+    private func storeToken(_ value: String) {
+        var properties: [HTTPCookiePropertyKey: Any] = [
+            .domain: "jfpay.xatu.edu.cn",
+            .path: "/",
+            .name: "datalook_reimbursement_token",
+            .value: value
+        ]
+        if let cookie = HTTPCookie(properties: properties) {
+            HTTPCookieStorage.shared.setCookie(cookie)
+            return
+        }
+        properties[.domain] = ".xatu.edu.cn"
+        if let cookie = HTTPCookie(properties: properties) {
+            HTTPCookieStorage.shared.setCookie(cookie)
         }
     }
 
@@ -104,6 +141,7 @@ struct PayService {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         if let token = token() {
             request.setValue(token, forHTTPHeaderField: "X-Token")
         }
@@ -119,6 +157,10 @@ struct PayService {
             throw AppError.sessionExpired
         }
 
+        if response.url?.path.contains("casLogin") == true || raw.contains("<title>错误代码") {
+            Self.lastError = "\(path) → 平台报错（疑似没拿到凭证）：\(raw.prefix(200))"
+            throw AppError.loginFailed("缴费平台说服务器错误，多半是登录凭证没拿到")
+        }
         guard let object = try? JSONSerialization.jsonObject(with: data) else {
             Self.lastError = "\(path) 返回的不是 JSON：\(raw.prefix(500))"
             throw AppError.loginFailed("返回的不是 JSON（\(raw.prefix(80))）")
