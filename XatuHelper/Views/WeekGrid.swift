@@ -42,7 +42,7 @@ struct WeekGrid: View {
     var onSelect: (CourseBlock) -> Void
 
     private let headerHeight: CGFloat = 40
-    private let minRowHeight: CGFloat = 52
+    private let minRowHeight: CGFloat = 28
     private let maxRowHeight: CGFloat = 84
     private let dayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
@@ -74,17 +74,16 @@ struct WeekGrid: View {
             VStack(spacing: 0) {
                 headerRow(dayWidth: dayWidth)
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    ZStack(alignment: .topLeading) {
-                        gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
-                        blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
-                    }
-                    .frame(
-                        width: proxy.size.width,
-                        height: CGFloat(periods) * rowHeight,
-                        alignment: .topLeading
-                    )
+                // 不用 ScrollView：竖把手势让给外层翻周，行高自己缩到能放下
+                ZStack(alignment: .topLeading) {
+                    gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
+                    blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
                 }
+                .frame(
+                    width: proxy.size.width,
+                    height: CGFloat(periods) * rowHeight,
+                    alignment: .topLeading
+                )
             }
         }
     }

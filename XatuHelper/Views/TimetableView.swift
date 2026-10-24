@@ -7,6 +7,8 @@ struct TimetableView: View {
     @State private var showSettings = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
+    /// 拖动时三页整体横向位移，松手后归零
+    @State private var dragOffset: CGFloat = 0
 
     /// 0 表示"跟着今天走"。非当前学期没有"本周"，落到这学期第一门有课的周。
     private var week: Int {
@@ -20,23 +22,16 @@ struct TimetableView: View {
         return weeks.min() ?? 1
     }
 
-    /// 左右滑动切前后周，边界卡在 1...30
-    private func stepWeek(_ delta: Int) {
-        let target = min(max(week + delta, 1), 30)
-        guard target != week else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selectedWeek = target
-        }
-    }
+    private static let weekRange = 1...30
 
-    private var blocks: [CourseBlock] {
-        app.occurrences(in: week).courseBlocks()
+    private func blocks(for target: Int) -> [CourseBlock] {
+        app.occurrences(in: target).courseBlocks()
     }
 
     /// 表头上显示日期用。只有当前学期知道第一周的周一，往届学期不显示日期。
-    private var mondayDate: Date? {
+    private func mondayDate(for target: Int) -> Date? {
         guard app.isCurrentSemester else { return nil }
-        return Calendar.current.date(byAdding: .day, value: (week - 1) * 7, to: app.semesterStartMonday)
+        return Calendar.current.date(byAdding: .day, value: (target - 1) * 7, to: app.semesterStartMonday)
     }
 
     // MARK: - 学年 / 学期拆成两个一级菜单
@@ -110,6 +105,91 @@ struct TimetableView: View {
         )
     }
 
+    // MARK: - 跟着手指滑动的周视图
+
+    /// 前后周并排摆着，拖动时整块跟着手指走，松手再滑到位
+    private func pager(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            weekPage(week - 1, width: width)
+            weekPage(week, width: width)
+            weekPage(week + 1, width: width)
+        }
+        .frame(width: width * 3, alignment: .leading)
+        .offset(x: -width + dragOffset)
+        .frame(width: width, alignment: .leading)
+        .clipped()
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onChanged { value in
+                    let dx = value.translation.width
+                    guard abs(dx) > abs(value.translation.height) else { return }
+                    dragOffset = rubberBand(dx)
+                }
+                .onEnded { value in
+                    let dx = value.translation.width
+                    guard abs(dx) > abs(value.translation.height) else {
+                        settle(to: 0, week: nil)
+                        return
+                    }
+                    if dx < -width * 0.25, week < Self.weekRange.upperBound {
+                        settle(to: -width, week: week + 1)
+                    } else if dx > width * 0.25, week > Self.weekRange.lowerBound {
+                        settle(to: width, week: week - 1)
+                    } else {
+                        settle(to: 0, week: nil)
+                    }
+                }
+        )
+    }
+
+    /// 到头了给一点阻尼，别让页面整块飞出去
+    private func rubberBand(_ dx: CGFloat) -> CGFloat {
+        if week <= Self.weekRange.lowerBound && dx > 0 { return dx / 3 }
+        if week >= Self.weekRange.upperBound && dx < 0 { return dx / 3 }
+        return dx
+    }
+
+    /// 滑到目标位置再换周，两件事同一帧完成，看不出跳
+    private func settle(to offset: CGFloat, week target: Int?) {
+        withAnimation(.easeOut(duration: 0.22)) {
+            dragOffset = offset
+        } completion: {
+            if let target {
+                selectedWeek = target
+            }
+            dragOffset = 0
+        }
+    }
+
+    @ViewBuilder
+    private func weekPage(_ target: Int, width: CGFloat) -> some View {
+        let pageBlocks = blocks(for: target)
+        if Self.weekRange.contains(target) {
+            WeekGrid(
+                blocks: pageBlocks,
+                unitCount: app.unitCount,
+                monday: mondayDate(for: target),
+                showWeekend: !hideWeekend,
+                onSelect: { detail = $0 }
+            )
+            .frame(width: width)
+            .overlay {
+                if app.isLoading && pageBlocks.isEmpty {
+                    ProgressView()
+                } else if !app.isLoading && pageBlocks.isEmpty {
+                    ContentUnavailableView(
+                        "这一周没有课",
+                        systemImage: "calendar",
+                        description: Text("翻到别的周看看，或者在设置里校正周次")
+                    )
+                }
+            }
+        } else {
+            Color.clear.frame(width: width)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -124,36 +204,8 @@ struct TimetableView: View {
                         .padding(.bottom, 6)
                 }
 
-                WeekGrid(
-                    blocks: blocks,
-                    unitCount: app.unitCount,
-                    monday: mondayDate,
-                    showWeekend: !hideWeekend,
-                    onSelect: { detail = $0 }
-                )
-                .gesture(
-                    DragGesture(minimumDistance: 30)
-                        .onEnded { value in
-                            let dx = value.translation.width
-                            let dy = value.translation.height
-                            guard abs(dx) > abs(dy) else { return }
-                            if dx < -60 {
-                                stepWeek(1)
-                            } else if dx > 60 {
-                                stepWeek(-1)
-                            }
-                        }
-                )
-                .overlay {
-                    if app.isLoading && blocks.isEmpty {
-                        ProgressView()
-                    } else if !app.isLoading && blocks.isEmpty {
-                        ContentUnavailableView(
-                            "这一周没有课",
-                            systemImage: "calendar",
-                            description: Text("翻到别的周看看，或者在设置里校正周次")
-                        )
-                    }
+                GeometryReader { proxy in
+                    pager(width: proxy.size.width)
                 }
             }
             .navigationTitle(app.semesterName)
