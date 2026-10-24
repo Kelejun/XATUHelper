@@ -8,6 +8,7 @@ struct MainTabView: View {
     enum Tab: Hashable {
         case home
         case timetable
+        case info
     }
 
     var body: some View {
@@ -19,6 +20,10 @@ struct MainTabView: View {
             TimetableView()
                 .tabItem { Label("课程表", systemImage: "calendar") }
                 .tag(Tab.timetable)
+
+            InfoView()
+                .tabItem { Label("学业", systemImage: "graduationcap") }
+                .tag(Tab.info)
         }
         .sheet(isPresented: $app.showsWebLogin) {
             CASWebLoginSheet()
