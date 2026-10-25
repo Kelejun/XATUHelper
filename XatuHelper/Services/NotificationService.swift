@@ -8,6 +8,7 @@ enum NotificationSettings {
     static let examEnabled = "notify.exam.enabled"
     static let examLead = "notify.exam.lead"
     static let prompted = "notify.prompted"
+    static let examPrompted = "notify.examPrompted"
 
     static let defaultClassLead = 30
     static let defaultExamLead = 30
@@ -34,6 +35,11 @@ enum NotificationSettings {
     static var hasPrompted: Bool {
         get { UserDefaults.standard.bool(forKey: prompted) }
         set { UserDefaults.standard.set(newValue, forKey: prompted) }
+    }
+
+    static var hasPromptedExam: Bool {
+        get { UserDefaults.standard.bool(forKey: examPrompted) }
+        set { UserDefaults.standard.set(newValue, forKey: examPrompted) }
     }
 }
 

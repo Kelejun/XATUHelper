@@ -88,6 +88,7 @@ struct NotificationSetupSheet: View {
                     }
                     Button("先不用") {
                         NotificationSettings.hasPrompted = true
+                        NotificationSettings.hasPromptedExam = true
                         dismiss()
                     }
                     .foregroundStyle(.secondary)
@@ -100,6 +101,7 @@ struct NotificationSetupSheet: View {
 
     private func enable() async {
         NotificationSettings.hasPrompted = true
+        NotificationSettings.hasPromptedExam = true
         classEnabled = true
         examEnabled = true
         _ = await NotificationService.requestAuthorization()
@@ -113,4 +115,62 @@ func requestAuthorizationIfNeeded() async {
     let status = await NotificationService.authorizationStatus()
     guard status == .notDetermined else { return }
     _ = await NotificationService.requestAuthorization()
+}
+
+/// 第一次进考试页时单独问一次考试提醒
+struct ExamNotificationSetupSheet: View {
+    @EnvironmentObject var app: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
+    @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("考试要不要提前提醒？")
+                        .font(.headline)
+                    Text("会在前一天 21:00、当天 08:00 和开考前再各弹一次，内容用本地缓存的考试安排。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle("考试提醒", isOn: $examEnabled)
+                    if examEnabled {
+                        Picker("开考前", selection: $examLead) {
+                            ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
+                                Text("\(minutes) 分钟").tag(minutes)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button("开启提醒") {
+                        Task { await enable() }
+                    }
+                    Button("先不用") {
+                        NotificationSettings.hasPromptedExam = true
+                        dismiss()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("考试提醒")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if !NotificationSettings.examOn { examEnabled = true }
+            }
+        }
+    }
+
+    private func enable() async {
+        NotificationSettings.hasPromptedExam = true
+        examEnabled = true
+        _ = await NotificationService.requestAuthorization()
+        await app.rescheduleNotifications()
+        dismiss()
+    }
 }

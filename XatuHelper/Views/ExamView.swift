@@ -8,6 +8,7 @@ struct ExamView: View {
 
     /// 空表示跟当前学期走；选了历史学期就钉住那一个
     @State private var semesterID = ""
+    @State private var showNotificationSetup = false
 
     private var effectiveSemesterID: String {
         semesterID.isEmpty ? app.currentSemesterID : semesterID
@@ -144,6 +145,12 @@ struct ExamView: View {
         }
         .task {
             if app.exams.isEmpty { await app.refreshExams(semesterID: effectiveSemesterID) }
+            if !NotificationSettings.hasPromptedExam {
+                showNotificationSetup = true
+            }
+        }
+        .sheet(isPresented: $showNotificationSetup) {
+            ExamNotificationSetupSheet()
         }
     }
 
