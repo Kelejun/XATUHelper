@@ -100,8 +100,8 @@ struct CASService {
             return
         }
 
-        // captchaSwitch = "1" 表示这次一定要填验证码，纯 API 过不去，直接交给网页
-        if html.firstMatch(#"var\s+captchaSwitch\s*=\s*"([^"]*)""#) == "1" {
+        // captchaSwitch 打开表示这次一定要填验证码，纯 API 过不去，直接交给网页
+        if Self.captchaRequired(in: html) {
             throw AppError.needCaptcha
         }
 
@@ -134,7 +134,12 @@ struct CASService {
         let finalHTML = String(data: responseData, encoding: .utf8) ?? ""
 
         if finalHost.contains("authserver") || finalHTML.contains("id=\"pwdEncryptSalt\"") {
-            // 登录失败回到的页面本身就带验证码/动态码字样，只能看错误提示里说了什么
+            // 登录失败回到的页面本身就带验证码/动态码字样，不能只看提示文案。
+            // 先看服务端是不是把验证码开关打开了——这就是"要验证码"最可靠的信号，
+            // 这种情况下提示经常只写"用户名或密码错误"，照着显示会把人带沟里。
+            if Self.captchaRequired(in: finalHTML) {
+                throw AppError.needCaptcha
+            }
             let message = errorMessage(from: finalHTML)
             if message.contains("验证码") || message.contains("动态码") {
                 throw AppError.needCaptcha
@@ -149,6 +154,15 @@ struct CASService {
         } catch {
             throw AppError.network(error.localizedDescription)
         }
+    }
+
+    /// 服务端的验证码开关。有的页面写 `var captchaSwitch = "1";`，
+    /// 有的写 `captchaSwitch = 1;`，两种都认
+    static func captchaRequired(in html: String) -> Bool {
+        guard let value = html.firstMatch(#"captchaSwitch\s*=\s*['"]?([A-Za-z0-9]+)"#) else {
+            return false
+        }
+        return value == "1" || value.lowercased() == "true"
     }
 
     private func errorMessage(from html: String) -> String {
