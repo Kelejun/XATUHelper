@@ -8,6 +8,16 @@ struct GradeView: View {
     /// 空表示跟当前学期走
     @State private var semesterID = ""
     @State private var expanded: Set<String> = []
+    @State private var searchText = ""
+
+    private var filteredGrades: [GradeRecord] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return app.grades }
+        return app.grades.filter {
+            $0.course.localizedCaseInsensitiveContains(keyword)
+                || $0.code.localizedCaseInsensitiveContains(keyword)
+        }
+    }
 
     private var effectiveSemesterID: String {
         semesterID.isEmpty ? app.currentSemesterID : semesterID
@@ -63,16 +73,17 @@ struct GradeView: View {
                 }
             } else {
                 Section {
-                    ForEach(app.grades) { grade in
+                    ForEach(filteredGrades) { grade in
                         gradeRow(grade)
                     }
                 } footer: {
-                    Text("点开一门课可以看各分项得分")
+                    Text(filteredGrades.isEmpty ? "没搜到这门课" : "点开一门课可以看各分项得分")
                 }
             }
         }
         .navigationTitle("成绩")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
         .refreshable { await app.refreshGrades(semesterID: effectiveSemesterID) }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -150,7 +161,6 @@ struct GradeView: View {
                         Text(component.score)
                     }
                     .font(.callout)
-                    .foregroundStyle(.secondary)
                 }
             } label: {
                 label
