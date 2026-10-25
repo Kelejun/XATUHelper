@@ -363,12 +363,6 @@ struct SettingsSheet: View {
             Form {
                 Section("账号") {
                     LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
-                    if let fetchedAt = app.fetchedAt {
-                        LabeledContent(
-                            "上次更新",
-                            value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
-                        )
-                    }
                     Button("退出登录", role: .destructive) {
                         app.logout()
                         dismiss()
@@ -423,6 +417,12 @@ struct TimetableSettingsSheet: View {
 
                 Section("课表") {
                     Toggle("隐藏周末", isOn: $hideWeekend)
+                    if let fetchedAt = app.fetchedAt {
+                        LabeledContent(
+                            "上次更新",
+                            value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    }
                 }
 
                 if showDiagnostics {
