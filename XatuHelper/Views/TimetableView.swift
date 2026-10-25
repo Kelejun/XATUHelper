@@ -198,6 +198,7 @@ struct TimetableView: View {
         }
         .navigationTitle(app.semesterName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(embedded ? .hidden : .visible, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
