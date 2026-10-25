@@ -5,6 +5,7 @@ import Foundation
 struct ExamRecord: Identifiable, Hashable {
     var id: String
     var course: String      // 课程名称
+    var code: String        // 课程序号
     var name: String        // 考试名称
     var time: String        // 考试时间（原始文本）
     var room: String        // 考场

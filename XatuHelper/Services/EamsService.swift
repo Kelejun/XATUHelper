@@ -331,12 +331,16 @@ struct EamsService {
             header.firstIndex { head in keywords.contains { head.contains($0) } }
         }
 
-        let courseColumn = column(["课程", "科目"])
+        // 表头里「课程名称」和「课程序号」都带"课程"，得分开认
+        let codeColumn = header.firstIndex { $0.contains("课程序号") || $0.contains("课程号") }
+        let courseColumn = header.firstIndex { $0.contains("课程名称") }
+            ?? column(["科目", "课程"])
         let timeColumn = column(["时间", "日期"])
         let roomColumn = column(["考场", "教室", "地点"])
         let seatColumn = column(["座位"])
         let noteColumn = column(["备注", "说明"])
-        let nameColumn = column(["考试名称", "名称", "考试"])
+        let nameColumn = header.firstIndex { $0.contains("考试名称") }
+            ?? column(["考试名称", "名称", "考试"])
 
         guard timeColumn != nil || roomColumn != nil else { return [] }
 
@@ -372,6 +376,7 @@ struct EamsService {
                 ExamRecord(
                     id: "\(offset)-\(course)-\(time)-\(room)",
                     course: course,
+                    code: cell(codeColumn),
                     name: name == course ? "" : name,
                     time: time,
                     room: room,

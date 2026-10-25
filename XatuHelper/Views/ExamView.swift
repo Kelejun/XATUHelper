@@ -190,37 +190,78 @@ struct ExamView: View {
     }
 
     private func row(_ exam: ExamRecord) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(exam.course.isEmpty ? (exam.name.isEmpty ? "考试" : exam.name) : exam.course)
-                .font(.body.weight(.medium))
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(exam.course.isEmpty ? (exam.name.isEmpty ? "考试" : exam.name) : exam.course)
+                    .font(.body.weight(.medium))
 
-            if !exam.name.isEmpty && exam.name != exam.course {
-                Text(exam.name)
+                if !subtitle(for: exam).isEmpty {
+                    Text(subtitle(for: exam))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    if !exam.time.isEmpty {
+                        meta("clock", exam.time)
+                    }
+                    if !exam.room.isEmpty {
+                        meta("mappin.and.ellipse", exam.room)
+                    }
+                    if !exam.seat.isEmpty {
+                        Text("座位 \(exam.seat)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if !exam.note.isEmpty {
+                    Text(exam.note)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if !remainingText(for: exam).isEmpty {
+                Text(remainingText(for: exam))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 12) {
-                if !exam.time.isEmpty {
-                    Label(exam.time, systemImage: "clock")
-                }
-                if !exam.room.isEmpty {
-                    Label(exam.room, systemImage: "mappin.and.ellipse")
-                }
-                if !exam.seat.isEmpty {
-                    Text("座位 \(exam.seat)")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            if !exam.note.isEmpty {
-                Text(exam.note)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.trailing)
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// 课程序号在前、考试名称在后
+    private func subtitle(for exam: ExamRecord) -> String {
+        [exam.code, exam.name]
+            .filter { !$0.isEmpty && $0 != exam.course }
+            .joined(separator: " · ")
+    }
+
+    /// 图标和文字的间距，系统的 Label 默认留得太宽
+    private func meta(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .regular))
+            Text(text)
+        }
+    }
+
+    /// 课程名右边的「还有几天」
+    private func remainingText(for exam: ExamRecord) -> String {
+        let key = exam.dateKey
+        guard !key.isEmpty,
+              let date = ExamView.parser.date(from: key),
+              let today = ExamView.parser.date(from: ExamView.dayFormatter.string(from: Date())) else {
+            return ""
+        }
+        let days = Calendar.current.dateComponents([.day], from: today, to: date).day ?? 0
+        if days > 0 { return "还有 \(days) 天" }
+        if days == 0 { return "今天" }
+        return ""
     }
 
     // MARK: - 学期菜单
