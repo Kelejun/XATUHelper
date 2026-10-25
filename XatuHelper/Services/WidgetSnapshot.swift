@@ -28,6 +28,7 @@ struct WidgetSnapshot: Codable {
     var courses: [Course]
     var balance: Double?
     var balanceUpdatedAt: Date?
+    var roomName: String?
     var upcomingBreak: Break?
     var nextExam: Exam?
     var loggedIn: Bool
@@ -39,6 +40,7 @@ struct WidgetSnapshot: Codable {
         courses: [],
         balance: nil,
         balanceUpdatedAt: nil,
+        roomName: nil,
         upcomingBreak: nil,
         nextExam: nil,
         loggedIn: false

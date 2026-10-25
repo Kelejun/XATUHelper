@@ -31,6 +31,7 @@ extension AppState {
             courses: courses,
             balance: electricityBalance.flatMap(Double.init),
             balanceUpdatedAt: electricityCheckedAt,
+            roomName: dorm?.displayName,
             upcomingBreak: upcomingBreakForWidget(),
             nextExam: nextExamForWidget(),
             loggedIn: isLoggedIn

@@ -4,174 +4,294 @@ import WidgetKit
 @main
 struct XatuHelperWidgetBundle: WidgetBundle {
     var body: some Widget {
-        TodayWidget()
+        CourseWidget()
+        ElectricityWidget()
+        BreakWidget()
     }
 }
+
+// MARK: - 数据
 
 struct TodayEntry: TimelineEntry {
     let date: Date
-    let snapshot: WidgetSnapshot?
+    let snapshot: WidgetSnapshot
 }
 
-struct TodayProvider: TimelineProvider {
+struct SnapshotProvider: TimelineProvider {
+    var preview: WidgetSnapshot
+
     func placeholder(in context: Context) -> TodayEntry {
-        TodayEntry(date: Date(), snapshot: .empty)
+        TodayEntry(date: Date(), snapshot: preview)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        completion(TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? .empty))
+        completion(TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? preview))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
-        let entry = TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? .empty)
+        let entry = TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? preview)
         let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(refresh)))
     }
 }
 
-struct TodayWidget: Widget {
+enum PreviewData {
+    static let snapshot: WidgetSnapshot = {
+        let courses = [
+            WidgetSnapshot.Course(id: "1", name: "计算机网络", room: "教3-109",
+                                  startMinutes: 8 * 60 + 20, endMinutes: 10 * 60),
+            WidgetSnapshot.Course(id: "2", name: "计算机组成与体系结构", room: "教2-210",
+                                  startMinutes: 14 * 60, endMinutes: 15 * 60 + 40)
+        ]
+        return WidgetSnapshot(
+            generatedAt: Date(),
+            week: 8,
+            weekday: 3,
+            courses: courses,
+            balance: 52.77,
+            balanceUpdatedAt: Date(),
+            roomName: "9号公寓",
+            upcomingBreak: WidgetSnapshot.Break(title: "放寒假",
+                                                date: Date().addingTimeInterval(83 * 86400),
+                                                days: 83),
+            nextExam: nil,
+            loggedIn: true
+        )
+    }()
+}
+
+// MARK: - 小组件
+
+struct CourseWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TodayWidget", provider: TodayProvider()) { entry in
-            TodayWidgetView(entry: entry)
+        StaticConfiguration(kind: "CourseWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
+            CourseWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("今日")
-        .description("今天的课、电费余额和放假倒计时。")
+        .configurationDisplayName("课程")
+        .description("今天要上的课。")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
-struct TodayWidgetView: View {
+struct ElectricityWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ElectricityWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
+            ElectricityWidgetView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("电费")
+        .description("宿舍还剩多少电费。")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+struct BreakWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "BreakWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
+            BreakWidgetView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("放假倒计时")
+        .description("离放假还有多少天。")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+// MARK: - 视图
+
+struct CourseWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TodayEntry
 
     var body: some View {
-        if let snapshot = entry.snapshot, snapshot.loggedIn {
-            if family == .systemSmall {
-                smallLayout(snapshot)
-            } else {
-                mediumLayout(snapshot)
-            }
+        if !entry.snapshot.loggedIn {
+            EmptyHint()
+        } else if family == .systemSmall {
+            smallLayout
         } else {
-            emptyLayout
+            mediumLayout
         }
     }
 
-    private var emptyLayout: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("XATU Helper")
-                .font(.headline)
-            Text("打开 App 登录一次，这里就会显示今天的课。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func smallLayout(_ snapshot: WidgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text(snapshot.weekdayLabel)
-                if snapshot.week > 0 { Text("· 第 \(snapshot.week) 周") }
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-
+    private var smallLayout: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            header
             Spacer(minLength: 0)
-
-            if let next = nextCourse(snapshot) {
-                Text(next.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(2)
-                Text("\(WidgetSnapshot.clock(next.startMinutes)) \(next.room)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            if remaining.isEmpty {
+                Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
+                    .font(.headline)
             } else {
-                Text(snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
-                    .font(.system(size: 15, weight: .semibold))
+                ForEach(remaining.prefix(3)) { course in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(course.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Text(WidgetSnapshot.clock(course.startMinutes))
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-
             Spacer(minLength: 0)
-
-            HStack(spacing: 6) {
-                if let balance = snapshot.balance {
-                    Text("¥\(String(format: "%.2f", balance))")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
-                }
-                if let breakItem = snapshot.upcomingBreak {
-                    Text("\(breakItem.title) \(breakItem.days) 天")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 
-    private func mediumLayout(_ snapshot: WidgetSnapshot) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Text(snapshot.weekdayLabel)
-                    if snapshot.week > 0 { Text("· 第 \(snapshot.week) 周") }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-                if snapshot.courses.isEmpty {
-                    Text("今天没课")
-                        .font(.system(size: 14, weight: .semibold))
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(remainingCourses(snapshot).prefix(4)) { course in
-                            HStack(spacing: 6) {
-                                Text(WidgetSnapshot.clock(course.startMinutes))
-                                    .font(.system(size: 11, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 36, alignment: .leading)
-                                Text(course.name)
-                                    .font(.system(size: 11))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
+    private var mediumLayout: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header
+            Spacer(minLength: 0)
+            if remaining.isEmpty {
+                Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
+                    .font(.headline)
+            } else {
+                ForEach(remaining.prefix(4)) { course in
+                    HStack(spacing: 8) {
+                        Text(WidgetSnapshot.clock(course.startMinutes))
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 38, alignment: .leading)
+                        Text(course.name)
+                            .font(.system(size: 12))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if !course.room.isEmpty {
+                            Text(course.room)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
                 }
-                Spacer(minLength: 0)
             }
-
-            VStack(alignment: .trailing, spacing: 6) {
-                if let balance = snapshot.balance {
-                    Text("¥\(String(format: "%.2f", balance))")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
-                }
-                if let breakItem = snapshot.upcomingBreak {
-                    Text("\(breakItem.title)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text("还有 \(breakItem.days) 天")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.teal)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: 84, alignment: .trailing)
+            Spacer(minLength: 0)
         }
     }
 
-    private func remainingCourses(_ snapshot: WidgetSnapshot) -> [WidgetSnapshot.Course] {
-        let now = entry.date
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
-        let remaining = snapshot.courses.filter { $0.endMinutes >= minutes }
-        return remaining.isEmpty ? snapshot.courses : remaining
+    private var header: some View {
+        HStack(spacing: 4) {
+            Text(entry.snapshot.weekdayLabel)
+            if entry.snapshot.week > 0 {
+                Text("· 第 \(entry.snapshot.week) 周")
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 
-    private func nextCourse(_ snapshot: WidgetSnapshot) -> WidgetSnapshot.Course? {
+    private var remaining: [WidgetSnapshot.Course] {
         let calendar = Calendar.current
-        let now = entry.date
-        let minutes = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
-        return snapshot.courses.first { $0.endMinutes >= minutes }
+        let minutes = calendar.component(.hour, from: entry.date) * 60
+            + calendar.component(.minute, from: entry.date)
+        let list = entry.snapshot.courses.filter { $0.endMinutes >= minutes }
+        return list.isEmpty ? [] : list
+    }
+}
+
+struct ElectricityWidgetView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        if !entry.snapshot.loggedIn {
+            EmptyHint()
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("电费还剩")
+                    .font(.headline)
+
+                Spacer(minLength: 0)
+
+                if let balance = entry.snapshot.balance {
+                    Text("¥\(String(format: "%.2f", balance))")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                } else {
+                    Text("还没查过")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(footerText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var footerText: String {
+        var parts: [String] = []
+        if let room = entry.snapshot.roomName, !room.isEmpty {
+            parts.append(room)
+        }
+        if let updated = entry.snapshot.balanceUpdatedAt {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            parts.append(formatter.string(from: updated))
+        }
+        return parts.isEmpty ? "打开 App 查一次" : parts.joined(separator: " · ")
+    }
+}
+
+struct BreakWidgetView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        if !entry.snapshot.loggedIn {
+            EmptyHint()
+        } else if let item = entry.snapshot.upcomingBreak {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Text(item.days == 0 ? "今天" : "还有 \(item.days) 天")
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.teal)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+
+                Spacer(minLength: 0)
+
+                Text(dateText(item.date))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("放假倒计时")
+                    .font(.headline)
+                Spacer(minLength: 0)
+                Text("先把校历打开一次")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日"
+        return formatter.string(from: date)
+    }
+}
+
+struct EmptyHint: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("XATU Helper")
+                .font(.headline)
+            Text("打开 App 登录一次，这里就有数据了。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 }

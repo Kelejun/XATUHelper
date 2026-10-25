@@ -8,13 +8,37 @@
 
 /* Begin PBXBuildFile section */
 		0000000000000000000000BC /* XatuHelperWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B0 /* XatuHelperWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		0000000000000000000000BD /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000BE /* WidgetSnapshot.swift */; };
+		0000000000000000000000BD /* XatuHelper/Services/WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0000000000000000000000BA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0000000000000000000000B2;
+			remoteInfo = XatuHelperWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0000000000000000000000BB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0000000000000000000000BC /* XatuHelperWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000004 /* XatuHelper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XatuHelper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0000000000000000000000B0 /* XatuHelperWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = XatuHelperWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		0000000000000000000000BE /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/WidgetSnapshot.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -54,6 +78,7 @@
 				000000000000000000000009 /* XatuHelper */,
 				0000000000000000000000B1 /* XatuHelperWidget */,
 				000000000000000000000003 /* Products */,
+				2B8776EC308E4F5500E0B23C /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -64,6 +89,14 @@
 				0000000000000000000000B0 /* XatuHelperWidget.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		2B8776EC308E4F5500E0B23C /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -113,20 +146,6 @@
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		0000000000000000000000BB /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				0000000000000000000000BC /* XatuHelperWidget.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXProject section */
 		000000000000000000000001 /* Project object */ = {
@@ -214,7 +233,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0000000000000000000000BD /* WidgetSnapshot.swift in Sources */,
+				0000000000000000000000BD /* XatuHelper/Services/WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -227,16 +246,6 @@
 			targetProxy = 0000000000000000000000BA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin PBXContainerItemProxy section */
-		0000000000000000000000BA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 000000000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 0000000000000000000000B2;
-			remoteInfo = XatuHelperWidget;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		00000000000000000000000C /* Debug */ = {
@@ -365,7 +374,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XZ349G3H8D;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Config/Widget-Info.plist;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -392,7 +401,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XZ349G3H8D;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Config/Widget-Info.plist;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
