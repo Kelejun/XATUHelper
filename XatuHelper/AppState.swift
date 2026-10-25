@@ -36,6 +36,8 @@ final class AppState: ObservableObject {
     @Published var gradeScope: GradeScope = .current
     @Published var gradesLoading = false
     @Published var gradesError: String?
+    /// 成绩页自带的汇总（门数/总学分/平均绩点），页面里有就用页面的
+    @Published var gradeSummary: EamsService.GradeSummary?
 
     @Published var weekOneMonday: Date = AppState.fallStart
     /// 需要验证码/动态码时弹出网页登录
@@ -400,6 +402,7 @@ final class AppState: ObservableObject {
         guard !gradesLoading else { return }
         gradesLoading = true
         gradesError = nil
+        gradeSummary = nil
         if let scope { gradeScope = scope }
         do {
             if gradeScope == .all {
@@ -409,6 +412,7 @@ final class AppState: ObservableObject {
                 let target = semesterID ?? fallback
                 grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
             }
+            gradeSummary = EamsService.lastGradeSummary
         } catch {
             gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }

@@ -36,6 +36,18 @@ struct EamsService {
     /// 成绩页外壳（带学期控件那一层）
     static var lastGradeShellRaw = ""
 
+    /// 成绩页底部/顶部自带的汇总（门数、总学分、平均绩点），有就直接用页面上的，
+    /// 没有才退回自己算。
+    struct GradeSummary {
+        var count: Int?
+        var credits: Double?
+        var gpa: Double?
+
+        var isEmpty: Bool { count == nil && credits == nil && gpa == nil }
+    }
+
+    static var lastGradeSummary: GradeSummary?
+
     /// URLSession 报「重定向太多」，基本都是 CAS 在登录页和业务页之间打转，
     /// 说明本校那个会话已经坏了，按登录态失效处理，让上层清 cookie 重登。
     static func isRedirectLoop(_ error: Error) -> Bool {
@@ -440,6 +452,7 @@ struct EamsService {
         )
 
         EamsService.lastGradeRaw = html
+        EamsService.lastGradeSummary = EamsService.parseGradeSummary(html)
         return EamsService.parseGrades(html)
     }
 
@@ -451,11 +464,44 @@ struct EamsService {
             label: "所有学期成绩"
         )
         EamsService.lastGradeRaw = html
+        EamsService.lastGradeSummary = EamsService.parseGradeSummary(html)
         return EamsService.parseGrades(html)
     }
 
     /// 成绩页也是服务端直出的表格。表头里的「平时成绩」「期末成绩」这类都当分项，
     /// 「总成绩」才是最终成绩，「绩点」单独一列。
+    /// 从成绩页文字里抠学校自己算好的汇总数字
+    static func parseGradeSummary(_ html: String) -> GradeSummary {
+        var summary = GradeSummary()
+
+        let plain = html
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+        func number(_ keywords: [String]) -> Double? {
+            for keyword in keywords {
+                let pattern = NSRegularExpression.escapedPattern(for: keyword)
+                    + #"[^0-9]{0,14}([0-9]+(?:\.[0-9]+)?)"#
+                if let raw = plain.firstMatch(pattern), let value = Double(raw) {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        if let value = number(["课程门数", "门数", "课程数"]) {
+            summary.count = Int(value)
+        } else if let raw = plain.firstMatch(#"共\s*([0-9]+)\s*门"#), let value = Int(raw) {
+            summary.count = value
+        }
+
+        summary.credits = number(["总学分", "合计学分", "学分合计", "已修学分", "已获学分", "获得学分"])
+        summary.gpa = number(["平均学分绩点", "平均绩点", "平均GPA"])
+
+        return summary
+    }
+
     static func parseGrades(_ html: String) -> [GradeRecord] {
         let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#).compactMap { $0.first }
         guard !rows.isEmpty else { return [] }

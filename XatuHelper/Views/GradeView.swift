@@ -64,15 +64,15 @@ struct GradeView: View {
             if !app.grades.isEmpty {
                 Section {
                     HStack(alignment: .center, spacing: 0) {
-                        statCell(title: "门数", value: "\(stats.count)")
+                        statCell(title: "门数", value: displayCount)
                         Divider().frame(height: 30)
-                        statCell(title: "总学分", value: stats.creditsText)
+                        statCell(title: "总学分", value: displayCredits)
                         Divider().frame(height: 30)
-                        statCell(title: "平均绩点", value: stats.gpaText)
+                        statCell(title: "平均绩点", value: displayGPA)
                     }
                     .padding(.vertical, 4)
                 } footer: {
-                    Text("平均绩点按学分加权")
+                    Text(hasPageSummary ? "数据取自教务页面" : "平均绩点按学分加权")
                 }
             }
 
@@ -154,6 +154,28 @@ struct GradeView: View {
     }
 
     // MARK: - 统计
+
+    /// 教务页面自己带着汇总就用它的，算不出来才退回本地计算
+    private var hasPageSummary: Bool {
+        !(app.gradeSummary?.isEmpty ?? true)
+    }
+
+    private var displayCount: String {
+        if let count = app.gradeSummary?.count { return "\(count)" }
+        return "\(stats.count)"
+    }
+
+    private var displayCredits: String {
+        if let credits = app.gradeSummary?.credits {
+            return credits == credits.rounded() ? "\(Int(credits))" : String(format: "%.1f", credits)
+        }
+        return stats.creditsText
+    }
+
+    private var displayGPA: String {
+        if let gpa = app.gradeSummary?.gpa { return String(format: "%.2f", gpa) }
+        return stats.gpaText
+    }
 
     private var stats: GradeStats {
         var credits = 0.0
