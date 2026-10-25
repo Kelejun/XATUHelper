@@ -67,7 +67,7 @@ struct CourseWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "CourseWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             CourseWidgetView(entry: entry)
-                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
+                .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("课程")
         .description("今天要上的课。")
@@ -79,7 +79,7 @@ struct ElectricityWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ElectricityWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             ElectricityWidgetView(entry: entry)
-                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
+                .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("电费")
         .description("宿舍还剩多少电费。")
@@ -91,7 +91,7 @@ struct BreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BreakWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             BreakWidgetView(entry: entry)
-                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
+                .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("放假倒计时")
         .description("离放假还有多少天。")
@@ -316,6 +316,21 @@ struct EmptyHint: View {
             Text("打开 App 登录一次，这里就有数据了。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+/// 小组件底色：iOS 26 起用系统玻璃效果，老系统退回毛玻璃材质。
+struct WidgetBackdrop: View {
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .glassEffect(.regular)
+        } else {
+            Rectangle()
+                .fill(.ultraThinMaterial)
         }
     }
 }
