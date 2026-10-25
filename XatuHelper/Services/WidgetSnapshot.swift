@@ -1,0 +1,84 @@
+import Foundation
+
+/// App 和小组件共用的快照，两边都编进 target
+struct WidgetSnapshot: Codable {
+    struct Course: Codable, Identifiable, Hashable {
+        var id: String
+        var name: String
+        var room: String
+        var startMinutes: Int
+        var endMinutes: Int
+    }
+
+    struct Break: Codable, Hashable {
+        var title: String
+        var date: Date
+        var days: Int
+    }
+
+    struct Exam: Codable, Hashable {
+        var title: String
+        var date: Date?
+        var days: Int?
+    }
+
+    var generatedAt: Date
+    var week: Int
+    var weekday: Int
+    var courses: [Course]
+    var balance: Double?
+    var balanceUpdatedAt: Date?
+    var upcomingBreak: Break?
+    var nextExam: Exam?
+    var loggedIn: Bool
+
+    static let empty = WidgetSnapshot(
+        generatedAt: Date(timeIntervalSince1970: 0),
+        week: 0,
+        weekday: 1,
+        courses: [],
+        balance: nil,
+        balanceUpdatedAt: nil,
+        upcomingBreak: nil,
+        nextExam: nil,
+        loggedIn: false
+    )
+
+    var weekdayLabel: String {
+        let names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        guard weekday >= 1, weekday <= names.count else { return "" }
+        return names[weekday - 1]
+    }
+
+    static func clock(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
+}
+
+/// 共享容器，读不到就说明没开 App Group
+enum WidgetStore {
+    static let appGroup = "group.com.cell.xatuapp"
+    static let fileName = "widget-snapshot.json"
+
+    static var fileURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+            .appendingPathComponent(fileName)
+    }
+
+    static func read() -> WidgetSnapshot? {
+        guard let url = fileURL, let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(WidgetSnapshot.self, from: data)
+    }
+
+    @discardableResult
+    static func write(_ snapshot: WidgetSnapshot) -> Bool {
+        guard let url = fileURL else { return false }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(snapshot) else { return false }
+        return (try? data.write(to: url, options: .atomic)) != nil
+    }
+}

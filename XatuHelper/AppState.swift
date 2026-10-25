@@ -240,6 +240,7 @@ final class AppState: ObservableObject {
                 try await self.loadTable()
             }
             isLoggedIn = true
+            publishWidgetSnapshot()
         } catch {
             handle(error)
         }
@@ -535,6 +536,7 @@ final class AppState: ObservableObject {
             Preferences.electricityBalance = balance
             Preferences.electricityCheckedAt = electricityCheckedAt
             recordElectricity(balance: balance)
+            publishWidgetSnapshot()
         } catch {
             electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }

@@ -27,6 +27,7 @@ struct MainTabView: View {
         }
         .task {
             await app.startupRefreshIfNeeded()
+            app.publishWidgetSnapshot()
         }
         .sheet(isPresented: $app.showsWebLogin) {
             CASWebLoginSheet()
