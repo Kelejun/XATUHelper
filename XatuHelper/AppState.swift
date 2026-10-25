@@ -503,6 +503,16 @@ final class AppState: ObservableObject {
         electricityError = nil
     }
 
+    /// 充值页地址：缴费平台的充值路由按电费项目的 factoryCode 分，比如 /#/chargeElectricityE011
+    func chargePageURL() async -> URL? {
+        var project = electricProject
+        if project == nil {
+            project = try? await withPay { $0 }
+        }
+        guard let code = project?.factoryCode, !code.isEmpty else { return nil }
+        return URL(string: "https://jfpay.xatu.edu.cn/#/chargeElectricity\(code)")
+    }
+
     func loadSchools() async throws -> [DormOption] {
         try await withPay { try await self.pay.schools(projectID: $0.id) }
     }

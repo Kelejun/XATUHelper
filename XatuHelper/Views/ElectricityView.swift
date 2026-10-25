@@ -5,6 +5,9 @@ import SwiftUI
 struct ElectricityView: View {
     @EnvironmentObject var app: AppState
     @State private var editing = false
+    @State private var showingCharge = false
+    @State private var chargeURL: String?
+    @State private var preparingCharge = false
 
     var body: some View {
         Form {
@@ -53,17 +56,54 @@ struct ElectricityView: View {
                 DormPickerView()
             }
         }
+        .sheet(isPresented: $showingCharge) {
+            if let chargeURL {
+                WebSheet(title: "充值", urlString: chargeURL)
+            }
+        }
         .task {
             await app.refreshElectricityIfNeeded()
         }
     }
 
+    /// 余额卡片右边那个绿色充值按钮，点了用内置网页打开缴费平台的充值页
+    private var chargeButton: some View {
+        Button {
+            Task {
+                preparingCharge = true
+                if let url = await app.chargePageURL() {
+                    chargeURL = url.absoluteString
+                    showingCharge = true
+                } else {
+                    app.electricityError = "没拿到充值页地址，先换一个宿舍再试"
+                }
+                preparingCharge = false
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.12))
+                    .frame(width: 34, height: 34)
+                if preparingCharge {
+                    ProgressView()
+                } else {
+                    Image(systemName: "yensign")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(preparingCharge)
+        .accessibilityLabel("充值")
+    }
+
     /// 余额卡片：大字余额、右边一个蓝色刷新图标，余额下面灰色小字写上次查询时间
-    private var balanceCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private var balanceCard: some View {        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
                 balanceValue
                 Spacer(minLength: 12)
+                chargeButton
                 Button {
                     Task { await app.refreshElectricity() }
                 } label: {
