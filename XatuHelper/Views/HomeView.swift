@@ -191,13 +191,10 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
                     Color.clear
                         .frame(height: 150)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets())
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(greeting)
@@ -207,44 +204,29 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets())
-                }
 
-                if let exam = nextExam {
-                    Section {
+                    if let exam = nextExam {
                         examCard(exam)
-                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                            .cardStyle()
                     }
-                }
 
-                Section {
                     scheduleCard
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                }
-                Section {
+                        .cardStyle()
+
                     HStack(alignment: .top, spacing: 12) {
                         electricityCard
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                            .cardStyle()
                         if let holiday = nextHoliday {
                             holidayCard(holiday)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(14)
-                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                                .cardStyle()
                         }
                     }
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
-            .listStyle(.insetGrouped)
-            .listSectionSpacing(14)
-            .scrollContentBackground(.hidden)
-            .contentMargins(.top, 0, for: .scrollContent)
             .background(alignment: .top) { homeBackground }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -529,4 +511,17 @@ struct HomeView: View {
 #Preview {
     HomeView()
         .environmentObject(AppState())
+}
+
+/// 统一的卡片外观，跟课程表那边一套
+private extension View {
+    func cardStyle() -> some View {
+        self
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: 30, style: .continuous)
+            )
+    }
 }
