@@ -1,5 +1,13 @@
 import Foundation
 
+/// 成绩页的两种视角
+enum GradeScope: String, CaseIterable, Identifiable {
+    case current = "当前学期"
+    case all = "所有学期成绩"
+
+    var id: String { rawValue }
+}
+
 /// 成绩里的一个分项，比如「平时成绩 88」
 struct GradeComponent: Identifiable, Hashable {
     var id: String
@@ -15,6 +23,7 @@ struct GradeRecord: Identifiable, Hashable {
     var credit: String      // 学分
     var score: String       // 总成绩
     var gpa: String         // 绩点
+    var term: String = ""   // 学年学期，只有「所有学期成绩」那一页才有
     var components: [GradeComponent]
 
     /// 右边那行大字：「成绩 / 绩点」
@@ -25,7 +34,7 @@ struct GradeRecord: Identifiable, Hashable {
     }
 
     var subtitle: String {
-        [code, credit.isEmpty ? "" : "\(credit) 学分"]
+        [term, code, credit.isEmpty ? "" : "\(credit) 学分"]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }

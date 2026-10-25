@@ -32,6 +32,8 @@ final class AppState: ObservableObject {
     @Published var examsError: String?
 
     @Published var grades: [GradeRecord] = []
+    /// 成绩页看的是当前学期还是所有学期
+    @Published var gradeScope: GradeScope = .current
     @Published var gradesLoading = false
     @Published var gradesError: String?
 
@@ -394,14 +396,19 @@ final class AppState: ObservableObject {
 
     // MARK: - 成绩
 
-    func refreshGrades(semesterID: String? = nil) async {
+    func refreshGrades(semesterID: String? = nil, scope: GradeScope? = nil) async {
         guard !gradesLoading else { return }
         gradesLoading = true
         gradesError = nil
+        if let scope { gradeScope = scope }
         do {
-            let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
-            let target = semesterID ?? fallback
-            grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
+            if gradeScope == .all {
+                grades = try await withReloginValue { try await self.eams.fetchAllGrades() }
+            } else {
+                let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+                let target = semesterID ?? fallback
+                grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
+            }
         } catch {
             gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }

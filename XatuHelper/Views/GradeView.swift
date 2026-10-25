@@ -44,6 +44,23 @@ struct GradeView: View {
 
     var body: some View {
         List {
+            Section {
+                Picker("范围", selection: Binding(
+                    get: { app.gradeScope },
+                    set: { scope in
+                        guard scope != app.gradeScope else { return }
+                        expanded = []
+                        app.grades = []
+                        Task { await app.refreshGrades(semesterID: effectiveSemesterID, scope: scope) }
+                    }
+                )) {
+                    ForEach(GradeScope.allCases) { scope in
+                        Text(scope.rawValue).tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
             if let error = app.gradesError {
                 Section {
                     Text(error)
@@ -84,7 +101,7 @@ struct GradeView: View {
         .navigationTitle("成绩")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
-        .refreshable { await app.refreshGrades(semesterID: effectiveSemesterID) }
+        .refreshable { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
@@ -102,12 +119,12 @@ struct GradeView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal")
                 }
-                .disabled(app.semesters.isEmpty)
+                .disabled(app.semesters.isEmpty || app.gradeScope == .all)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await app.refreshGrades(semesterID: effectiveSemesterID) }
+                    Task { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -115,7 +132,9 @@ struct GradeView: View {
             }
         }
         .task {
-            if app.grades.isEmpty { await app.refreshGrades(semesterID: effectiveSemesterID) }
+            if app.grades.isEmpty {
+                await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope)
+            }
         }
     }
 
@@ -234,7 +253,7 @@ struct GradeView: View {
         semesterID = id
         expanded = []
         app.grades = []
-        Task { await app.refreshGrades(semesterID: id) }
+        Task { await app.refreshGrades(semesterID: id, scope: .current) }
     }
 }
 

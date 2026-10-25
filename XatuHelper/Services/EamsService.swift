@@ -433,6 +433,17 @@ struct EamsService {
         return EamsService.parseGrades(html)
     }
 
+    /// 「所有学期成绩」，对应成绩页工具栏上那个 historyCourseGrade
+    func fetchAllGrades() async throws -> [GradeRecord] {
+        let html = try await examText(
+            path: "/eams/teach/grade/course/person!historyCourseGrade.action",
+            query: [URLQueryItem(name: "projectType", value: "MAJOR")],
+            label: "所有学期成绩"
+        )
+        EamsService.lastGradeRaw = html
+        return EamsService.parseGrades(html)
+    }
+
     /// 成绩页也是服务端直出的表格。表头里的「平时成绩」「期末成绩」这类都当分项，
     /// 「总成绩」才是最终成绩，「绩点」单独一列。
     static func parseGrades(_ html: String) -> [GradeRecord] {
@@ -460,6 +471,7 @@ struct EamsService {
 
         let courseColumn = header.firstIndex { $0.contains("课程名称") } ?? column(["科目", "课程"])
         let codeColumn = header.firstIndex { $0.contains("课程序号") || $0.contains("课程号") || $0.contains("课程代码") }
+        let termColumn = header.firstIndex { $0.contains("学期") || $0.contains("学年") }
         let creditColumn = column(["学分"])
         let gpaColumn = column(["绩点"])
         // 教务里这个列有的叫「总评成绩」，有的叫「总成绩」「成绩」
@@ -503,6 +515,7 @@ struct EamsService {
                     credit: cell(creditColumn),
                     score: score,
                     gpa: cell(gpaColumn),
+                    term: cell(termColumn),
                     components: components
                 )
             )
