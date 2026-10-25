@@ -36,6 +36,13 @@ struct EamsService {
     /// 成绩页外壳（带学期控件那一层）
     static var lastGradeShellRaw = ""
 
+    /// URLSession 报「重定向太多」，基本都是 CAS 在登录页和业务页之间打转，
+    /// 说明本校那个会话已经坏了，按登录态失效处理，让上层清 cookie 重登。
+    static func isRedirectLoop(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return ns.code == NSURLErrorHTTPTooManyRedirects
+    }
+
     /// 设置页「复制诊断数据」导出的内容
     static var diagnosticDump: String {
         let shell = lastShellRaw.isEmpty ? "(空，外壳页没抓到)" : String(lastShellRaw.prefix(30000))
@@ -89,7 +96,8 @@ struct EamsService {
         do {
             (data, response) = try await Net.session.data(from: url)
         } catch {
-            EamsService.lastError = "课表外壳页请求失败：\(Net.describe(error))"
+            EamsService.lastError = "课表外壳页请求失败：\(Net.describe(error))\(Net.redirectTrail)"
+            if EamsService.isRedirectLoop(error) { throw AppError.sessionExpired }
             throw AppError.network(Net.describe(error))
         }
         let host = response.url?.host ?? ""
@@ -297,7 +305,9 @@ struct EamsService {
         do {
             (data, response) = try await Net.session.data(from: url)
         } catch {
-            EamsService.lastError = "\(label)请求失败：\(Net.describe(error))"
+            EamsService.lastError = "\(label)请求失败：\(Net.describe(error))\(Net.redirectTrail)"
+            // 重定向打转基本都是登录态坏了：清掉 cookie 重登一次就好了
+            if EamsService.isRedirectLoop(error) { throw AppError.sessionExpired }
             throw AppError.network(Net.describe(error))
         }
 

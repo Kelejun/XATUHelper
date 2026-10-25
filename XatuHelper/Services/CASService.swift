@@ -35,7 +35,27 @@ enum AppError: LocalizedError {
     }
 }
 
+/// 记一下每次请求的 302 链，出问题能看出是在哪儿打转
+final class NetRedirectTracer: NSObject, URLSessionTaskDelegate {
+    static var lastHops: [String] = []
+
+    private var buffer: [String] = []
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        buffer.append(request.url?.absoluteString ?? "")
+        if buffer.count > 16 { buffer.removeFirst() }
+        NetRedirectTracer.lastHops = buffer
+        completionHandler(request)
+    }
+}
+
 enum Net {
+    private static let tracer = NetRedirectTracer()
+
     static let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpCookieStorage = HTTPCookieStorage.shared
@@ -43,7 +63,7 @@ enum Net {
         config.timeoutIntervalForRequest = 20
         config.timeoutIntervalForResource = 40
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: config)
+        return URLSession(configuration: config, delegate: tracer, delegateQueue: nil)
     }()
 
     /// 把 ATS / 超时这类系统错误连带着失败的域名一起吐出来，不然只看到一句笼统的提示
@@ -63,6 +83,18 @@ enum Net {
             || ns.code == NSURLErrorTimedOut
             || ns.code == NSURLErrorNetworkConnectionLost
     }
+
+    /// 重定向打转时，把链子摊出来，方便判断是在 CAS 之间来回还是同一个地址死循环
+    static var redirectTrail: String {
+        guard !lastHops.isEmpty else { return "" }
+        let tail = lastHops.suffix(6).map { hop in
+            guard let url = URL(string: hop) else { return hop }
+            return url.host.map { "\($0)\(url.path)" } ?? hop
+        }
+        return "；跳转：" + tail.joined(separator: " → ")
+    }
+
+    private static var lastHops: [String] { NetRedirectTracer.lastHops }
 
     static func formBody(_ pairs: [(String, String)]) -> String {
         pairs.map { pair in
