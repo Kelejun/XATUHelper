@@ -27,7 +27,9 @@ struct EamsService {
     static var lastError = ""
     /// 最近一次课表接口的原始响应
     static var lastTableRaw = ""
-    /// 最近一次考试页的原始 HTML
+    /// 最近一次考试页外壳（stdExamTable.action）的原始 HTML
+    static var lastExamShellRaw = ""
+    /// 最近一次考试表（stdExamTable!examTable.action）的原始 HTML
     static var lastExamRaw = ""
 
     /// 设置页「复制诊断数据」导出的内容
@@ -232,34 +234,81 @@ struct EamsService {
         return nil
     }
 
-    /// 拉指定学期的考试安排
+    /// 拉指定学期的考试安排。
+    /// 这页是两层的：stdExamTable.action 只出外壳（批次下拉 + 学期表单 + 空的 contentDiv），
+    /// 真正的表格由 bg.Go 再请求 stdExamTable!examTable.action?examBatch.id=0 填进去。
     func fetchExams(semesterID: String) async throws -> [ExamRecord] {
-        var components = URLComponents(string: base + "/eams/stdExamTable.action")
-        if !semesterID.isEmpty {
-            components?.queryItems = [URLQueryItem(name: "semester.id", value: semesterID)]
-        }
-        guard let url = components?.url else { throw AppError.badURL }
+        let semesterQuery = semesterID.isEmpty
+            ? []
+            : [URLQueryItem(name: "semester.id", value: semesterID)]
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        let shell = try await examText(
+            path: "/eams/stdExamTable.action",
+            query: semesterQuery,
+            label: "考试页外壳"
+        )
+        EamsService.lastExamShellRaw = shell
+
+        let batches = EamsService.parseExamBatches(shell)
+        // 0 = 全部；整批取不到就逐个批次再试一遍
+        var batchIDs = ["0"]
+        batchIDs += batches.map(\.id).filter { $0 != "0" }
+
+        var collected: [ExamRecord] = []
+        var lastTable = ""
+        for batch in batchIDs {
+            var query = [URLQueryItem(name: "examBatch.id", value: batch)]
+            query += semesterQuery
+            let table = try await examText(
+                path: "/eams/stdExamTable!examTable.action",
+                query: query,
+                label: "考试表"
+            )
+            if !table.isEmpty { lastTable = table }
+            let parsed = EamsService.parseExams(table)
+            if !parsed.isEmpty {
+                collected += parsed
+                break
+            }
+        }
+
+        EamsService.lastExamRaw = lastTable
+        return collected
+    }
+
+    /// 统一的文字请求，顺便判掉登录页
+    private func examText(path: String, query: [URLQueryItem], label: String) async throws -> String {
+        var components = URLComponents(string: base + path)
+        if !query.isEmpty { components?.queryItems = query }
+        guard let url = components?.url else { throw AppError.badURL }
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await Net.session.data(for: request)
+            (data, response) = try await Net.session.data(from: url)
         } catch {
-            EamsService.lastError = "考试页请求失败：\(Net.describe(error))"
+            EamsService.lastError = "\(label)请求失败：\(Net.describe(error))"
             throw AppError.network(Net.describe(error))
         }
 
-        let finalHost = response.url?.host ?? ""
         let html = String(data: data, encoding: .utf8) ?? ""
-        EamsService.lastExamRaw = html
-
-        if finalHost.contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
+        if (response.url?.host ?? "").contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
             throw AppError.sessionExpired
         }
-        return EamsService.parseExams(html)
+        return html
+    }
+
+    /// 外壳页里的考试批次下拉
+    static func parseExamBatches(_ html: String) -> [(id: String, name: String)] {
+        guard let block = html.firstMatch(#"<select[^>]*name="examBatch\.id"[^>]*>([\s\S]*?)</select>"#) else {
+            return []
+        }
+        return block.regexGroups(#"<option[^>]*value="([0-9]+)"[^>]*>([^<]*)</option>"#)
+            .compactMap { groups in
+                guard let id = groups.first, !id.isEmpty else { return nil }
+                let name = groups.count > 1 ? groups[1].strippingTags : ""
+                return (id: id, name: name)
+            }
     }
 
     /// 「我的考试」是服务端直出的表格，按表头找列，认不出来就当没数据

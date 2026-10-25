@@ -131,14 +131,21 @@ struct ExamView: View {
     @ViewBuilder
     private var debugSection: some View {
         let raw = EamsService.lastExamRaw
+        let shell = EamsService.lastExamShellRaw
         Section {
-            Text("接口返回 \(raw.count) 个字符")
+            Text("外壳 \(shell.count) 字符 · 考试表 \(raw.count) 字符")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if !raw.isEmpty {
                 Button {
-                    UIPasteboard.general.string = raw
+                    UIPasteboard.general.string = """
+                    ===== 外壳 stdExamTable.action =====
+                    \(shell)
+
+                    ===== 考试表 stdExamTable!examTable.action =====
+                    \(raw)
+                    """
                 } label: {
                     Label("复制原始返回", systemImage: "doc.on.doc")
                 }
