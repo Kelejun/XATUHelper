@@ -111,61 +111,51 @@ struct GradeView: View {
     private func gradeRow(_ grade: GradeRecord) -> some View {
         let isOpen = expanded.contains(grade.id)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if isOpen { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
-                }
-            } label: {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(grade.course.isEmpty ? "课程" : grade.course)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(.primary)
-                        if !grade.subtitle.isEmpty {
-                            Text(grade.subtitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Spacer(minLength: 8)
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(grade.headline)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text("成绩 / 绩点")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-
-            if isOpen {
-                if grade.components.isEmpty {
-                    Text("这门课没有分项成绩")
+        let label = HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(grade.course.isEmpty ? "课程" : grade.course)
+                    .font(.body.weight(.medium))
+                if !grade.subtitle.isEmpty {
+                    Text(grade.subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(grade.components) { component in
-                            HStack {
-                                Text(component.name)
-                                Spacer(minLength: 8)
-                                Text(component.score)
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.leading, 2)
                 }
             }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(grade.headline)
+                    .font(.callout.weight(.semibold))
+                Text("成绩 / 绩点")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
+
+        // 没有分项就老老实实一行，别给人一个点开是空的箭头
+        guard !grade.components.isEmpty else { return AnyView(label) }
+
+        return AnyView(
+            DisclosureGroup(isExpanded: Binding(
+                get: { isOpen },
+                set: { open in
+                    if open { expanded.insert(grade.id) } else { expanded.remove(grade.id) }
+                }
+            )) {
+                ForEach(grade.components) { component in
+                    HStack {
+                        Text(component.name)
+                        Spacer(minLength: 8)
+                        Text(component.score)
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+            } label: {
+                label
+            }
+        )
     }
 
     /// 空列表时给现场信息，方便判断是没出分还是没解析出来

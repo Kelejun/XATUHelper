@@ -462,7 +462,11 @@ struct EamsService {
         let codeColumn = header.firstIndex { $0.contains("课程序号") || $0.contains("课程号") || $0.contains("课程代码") }
         let creditColumn = column(["学分"])
         let gpaColumn = column(["绩点"])
-        let scoreColumn = header.firstIndex { $0 == "总成绩" || $0 == "成绩" || $0.contains("总成绩") }
+        // 教务里这个列有的叫「总评成绩」，有的叫「总成绩」「成绩」
+        let scoreColumn = header.firstIndex { $0.contains("总评") }
+            ?? header.firstIndex { $0.contains("总成绩") }
+            ?? header.firstIndex { $0 == "成绩" }
+            ?? header.firstIndex { $0.contains("成绩") && !$0.contains("绩点") }
 
         // 除总成绩以外的「xx成绩」列都当分项
         let componentColumns: [(index: Int, name: String)] = header.enumerated().compactMap { index, head in
