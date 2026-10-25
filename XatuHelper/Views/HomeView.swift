@@ -192,25 +192,25 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                Color.clear
-                    .frame(height: 150)
+                Section {
+                    Color.clear
+                        .frame(height: 150)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(greeting)
+                            .font(.largeTitle.weight(.bold))
+                        Text(statusLine)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets())
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(greeting)
-                        .font(.largeTitle.weight(.bold))
-                    Text(statusLine)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 2)
-                .padding(.top, 10)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets())
 
                 if let exam = nextExam {
                     Section {
