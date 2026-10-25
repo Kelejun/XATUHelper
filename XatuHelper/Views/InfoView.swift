@@ -79,7 +79,6 @@ struct InfoView: View {
     @State private var showsCheckin = false
     @State private var showsSettings = false
     @State private var webLink: WebLink?
-    @State private var resolvingCalendar = false
 
     private struct WebLink: Identifiable {
         let id = UUID()
@@ -106,13 +105,6 @@ struct InfoView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("校园")
-            .overlay {
-                if resolvingCalendar {
-                    ProgressView()
-                        .padding(18)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                }
-            }
             .sheet(item: $webLink) { link in
                 WebSheet(title: link.title, urlString: link.urlString)
             }
@@ -128,7 +120,7 @@ struct InfoView: View {
             .alert(item: $pending) { entry in
                 Alert(
                     title: Text(entry.title),
-                    message: Text(entry == .calendar ? "没在教务处页面里找到校历链接，可能改版了。" : "这个还没做，下一版接上。"),
+                    message: Text("这个还没做，下一版接上。"),
                     dismissButton: .default(Text("好"))
                 )
             }
@@ -168,7 +160,7 @@ struct InfoView: View {
                         Button { showsCheckin = true } label: { card(entry) }
                             .buttonStyle(.plain)
                     } else if entry == .calendar {
-                        Button { openCalendar() } label: { card(entry) }
+                        NavigationLink { SchoolCalendarView() } label: { card(entry) }
                             .buttonStyle(.plain)
                     } else if entry == .ehall {
                         Button {
@@ -193,19 +185,6 @@ struct InfoView: View {
                     }
                 }
             }
-        }
-    }
-
-    private func openCalendar() {
-        guard !resolvingCalendar else { return }
-        resolvingCalendar = true
-        Task {
-            if let url = await CalendarService.latestCalendarURL() {
-                webLink = WebLink(title: "校历", urlString: url.absoluteString)
-            } else {
-                pending = .calendar
-            }
-            resolvingCalendar = false
         }
     }
 
