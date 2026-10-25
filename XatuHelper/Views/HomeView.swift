@@ -109,6 +109,22 @@ struct HomeView: View {
         NavigationStack {
             List {
                 Section {
+                    Text(statusLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 4, trailing: 18))
+                }
+
+                if let exam = nextExam {
+                    Section {
+                        examCard(exam)
+                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    }
+                }
+
+                Section {
                     scheduleCard
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                 }
@@ -118,6 +134,8 @@ struct HomeView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(alignment: .top) { homeBackground }
             .contentMargins(.top, titleGap, for: .scrollContent)
             .navigationTitle(greeting)
             .toolbar {
@@ -135,7 +153,114 @@ struct HomeView: View {
             }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
-        .task { await app.refreshElectricityIfNeeded() }
+        .task {
+            await app.refreshElectricityIfNeeded()
+            if app.exams.isEmpty, !app.currentSemesterID.isEmpty {
+                await app.refreshExams(semesterID: app.currentSemesterID)
+            }
+        }
+    }
+
+    /// 顶部那片浅蓝渐变，往下化到页面底色，跟健康 App 的摘要页一个意思
+    private var homeBackground: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.16, green: 0.44, blue: 0.94).opacity(0.34), location: 0),
+                .init(color: Color(red: 0.40, green: 0.66, blue: 0.98).opacity(0.16), location: 0.55),
+                .init(color: Color(.systemGroupedBackground).opacity(0), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 300)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+    }
+
+    // MARK: - 顶部那行状态
+
+    /// 第 N 周 · 今天还有 2 节 · 下次考试还有 6 天
+    private var statusLine: String {
+        var parts: [String] = []
+        if app.isCurrentSemester, app.currentWeek > 0 {
+            parts.append("第 \(app.currentWeek) 周")
+        }
+        if isLateNight || remainingCount == 0 {
+            parts.append("今天没课了")
+        } else {
+            parts.append("今天还有 \(remainingCount) 节")
+        }
+        if let exam = nextExam, let days = daysUntil(exam) {
+            parts.append(days <= 0 ? "今天有考试" : "下次考试还有 \(days) 天")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var remainingCount: Int {
+        remainingToday.count + (currentBlock == nil ? 0 : 1)
+    }
+
+    private var nextExam: ExamRecord? {
+        Self.examCandidates(app.exams, from: now).first
+    }
+
+    private func daysUntil(_ exam: ExamRecord) -> Int? {
+        guard let date = Self.examDateFormatter.date(from: exam.dateKey) else { return nil }
+        let today = Calendar.current.startOfDay(for: now)
+        return Calendar.current.dateComponents([.day], from: today, to: date).day
+    }
+
+    /// 今天及以后的考试，按日期升序
+    static func examCandidates(_ exams: [ExamRecord], from now: Date) -> [ExamRecord] {
+        let today = Calendar.current.startOfDay(for: now)
+        return exams
+            .compactMap { exam -> (ExamRecord, Date)? in
+                guard let date = examDateFormatter.date(from: exam.dateKey) else { return nil }
+                return date >= today ? (exam, date) : nil
+            }
+            .sorted { $0.1 < $1.1 }
+            .map { $0.0 }
+    }
+
+    private static let examDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    private func examCard(_ exam: ExamRecord) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("下一场考试")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                if let days = daysUntil(exam) {
+                    Text(days <= 0 ? "今天" : "还有 \(days) 天")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.orange)
+                }
+            }
+
+            Text(exam.course)
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                if !exam.time.isEmpty {
+                    Text(exam.time)
+                }
+                HStack(spacing: 6) {
+                    if !exam.room.isEmpty { Text(exam.room) }
+                    if !exam.seat.isEmpty {
+                        if !exam.room.isEmpty { Text("·") }
+                        Text("座位 \(exam.seat)")
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
     }
 
     /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课
