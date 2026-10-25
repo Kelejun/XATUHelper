@@ -27,6 +27,8 @@ struct EamsService {
     static var lastError = ""
     /// 最近一次课表接口的原始响应
     static var lastTableRaw = ""
+    /// 最近一次考试页的原始 HTML
+    static var lastExamRaw = ""
 
     /// 设置页「复制诊断数据」导出的内容
     static var diagnosticDump: String {
@@ -48,6 +50,9 @@ struct EamsService {
 
         ===== 课表接口 courseTableForStd!courseTable.action =====
         \(lastTableRaw.isEmpty ? "(空)" : String(lastTableRaw.prefix(6000)))
+
+        ===== 考试页 stdExamTable.action =====
+        \(lastExamRaw.isEmpty ? "(空)" : String(lastExamRaw.prefix(20000)))
         """
     }
 
@@ -225,6 +230,96 @@ struct EamsService {
             }
         }
         return nil
+    }
+
+    /// 拉指定学期的考试安排
+    func fetchExams(semesterID: String) async throws -> [ExamRecord] {
+        var components = URLComponents(string: base + "/eams/stdExamTable.action")
+        if !semesterID.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "semester.id", value: semesterID)]
+        }
+        guard let url = components?.url else { throw AppError.badURL }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await Net.session.data(for: request)
+        } catch {
+            EamsService.lastError = "考试页请求失败：\(Net.describe(error))"
+            throw AppError.network(Net.describe(error))
+        }
+
+        let finalHost = response.url?.host ?? ""
+        let html = String(data: data, encoding: .utf8) ?? ""
+        EamsService.lastExamRaw = html
+
+        if finalHost.contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
+            throw AppError.sessionExpired
+        }
+        return EamsService.parseExams(html)
+    }
+
+    /// 「我的考试」是服务端直出的表格，按表头找列，认不出来就当没数据
+    static func parseExams(_ html: String) -> [ExamRecord] {
+        let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#).compactMap { $0.first }
+        guard !rows.isEmpty else { return [] }
+
+        let table = rows.map { row -> [String] in
+            row.regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags }
+        }
+
+        guard let headerIndex = table.firstIndex(where: { row in
+            row.contains { $0.contains("时间") || $0.contains("考场") }
+        }) else { return [] }
+
+        let header = table[headerIndex]
+        func column(_ keywords: [String]) -> Int? {
+            header.firstIndex { head in keywords.contains { head.contains($0) } }
+        }
+
+        let courseColumn = column(["课程", "科目"])
+        let timeColumn = column(["时间"])
+        let roomColumn = column(["考场", "教室", "地点"])
+        let seatColumn = column(["座位"])
+        let noteColumn = column(["备注", "说明"])
+        let nameColumn = column(["考试名称", "名称", "考试"])
+
+        guard timeColumn != nil || roomColumn != nil else { return [] }
+
+        var result: [ExamRecord] = []
+        for (offset, row) in table[(headerIndex + 1)...].enumerated() {
+            guard row.count > 1 else { continue }
+            func cell(_ index: Int?) -> String {
+                guard let index, index < row.count else { return "" }
+                let value = row[index]
+                return (value == "-" || value == "—" || value == "--") ? "" : value
+            }
+
+            let time = cell(timeColumn)
+            let room = cell(roomColumn)
+            if time.isEmpty && room.isEmpty { continue }
+
+            let course = cell(courseColumn)
+            let name = cell(nameColumn)
+
+            result.append(
+                ExamRecord(
+                    id: "\(offset)-\(course)-\(time)-\(room)",
+                    course: course,
+                    name: name == course ? "" : name,
+                    time: time,
+                    room: room,
+                    seat: cell(seatColumn),
+                    note: cell(noteColumn)
+                )
+            )
+        }
+        return result
     }
 
     // MARK: - 学期列表解析

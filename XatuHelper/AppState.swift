@@ -27,6 +27,10 @@ final class AppState: ObservableObject {
     @Published var electricityLoading = false
     @Published var electricityError: String?
 
+    @Published var exams: [ExamRecord] = []
+    @Published var examsLoading = false
+    @Published var examsError: String?
+
     @Published var weekOneMonday: Date = AppState.fallStart
     /// 需要验证码/动态码时弹出网页登录
     @Published var showsWebLogin = false
@@ -327,6 +331,55 @@ final class AppState: ObservableObject {
         } catch {
             throw AppError.network(Net.describe(error))
         }
+    }
+
+    /// 带返回值版本的 withRelogin
+    private func withReloginValue<T>(_ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch let error as AppError {
+            guard isRecoverable(error) else { throw error }
+            return try await reloginAndRetryValue(operation)
+        } catch {
+            guard Net.isTransportProblem(error) else { throw error }
+            return try await reloginAndRetryValue(operation)
+        }
+    }
+
+    private func reloginAndRetryValue<T>(_ operation: () async throws -> T) async throws -> T {
+        clearXatuCookies()
+        guard let saved = Preferences.studentID,
+              let password = Keychain.loadPassword(account: saved), !password.isEmpty else {
+            throw AppError.sessionExpired
+        }
+        do {
+            try await cas.login(username: saved, password: password)
+        } catch {
+            EamsService.lastError = "自动重登失败：\(error.localizedDescription)"
+            throw AppError.reloginFailed("登录已过期，自动重新登录没成功（\(error.localizedDescription)），请手动登录一次")
+        }
+        do {
+            return try await operation()
+        } catch let error as AppError {
+            throw error
+        } catch {
+            throw AppError.network(Net.describe(error))
+        }
+    }
+
+    // MARK: - 考试
+
+    func refreshExams() async {
+        guard !examsLoading else { return }
+        examsLoading = true
+        examsError = nil
+        do {
+            let target = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+            exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
+        } catch {
+            examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
+        examsLoading = false
     }
 
     // MARK: - 电费

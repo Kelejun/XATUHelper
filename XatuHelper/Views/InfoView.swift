@@ -108,6 +108,13 @@ struct InfoView: View {
                             card(entry)
                         }
                         .buttonStyle(.plain)
+                    } else if entry == .exam {
+                        NavigationLink {
+                            ExamView()
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
                     } else if entry == .checkin {
                         Button { showsCheckin = true } label: { card(entry) }
                             .buttonStyle(.plain)
