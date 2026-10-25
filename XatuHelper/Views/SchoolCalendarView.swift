@@ -161,12 +161,16 @@ struct SchoolCalendarView: View {
 
     @ViewBuilder
     private func notesSection(_ info: CalendarService.Info) -> some View {
-        Section("其他") {
+        Section {
             ForEach(info.notes, id: \.self) { note in
                 Text(note)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            Text("其他")
+        } footer: {
+            Text("这一节是从校历图上自动识别出来的文字，可能有识别错误，仅供参考。")
         }
     }
 
