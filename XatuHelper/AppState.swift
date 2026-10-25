@@ -3,7 +3,13 @@ import Combine
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var occurrences: [CourseOccurrence] = []
+    @Published var occurrences: [CourseOccurrence] = [] {
+        didSet {
+            let keys = occurrences.map(\.courseKey)
+            guard !keys.isEmpty else { return }
+            CoursePalette.register(keys)
+        }
+    }
     @Published var unitCount = 12
     @Published var studentID = ""
     @Published var fetchedAt: Date?
