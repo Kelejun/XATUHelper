@@ -579,11 +579,17 @@ struct EamsService {
         let scoreColumn = header.firstIndex { $0.contains("总评") }
             ?? header.firstIndex { $0.contains("最终") }
 
-        // 除总成绩以外的「xx成绩」列都当分项
+        // 除总评外的「xx成绩」列都当分项
         let componentColumns: [(index: Int, name: String)] = header.enumerated().compactMap { index, head in
-            guard head.contains("成绩"), index != scoreColumn else { return nil }
+            guard head.contains("成绩"), index != scoreColumn, !head.contains("总评") else { return nil }
             return (index, head)
         }
+        // 剩下那些没归类的列（考试方式、课程类别之类）合成一个「其他」分项
+        let usedColumns = Set(
+            [courseColumn, codeColumn, termColumn, creditColumn, gpaColumn, scoreColumn].compactMap { $0 }
+            + componentColumns.map(\.index)
+        )
+        let extraColumns = header.indices.filter { !usedColumns.contains($0) && !header[$0].isEmpty }
 
         guard courseColumn != nil || scoreColumn != nil else { return [] }
 
@@ -606,6 +612,17 @@ struct EamsService {
                 return GradeComponent(id: "\(offset)-\(item.name)", name: item.name, score: value)
             }
 
+            var extraParts: [String] = []
+            for index in extraColumns {
+                let value = cell(index)
+                guard !value.isEmpty else { continue }
+                extraParts.append("\(header[index]) \(value)")
+            }
+            var allComponents = components
+            if !extraParts.isEmpty {
+                allComponents.append(GradeComponent(id: "\(offset)-其他", name: "其他", score: extraParts.joined(separator: "，")))
+            }
+
             result.append(
                 GradeRecord(
                     id: "\(offset)-\(course)-\(score)",
@@ -615,7 +632,7 @@ struct EamsService {
                     score: score,
                     gpa: cell(gpaColumn),
                     term: cell(termColumn),
-                    components: components
+                    components: allComponents
                 )
             )
         }
