@@ -67,7 +67,6 @@ struct CourseWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "CourseWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             CourseWidgetView(entry: entry)
-                .widgetGlass()
                 .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("课程")
@@ -80,7 +79,6 @@ struct ElectricityWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ElectricityWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             ElectricityWidgetView(entry: entry)
-                .widgetGlass()
                 .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("电费")
@@ -93,7 +91,6 @@ struct BreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BreakWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             BreakWidgetView(entry: entry)
-                .widgetGlass()
                 .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("放假倒计时")
@@ -327,25 +324,9 @@ struct EmptyHint: View {
 /// 小组件底色：iOS 26 起用系统玻璃效果，老系统退回毛玻璃材质。
 struct WidgetBackdrop: View {
     var body: some View {
-        if #available(iOS 26.0, *) {
-            // iOS 26 起系统自己给小组件套液态玻璃，这里留空才会显出系统那层
-            Color.clear
-        } else {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-        }
+        Rectangle()
+            .fill(.ultraThinMaterial)
     }
 }
 
 
-private extension View {
-    /// iOS 26 起给整块内容套一层液态玻璃，老系统原样返回。
-    @ViewBuilder
-    func widgetGlass() -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(.regular)
-        } else {
-            self
-        }
-    }
-}
