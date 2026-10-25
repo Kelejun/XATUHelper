@@ -575,12 +575,9 @@ struct EamsService {
         let termColumn = header.firstIndex { $0.contains("学期") || $0.contains("学年") }
         let creditColumn = column(["学分"])
         let gpaColumn = column(["绩点"])
-        // 教务里这个列有的叫「最终」「最终成绩」，有的叫「总评成绩」「总成绩」「成绩」
-        let scoreColumn = header.firstIndex { $0.contains("最终") }
-            ?? header.firstIndex { $0.contains("总评") }
-            ?? header.firstIndex { $0.contains("总成绩") }
-            ?? header.firstIndex { $0 == "成绩" }
-            ?? header.firstIndex { $0.contains("成绩") && !$0.contains("绩点") }
+        // 成绩列就一个「总评成绩」，其余「xx成绩」都是分项
+        let scoreColumn = header.firstIndex { $0.contains("总评") }
+            ?? header.firstIndex { $0.contains("最终") }
 
         // 除总成绩以外的「xx成绩」列都当分项
         let componentColumns: [(index: Int, name: String)] = header.enumerated().compactMap { index, head in
