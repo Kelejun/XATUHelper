@@ -480,30 +480,37 @@ ScrollView {
     }
 
     private func currentRow(_ block: CourseBlock) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("正在上")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(CoursePalette.color(for: block).opacity(0.15)))
-                    .foregroundStyle(CoursePalette.color(for: block))
-                Text(block.name)
-                    .font(.subheadline.weight(.medium))
+        HStack(alignment: .top, spacing: 10) {
+            Text(timeText(block))
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 96, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(CoursePalette.color(for: block))
+                .frame(width: 4, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(block.name)
+                        .font(.subheadline)
+                    Text("正在上")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(CoursePalette.color(for: block).opacity(0.15)))
+                        .foregroundStyle(CoursePalette.color(for: block))
+                }
+                if !block.shortRoom.isEmpty {
+                    Text(block.shortRoom)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            HStack(spacing: 8) {
-                Text(timeText(block))
-                if !block.shortRoom.isEmpty { Text(block.shortRoom) }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(CoursePalette.color(for: block).opacity(0.08))
-        )
     }
 
     private func timeText(_ block: CourseBlock) -> String {
