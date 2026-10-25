@@ -47,6 +47,8 @@ struct EamsService {
     }
 
     static var lastGradeSummary: GradeSummary?
+    /// 汇总那一小段原文，排查数字为什么不对时用
+    static var lastGradeSummaryRaw = ""
 
     /// URLSession 报「重定向太多」，基本都是 CAS 在登录页和业务页之间打转，
     /// 说明本校那个会话已经坏了，按登录态失效处理，让上层清 cookie 重登。
@@ -81,6 +83,9 @@ struct EamsService {
 
         ===== 成绩外壳 teach/grade/course/person.action =====
         \(lastGradeShellRaw.isEmpty ? "(空)" : String(lastGradeShellRaw.prefix(8000)))
+
+        ===== 成绩汇总匹配到的原文 =====
+        \(lastGradeSummaryRaw.isEmpty ? "(空，没匹配到汇总)" : lastGradeSummaryRaw)
 
         ===== 成绩表 person!search.action =====
         \(lastGradeRaw.isEmpty ? "(空)" : String(lastGradeRaw.prefix(20000)))
@@ -468,21 +473,55 @@ struct EamsService {
         return EamsService.parseGrades(html)
     }
 
-    /// 成绩页也是服务端直出的表格。表头里的「平时成绩」「期末成绩」这类都当分项，
-    /// 「总成绩」才是最终成绩，「绩点」单独一列。
-    /// 从成绩页文字里抠学校自己算好的汇总数字
+    /// 从成绩页抠学校自己算好的汇总数字。
+    /// 优先按表格单元格找（标签格 + 数字格），找不到再退回纯文本邻近匹配。
     static func parseGradeSummary(_ html: String) -> GradeSummary {
         var summary = GradeSummary()
 
+        func plausible(_ value: Double, in range: ClosedRange<Double>) -> Double? {
+            // 4 位数基本是学年（2024-2025），不是我们要的统计值
+            guard value < 1900, range.contains(value) else { return nil }
+            return value
+        }
+
+        func trailingNumber(_ text: String) -> Double? {
+            guard let raw = text.firstMatch(#"([0-9]+(?:\.[0-9]+)?)"#) else { return nil }
+            return Double(raw)
+        }
+
+        // 1. 表格：标签格自己带数字，或者紧挨着的下一格是数字
+        let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#).compactMap { $0.first }
+        let table = rows.map { row -> [String] in
+            row.regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags }
+        }
+
+        func cellValue(_ keywords: [String]) -> Double? {
+            for row in table {
+                for (index, cell) in row.enumerated() {
+                    guard keywords.contains(where: { cell.contains($0) }) else { continue }
+                    // 标签后面直接跟数字
+                    if let value = trailingNumber(cell) { return value }
+                    // 数字在下一格 / 再下一格
+                    for offset in 1...2 where index + offset < row.count {
+                        if let value = trailingNumber(row[index + offset]) { return value }
+                    }
+                }
+            }
+            return nil
+        }
+
+        // 2. 纯文本：标签 + 冒号/空格 + 数字
         let plain = html
             .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
 
-        func number(_ keywords: [String]) -> Double? {
+        func textValue(_ keywords: [String]) -> Double? {
             for keyword in keywords {
                 let pattern = NSRegularExpression.escapedPattern(for: keyword)
-                    + #"[^0-9]{0,14}([0-9]+(?:\.[0-9]+)?)"#
+                    + #"[:：\s]{0,4}([0-9]+(?:\.[0-9]+)?)"#
                 if let raw = plain.firstMatch(pattern), let value = Double(raw) {
                     return value
                 }
@@ -490,14 +529,20 @@ struct EamsService {
             return nil
         }
 
-        if let value = number(["课程门数", "门数", "课程数"]) {
-            summary.count = Int(value)
-        } else if let raw = plain.firstMatch(#"共\s*([0-9]+)\s*门"#), let value = Int(raw) {
-            summary.count = value
+        func lookup(_ keywords: [String], range: ClosedRange<Double>) -> Double? {
+            if let value = cellValue(keywords), let ok = plausible(value, in: range) { return ok }
+            if let value = textValue(keywords), let ok = plausible(value, in: range) { return ok }
+            return nil
         }
 
-        summary.credits = number(["总学分", "合计学分", "学分合计", "已修学分", "已获学分", "获得学分"])
-        summary.gpa = number(["平均学分绩点", "平均绩点", "平均GPA"])
+        if let value = lookup(["课程门数", "门数", "课程数"], range: 1...200) {
+            summary.count = Int(value)
+        }
+        summary.credits = lookup(["总学分", "合计学分", "学分合计", "已修学分", "已获学分", "获得学分"],
+                                range: 0...500)
+        summary.gpa = lookup(["平均学分绩点", "平均绩点", "平均GPA"], range: 0...6)
+
+        EamsService.lastGradeSummaryRaw = plain.firstMatch(#".{0,40}(?:总学分|平均[学分]*绩点|门数).{0,60}"#) ?? ""
 
         return summary
     }
