@@ -2,10 +2,6 @@ import SwiftUI
 import UIKit
 
 struct TimetableView: View {
-    /// 从首页打开时外层已经有 NavigationStack，这里就不要再套一层
-    var embedded = false
-    /// 整页盖住的形式打开时，左上角给一个关闭按钮
-    var onClose: (() -> Void)?
 
     @EnvironmentObject var app: AppState
     @State private var showSettings = false
@@ -168,12 +164,8 @@ struct TimetableView: View {
 
 
     var body: some View {
-        if embedded {
+        NavigationStack {
             content
-        } else {
-            NavigationStack {
-                content
-            }
         }
     }
 
@@ -200,14 +192,7 @@ struct TimetableView: View {
         }
         .navigationTitle(app.semesterName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(embedded ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            if let onClose {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭", action: onClose)
-                }
-            }
-
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Menu("学年") {

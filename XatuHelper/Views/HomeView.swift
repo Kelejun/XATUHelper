@@ -4,7 +4,6 @@ import UIKit
 struct HomeView: View {
 
     @EnvironmentObject var app: AppState
-    @State private var showsTimetable = false
     @State private var now = Date()
 
     // MARK: - 问候语
@@ -121,11 +120,6 @@ struct HomeView: View {
             .contentMargins(.top, titleGap, for: .scrollContent)
             .navigationTitle(greeting)
         }
-        .fullScreenCover(isPresented: $showsTimetable) {
-            NavigationStack {
-                TimetableView(embedded: true, onClose: { showsTimetable = false })
-            }
-        }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .task { await app.refreshElectricityIfNeeded() }
     }
@@ -140,12 +134,7 @@ struct HomeView: View {
     }
 
     private var scheduleCard: some View {
-        Button {
-            showsTimetable = true
-        } label: {
-            cardContent
-        }
-        .foregroundStyle(.primary)
+        cardContent
     }
 
     private var cardContent: some View {
@@ -158,9 +147,6 @@ struct HomeView: View {
                 Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
             }
 
             if showingTomorrow {
