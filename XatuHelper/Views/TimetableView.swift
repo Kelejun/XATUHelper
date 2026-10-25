@@ -249,11 +249,8 @@ struct TimetableView: View {
             TimetableSettingsSheet()
         }
         .task {
-            await app.ensureShell()
+            // 定时刷新交给启动流程，这里只有完全没数据时才拉一次
             if app.occurrences.isEmpty {
-                await app.refresh()
-            } else if let fetchedAt = app.fetchedAt,
-                      Date().timeIntervalSince(fetchedAt) > 144 * 3600 {
                 await app.refresh()
             }
         }

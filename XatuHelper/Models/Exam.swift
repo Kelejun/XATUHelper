@@ -2,7 +2,7 @@ import Foundation
 
 /// 一条考试安排。树维的「我的考试」是服务端直出的表格，字段随学校配置略有差异，
 /// 所以这里保留原始文本，解析时按表头找列。
-struct ExamRecord: Identifiable, Hashable {
+struct ExamRecord: Identifiable, Hashable, Codable {
     var id: String
     var course: String      // 课程名称
     var code: String        // 课程序号

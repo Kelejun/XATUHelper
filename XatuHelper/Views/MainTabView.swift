@@ -26,7 +26,7 @@ struct MainTabView: View {
                 .tag(Tab.info)
         }
         .task {
-            await app.refreshElectricityIfNeeded()
+            await app.startupRefreshIfNeeded()
         }
         .sheet(isPresented: $app.showsWebLogin) {
             CASWebLoginSheet()

@@ -69,6 +69,7 @@ final class AppState: ObservableObject {
 
     /// 正在进行的自动登录任务，多个请求共用
     private var reloginTask: Task<Void, Error>?
+    private let examStore = ExamStore()
 
     init() {
         // 先把上次存的登录 cookie 塞回来，再读缓存
@@ -78,6 +79,7 @@ final class AppState: ObservableObject {
         electricityBalance = Preferences.electricityBalance
         electricityCheckedAt = Preferences.electricityCheckedAt
         electricityHistory = ElectricityHistoryStore.load()
+        exams = examStore.load()
         if let snapshot = store.load() {
             occurrences = snapshot.occurrences
             unitCount = snapshot.unitCount
@@ -267,6 +269,8 @@ final class AppState: ObservableObject {
         CookieVault.clear()
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         store.clear()
+        examStore.clear()
+        exams = []
         occurrences = []
         studentID = ""
         semesters = []
@@ -428,6 +432,7 @@ final class AppState: ObservableObject {
             let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
             let target = semesterID ?? fallback
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
+            examStore.save(exams)
         } catch {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
@@ -458,6 +463,31 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - 电费
+
+    /// 启动时最多做两件事：电费过期先查电费；课表超过 168 小时，隔 60 秒再查
+    /// 其他数据（考试、成绩）只在进入对应页面时刷新，首页考试卡片只读缓存
+    func startupRefreshIfNeeded() async {
+        guard isLoggedIn else { return }
+
+        let electricityIsStale: Bool = {
+            guard dorm != nil, electricityBalance != nil else { return dorm != nil }
+            guard let checked = electricityCheckedAt else { return true }
+            return !Calendar.current.isDateInToday(checked)
+        }()
+        if electricityIsStale {
+            await refreshElectricity()
+        }
+
+        let timetableIsStale: Bool = {
+            guard let fetched = fetchedAt else { return true }
+            return Date().timeIntervalSince(fetched) >= 168 * 3600
+        }()
+        guard timetableIsStale else { return }
+
+        try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+        guard !Task.isCancelled else { return }
+        await refresh()
+    }
 
     /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做
     /// 每天第一次打开 app 才自动查一次，其余情况只靠用户手动刷新

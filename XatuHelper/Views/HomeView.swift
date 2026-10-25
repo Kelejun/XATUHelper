@@ -228,12 +228,12 @@ struct HomeView: View {
                         electricityCard
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                         if let holiday = nextHoliday {
                             holidayCard(holiday)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(14)
-                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                         }
                     }
                     .listRowInsets(EdgeInsets())
@@ -270,12 +270,6 @@ struct HomeView: View {
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .onAppear { calendarInfo = CalendarCache.load() }
-        .task {
-            await app.refreshElectricityIfNeeded()
-            if app.exams.isEmpty, !app.currentSemesterID.isEmpty {
-                await app.refreshExams(semesterID: app.currentSemesterID)
-            }
-        }
     }
 
     /// 顶部那片浅蓝渐变，往下化到页面底色，跟健康 App 的摘要页一个意思
