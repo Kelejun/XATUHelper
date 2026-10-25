@@ -358,6 +358,13 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
 
+    /// 1.0.0（1）
+    static var versionText: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "\(short)（\(build)）"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -373,6 +380,10 @@ struct SettingsSheet: View {
                     Toggle("显示诊断数据", isOn: $showDiagnostics)
                 } footer: {
                     Text("如果出现解析问题，可复制诊断信息给开发者处理")
+                }
+
+                Section {
+                    LabeledContent("版本", value: Self.versionText)
                 }
             }
             .navigationTitle("设置")
