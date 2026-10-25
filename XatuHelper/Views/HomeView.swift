@@ -108,16 +108,17 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+            List {
+                Section {
                     scheduleCard
-                    electricityCard
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, titleGap)
-                .frame(maxWidth: .infinity, alignment: .top)
+                Section {
+                    electricityCard
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                }
             }
-            .background(Color(.systemGroupedBackground))
+            .listStyle(.insetGrouped)
             .navigationTitle(greeting)
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
@@ -137,7 +138,6 @@ struct HomeView: View {
         Button(action: onOpenTimetable) {
             cardContent
         }
-        .buttonStyle(ScheduleCardButtonStyle())
         .foregroundStyle(.primary)
     }
 
@@ -173,11 +173,6 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
     }
 
     /// 电费卡片：余额低于 10 元变黄
@@ -229,13 +224,8 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-            )
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
     }
 
     private func row(_ block: CourseBlock) -> some View {
@@ -292,17 +282,6 @@ struct HomeView: View {
     }
 }
 
-
-/// 点下去压一层灰，配 .plain 不给反馈
-private struct ScheduleCardButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.black.opacity(configuration.isPressed ? 0.08 : 0))
-            )
-    }
-}
 
 #Preview {
     HomeView()
