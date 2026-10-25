@@ -193,20 +193,22 @@ struct HomeView: View {
         NavigationStack {
             List {
                 Color.clear
-                    .frame(height: titleHeight + 12)
+                    .frame(height: 150)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets())
 
-                Text(statusLine)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 2)
-                    .padding(.bottom, 4)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets())
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(greeting)
+                        .font(.largeTitle.weight(.bold))
+                    Text(statusLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
 
                 if let exam = nextExam {
                     Section {
@@ -242,7 +244,8 @@ struct HomeView: View {
             .scrollContentBackground(.hidden)
             .contentMargins(.top, 0, for: .scrollContent)
             .background(alignment: .top) { homeBackground }
-            .navigationTitle(greeting)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
