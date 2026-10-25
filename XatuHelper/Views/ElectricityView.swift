@@ -8,35 +8,16 @@ struct ElectricityView: View {
     var body: some View {
         Form {
             if let dorm = app.dorm {
+                Section {
+                    balanceCard
+                }
+
                 Section("宿舍") {
                     LabeledContent("房间", value: dorm.displayName)
                     if !dorm.areaName.isEmpty, dorm.areaName != dorm.buildName {
                         LabeledContent("校区", value: dorm.areaName)
                     }
                     Button("换一个宿舍") { editing = true }
-                }
-
-                Section("剩余电费") {
-                    balanceRow
-                }
-
-                Section {
-                    Button {
-                        Task { await app.refreshElectricity() }
-                    } label: {
-                        HStack {
-                            Text("刷新")
-                            if app.electricityLoading {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(app.electricityLoading)
-
-                    if let checked = app.electricityCheckedAt {
-                        LabeledContent("上次查询", value: checked.formatted(date: .abbreviated, time: .shortened))
-                    }
                 }
 
                 if let error = app.electricityError {
@@ -65,29 +46,56 @@ struct ElectricityView: View {
         }
     }
 
+    /// 余额卡片：大字余额、右边一个蓝色刷新图标，余额下面灰色小字写上次查询时间
+    private var balanceCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center) {
+                balanceValue
+                Spacer(minLength: 12)
+                Button {
+                    Task { await app.refreshElectricity() }
+                } label: {
+                    if app.electricityLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.title3)
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(app.electricityLoading)
+                .accessibilityLabel("刷新电费")
+            }
+
+            if let checked = app.electricityCheckedAt {
+                Text("上次查询 \(checked.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     @ViewBuilder
-    private var balanceRow: some View {
+    private var balanceValue: some View {
         if let balance = app.electricityBalance {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("¥")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                 Text(balance)
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .foregroundStyle(app.isLowBalance ? .orange : .primary)
-                Spacer()
             }
-            .padding(.vertical, 4)
         } else if app.electricityLoading {
-            HStack {
-                Text("查询中…").foregroundStyle(.secondary)
-                Spacer()
-                ProgressView()
-            }
+            Text("查询中…")
+                .font(.title3)
+                .foregroundStyle(.secondary)
         } else {
-            Button("查询余额") {
-                Task { await app.refreshElectricity() }
-            }
+            Text("还没查到余额")
+                .font(.title3)
+                .foregroundStyle(.secondary)
         }
     }
 }
