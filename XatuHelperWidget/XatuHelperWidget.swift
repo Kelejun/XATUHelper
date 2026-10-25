@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WidgetKit
 
 @main
@@ -66,7 +67,7 @@ struct CourseWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "CourseWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             CourseWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
         }
         .configurationDisplayName("课程")
         .description("今天要上的课。")
@@ -78,7 +79,7 @@ struct ElectricityWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ElectricityWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             ElectricityWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
         }
         .configurationDisplayName("电费")
         .description("宿舍还剩多少电费。")
@@ -90,7 +91,7 @@ struct BreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BreakWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             BreakWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) { Color(UIColor.secondarySystemGroupedBackground) }
         }
         .configurationDisplayName("放假倒计时")
         .description("离放假还有多少天。")
