@@ -454,16 +454,16 @@ ScrollView {
     }
 
     private func row(_ block: CourseBlock) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(CoursePalette.color(for: block))
-                .frame(width: 4, height: 34)
-
+        HStack(alignment: .top, spacing: 10) {
             Text(timeText(block))
                 .font(.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 96, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(CoursePalette.color(for: block))
+                .frame(width: 4, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(block.name)
@@ -486,8 +486,8 @@ ScrollView {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    .foregroundStyle(Color.accentColor)
+                    .background(Capsule().fill(CoursePalette.color(for: block).opacity(0.15)))
+                    .foregroundStyle(CoursePalette.color(for: block))
                 Text(block.name)
                     .font(.subheadline.weight(.medium))
             }
@@ -498,18 +498,11 @@ ScrollView {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.leading, 14)
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(CoursePalette.color(for: block))
-                .frame(width: 4)
-                .padding(.vertical, 12)
-        }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.accentColor.opacity(0.08))
+                .fill(CoursePalette.color(for: block).opacity(0.08))
         )
     }
 
