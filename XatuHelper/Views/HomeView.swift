@@ -6,6 +6,7 @@ struct HomeView: View {
     @EnvironmentObject var app: AppState
     @State private var now = Date()
     @State private var showSettings = false
+    @State private var calendarInfo: CalendarService.Info?
 
     // MARK: - 问候语
 
@@ -103,6 +104,78 @@ struct HomeView: View {
         return weekday == 1 ? 7 : weekday - 1
     }
 
+    // MARK: - 放假/开学
+
+    private struct HolidayEvent {
+        let title: String
+        let date: Date
+        let dateText: String
+        let days: Int
+    }
+
+    private static let dayKeyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static let dayTextFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M月d日"
+        return f
+    }()
+
+    /// 校历里缓存的下一个「开学 / 放假」
+    private var nextHoliday: HolidayEvent? {
+        guard let info = calendarInfo, !info.semesters.isEmpty else { return nil }
+        let today = Calendar.current.startOfDay(for: Date())
+        var candidates: [(String, Date)] = []
+
+        for (index, span) in info.semesters.enumerated() {
+            if let start = Self.dayKeyFormatter.date(from: span.start) {
+                candidates.append(("\(span.label)开学", start))
+            }
+            if index < info.semesters.count - 1,
+               let end = Self.dayKeyFormatter.date(from: span.end),
+               let dayAfter = Calendar.current.date(byAdding: .day, value: 1, to: end) {
+                candidates.append((index == 0 ? "放寒假" : "放暑假", dayAfter))
+            }
+        }
+        if let last = info.semesters.last, let end = Self.dayKeyFormatter.date(from: last.end),
+           let dayAfter = Calendar.current.date(byAdding: .day, value: 1, to: end) {
+            candidates.append(("放暑假", dayAfter))
+        }
+
+        return candidates
+            .filter { $0.1 >= today }
+            .sorted { $0.1 < $1.1 }
+            .first
+            .map { title, date in
+                HolidayEvent(
+                    title: title,
+                    date: date,
+                    dateText: Self.dayTextFormatter.string(from: date),
+                    days: Calendar.current.dateComponents([.day], from: today, to: date).day ?? 0
+                )
+            }
+    }
+
+    private func holidayCard(_ event: HolidayEvent) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.title)
+                    .font(.headline)
+                Text(event.dateText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(event.days == 0 ? "今天" : "还有 \(event.days) 天")
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(.teal)
+        }
+    }
+
     // MARK: - 视图
 
     var body: some View {
@@ -117,6 +190,13 @@ struct HomeView: View {
                 if let exam = nextExam {
                     Section {
                         examCard(exam)
+                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    }
+                }
+
+                if let holiday = nextHoliday {
+                    Section {
+                        holidayCard(holiday)
                             .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                     }
                 }
@@ -161,6 +241,7 @@ struct HomeView: View {
             }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+        .onAppear { calendarInfo = CalendarCache.load() }
         .task {
             await app.refreshElectricityIfNeeded()
             if app.exams.isEmpty, !app.currentSemesterID.isEmpty {
