@@ -198,6 +198,16 @@ struct HomeView: View {
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets())
 
+                Text(statusLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+                    .padding(.bottom, 4)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+
                 if let exam = nextExam {
                     Section {
                         examCard(exam)
@@ -214,12 +224,12 @@ struct HomeView: View {
                         electricityCard
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         if let holiday = nextHoliday {
                             holidayCard(holiday)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(14)
-                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                     }
                     .listRowInsets(EdgeInsets())
@@ -231,16 +241,6 @@ struct HomeView: View {
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
             .contentMargins(.top, 0, for: .scrollContent)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                Text(statusLine)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 20)
-                    .padding(.trailing, 20)
-                    .padding(.top, 2)
-                    .padding(.bottom, 4)
-            }
             .background(alignment: .top) { homeBackground }
             .navigationTitle(greeting)
             .toolbar {
