@@ -128,6 +128,7 @@ struct HomeView: View {
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
             .contentMargins(.top, 0, for: .scrollContent)
+            .padding(.top, titleHeight + 12)
             .safeAreaInset(edge: .top, spacing: 0) {
                 Text(statusLine)
                     .font(.footnote)
@@ -138,7 +139,6 @@ struct HomeView: View {
                     .padding(.top, 2)
                     .padding(.bottom, 4)
             }
-            .padding(.top, titleHeight + 12)
             .background(alignment: .top) { homeBackground }
             .navigationTitle(greeting)
             .toolbar {
