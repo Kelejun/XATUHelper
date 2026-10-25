@@ -1,11 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct SchoolCalendarView: View {
     @State private var info: CalendarService.Info?
     @State private var isLoading = false
     @State private var errorText: String?
     @State private var showsOriginal = false
-    @State private var showsDiagnostics = false
+    @State private var cachedImage: UIImage?
+    @State private var showsCachedImage = false
     @AppStorage("showDiagnostics") private var diagnosticsEnabled = false
 
     private let dayFormatter: DateFormatter = {
@@ -46,7 +48,12 @@ struct SchoolCalendarView: View {
                 }
                 Section {
                     Button {
-                        showsOriginal = true
+                        if let data = CalendarCache.loadImage(for: info.imageURL) {
+                            cachedImage = UIImage(data: data)
+                            showsCachedImage = true
+                        } else {
+                            showsOriginal = true
+                        }
                     } label: {
                         Label("查看校历原图", systemImage: "photo")
                     }
@@ -64,6 +71,9 @@ struct SchoolCalendarView: View {
                 Section {
                     Text(errorText ?? "没拿到校历，过会儿再试。")
                         .foregroundStyle(.secondary)
+                    Text("校历放在教务处的网站上，只有连校内网才打得开。")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
                     Button("重新加载") { Task { await load(force: true) } }
                     if let info {
                         Text(info.rawText).font(.caption2)
@@ -75,6 +85,25 @@ struct SchoolCalendarView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(force: false) }
         .refreshable { await load(force: true) }
+        .sheet(isPresented: $showsCachedImage) {
+            NavigationStack {
+                ScrollView([.horizontal, .vertical]) {
+                    if let cachedImage {
+                        Image(uiImage: cachedImage)
+                            .resizable()
+                            .scaledToFit()
+                    }
+                }
+                .navigationTitle("校历原图")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showsCachedImage = false } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("关闭")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showsOriginal) {
             if let url = info?.imageURL {
                 WebSheet(title: "校历", urlString: url)
@@ -188,6 +217,15 @@ struct SchoolCalendarView: View {
 
     // MARK: - 加载
 
+    /// 校内网才通教务处，断网/外网时给一句人话
+    private func friendly(_ reason: String) -> String {
+        let offline = ["-1009", "-1001", "-1004", "-1005", "timed out", "TimedOut", "找不到", "已断开"]
+        if offline.contains(where: { reason.contains($0) }) {
+            return "教务处的校历页只能在校内网络打开，现在连不上"
+        }
+        return reason
+    }
+
     private func fallbackToCache(_ reason: String) {
         if let cached = CalendarCache.load() {
             info = cached
@@ -217,7 +255,7 @@ struct SchoolCalendarView: View {
         case .success(let value):
             page = value
         case .failure(let error):
-            fallbackToCache(error.localizedDescription)
+            fallbackToCache(friendly(error.localizedDescription))
             return
         }
         if !force, let cached = CalendarCache.load(imageURL: page.imageURL.absoluteString) {
@@ -228,8 +266,9 @@ struct SchoolCalendarView: View {
         switch await CalendarService.downloadImage(page.imageURL) {
         case .success(let value):
             data = value
+            CalendarCache.saveImage(value, for: page.imageURL.absoluteString)
         case .failure(let error):
-            fallbackToCache(error.localizedDescription)
+            fallbackToCache(friendly(error.localizedDescription))
             return
         }
         let text = await Task.detached(priority: .userInitiated) {

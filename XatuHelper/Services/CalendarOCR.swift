@@ -40,4 +40,34 @@ enum CalendarCache {
         guard let data = try? JSONEncoder().encode(info) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+
+    // MARK: - 校历原图缓存（离线时也能看）
+
+    private static func directory() -> URL? {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let dir = base.appendingPathComponent("SchoolCalendar", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func fileName(for url: String) -> String {
+        var hash: UInt64 = 1469598103934665603
+        for byte in url.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1099511628211
+        }
+        return String(hash, radix: 16) + ".jpg"
+    }
+
+    static func saveImage(_ data: Data, for url: String) {
+        guard let dir = directory() else { return }
+        try? data.write(to: dir.appendingPathComponent(fileName(for: url)), options: .atomic)
+    }
+
+    static func loadImage(for url: String) -> Data? {
+        guard let dir = directory() else { return nil }
+        return try? Data(contentsOf: dir.appendingPathComponent(fileName(for: url)))
+    }
 }
