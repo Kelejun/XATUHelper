@@ -61,6 +61,21 @@ struct GradeView: View {
                 .pickerStyle(.segmented)
             }
 
+            if !app.grades.isEmpty {
+                Section {
+                    HStack(alignment: .center, spacing: 0) {
+                        statCell(title: "门数", value: "\(stats.count)")
+                        Divider().frame(height: 30)
+                        statCell(title: "总学分", value: stats.creditsText)
+                        Divider().frame(height: 30)
+                        statCell(title: "平均绩点", value: stats.gpaText)
+                    }
+                    .padding(.vertical, 4)
+                } footer: {
+                    Text("平均绩点按学分加权")
+                }
+            }
+
             if let error = app.gradesError {
                 Section {
                     Text(error)
@@ -136,6 +151,66 @@ struct GradeView: View {
                 await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope)
             }
         }
+    }
+
+    // MARK: - 统计
+
+    private var stats: GradeStats {
+        var credits = 0.0
+        var weighted = 0.0
+        var weight = 0.0
+        var plain = 0.0
+        var plainCount = 0
+
+        for record in app.grades {
+            let credit = Double(record.credit.trimmingCharacters(in: .whitespaces)) ?? 0
+            credits += credit
+            guard let gpa = Double(record.gpa.trimmingCharacters(in: .whitespaces)) else { continue }
+            plain += gpa
+            plainCount += 1
+            if credit > 0 {
+                weighted += gpa * credit
+                weight += credit
+            }
+        }
+
+        let average: Double?
+        if weight > 0 {
+            average = weighted / weight
+        } else if plainCount > 0 {
+            average = plain / Double(plainCount)
+        } else {
+            average = nil
+        }
+
+        return GradeStats(count: app.grades.count, credits: credits, averageGPA: average)
+    }
+
+    private struct GradeStats {
+        var count: Int
+        var credits: Double
+        var averageGPA: Double?
+
+        var creditsText: String {
+            credits == credits.rounded() ? "\(Int(credits))" : String(format: "%.1f", credits)
+        }
+
+        var gpaText: String {
+            guard let averageGPA else { return "-" }
+            return String(format: "%.2f", averageGPA)
+        }
+    }
+
+    private func statCell(title: String, value: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func gradeRow(_ grade: GradeRecord) -> some View {
