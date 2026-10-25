@@ -127,14 +127,14 @@ struct HomeView: View {
             .listStyle(.insetGrouped)
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
-            .contentMargins(.top, titleHeight, for: .scrollContent)
+            .contentMargins(.top, titleHeight + 24, for: .scrollContent)
             .safeAreaInset(edge: .top, spacing: 0) {
                 Text(statusLine)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 16)
-                    .padding(.trailing, 16)
+                    .padding(.leading, 20)
+                    .padding(.trailing, 20)
                     .padding(.top, 2)
                     .padding(.bottom, 4)
             }
