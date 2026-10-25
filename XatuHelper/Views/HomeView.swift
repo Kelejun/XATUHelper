@@ -186,9 +186,6 @@ struct HomeView: View {
                     if app.electricityLoading {
                         ProgressView().controlSize(.small)
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
                 }
 
                 if let balance = app.electricityBalance {
