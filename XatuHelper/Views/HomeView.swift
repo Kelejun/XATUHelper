@@ -34,16 +34,13 @@ struct HomeView: View {
 
     // MARK: - 今天的课
 
-    /// 0 点到 5 点还挂在昨天：课表继续显示前一天那张卡片
+    /// 深夜（0 点到 5 点）：只影响问候语和「早点睡吧」这一句，日期照常按零点翻篇
     private var isLateNight: Bool {
         Calendar.current.component(.hour, from: now) < 5
     }
 
-    /// 卡片按哪一天算。深夜时回退一天，看的是刚过去那天
-    private var baseDate: Date {
-        guard isLateNight else { return now }
-        return Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
-    }
+    /// 卡片按哪一天算。零点一过就算新的一天
+    private var baseDate: Date { now }
 
     /// 周一 = 1 … 周日 = 7
     private var todayWeekday: Int { isoWeekday(of: baseDate) }
@@ -58,8 +55,7 @@ struct HomeView: View {
 
     /// 这会儿正在上的课（深夜不算，那天已经过完了）
     private var currentBlock: CourseBlock? {
-        guard !isLateNight else { return nil }
-        return todayBlocks.first {
+        todayBlocks.first {
             PeriodSchedule.startMinutes(of: $0) <= nowMinutes
                 && nowMinutes < PeriodSchedule.endMinutes(of: $0)
         }
@@ -67,8 +63,7 @@ struct HomeView: View {
 
     /// 还没开始的课
     private var remainingToday: [CourseBlock] {
-        guard !isLateNight else { return [] }
-        return todayBlocks.filter { PeriodSchedule.startMinutes(of: $0) > nowMinutes }
+        todayBlocks.filter { PeriodSchedule.startMinutes(of: $0) > nowMinutes }
     }
 
     /// 今天没有正在上的、也没有剩下的，就翻到明天
@@ -278,7 +273,7 @@ ScrollView {
         if app.isCurrentSemester, app.currentWeek > 0 {
             parts.append("第 \(app.currentWeek) 周")
         }
-        if isLateNight || remainingCount == 0 {
+        if remainingCount == 0 {
             parts.append("今天没课了")
         } else {
             parts.append("今天还有 \(remainingCount) 节")
