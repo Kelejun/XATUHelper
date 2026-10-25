@@ -325,9 +325,8 @@ struct EmptyHint: View {
 struct WidgetBackdrop: View {
     var body: some View {
         if #available(iOS 26.0, *) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .glassEffect(.regular)
+            // iOS 26 起系统自己给小组件套液态玻璃，这里留空才会显出系统那层
+            Color.clear
         } else {
             Rectangle()
                 .fill(.ultraThinMaterial)
