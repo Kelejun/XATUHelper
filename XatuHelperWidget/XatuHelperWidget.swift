@@ -120,8 +120,10 @@ struct CourseWidgetView: View {
             Spacer(minLength: 0)
             if remaining.isEmpty {
                 Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
             } else {
                 ForEach(remaining.prefix(3)) { course in
                     VStack(alignment: .leading, spacing: 1) {
@@ -146,8 +148,10 @@ struct CourseWidgetView: View {
             Spacer(minLength: 0)
             if remaining.isEmpty {
                 Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
             } else {
                 ForEach(remaining.prefix(4)) { course in
                     HStack(spacing: 8) {
