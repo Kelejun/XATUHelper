@@ -137,6 +137,7 @@ struct CourseWidgetView: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var mediumLayout: some View {
@@ -169,17 +170,20 @@ struct CourseWidgetView: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
-        HStack(spacing: 4) {
-            Text(entry.snapshot.weekdayLabel)
-            if entry.snapshot.week > 0 {
-                Text("· 第 \(entry.snapshot.week) 周")
-            }
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
+        Text(headerText)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    private var headerText: String {
+        entry.snapshot.week > 0
+            ? "\(entry.snapshot.weekdayLabel) · 第 \(entry.snapshot.week) 周"
+            : entry.snapshot.weekdayLabel
     }
 
     private var remaining: [WidgetSnapshot.Course] {
