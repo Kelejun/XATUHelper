@@ -113,6 +113,7 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
 		0000000000000000000000A9 /* Build Info */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -131,6 +132,8 @@
 			shellPath = /bin/sh;
 			shellScript = "cd \"$SRCROOT\"\nHASH=$(git rev-parse --short HEAD 2>/dev/null || echo dev)\nif ! git diff --quiet --ignore-submodules HEAD 2>/dev/null; then\n  HASH=\"$HASH-dirty\"\nfi\nDATE=$(date +%Y%m%d)\ncat > \"$SRCROOT/XatuHelper/Services/BuildInfo.swift\" <<SWIFTEOF\nimport Foundation\n\nenum BuildInfo {\n    static let commit = \"$HASH\"\n    static let builtAt = \"$DATE\"\n}\nSWIFTEOF\n";
 		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000000000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -150,13 +153,13 @@
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_ENABLE_MODULES = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -184,13 +187,13 @@
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_ENABLE_MODULES = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
