@@ -369,12 +369,13 @@ final class AppState: ObservableObject {
 
     // MARK: - 考试
 
-    func refreshExams() async {
+    func refreshExams(semesterID: String? = nil) async {
         guard !examsLoading else { return }
         examsLoading = true
         examsError = nil
         do {
-            let target = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+            let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+            let target = semesterID ?? fallback
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
         } catch {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
