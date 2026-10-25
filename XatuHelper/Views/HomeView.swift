@@ -170,8 +170,7 @@ struct HomeView: View {
         Button { destination = .calendar } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(event.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.headline)
                     .lineLimit(1)
                 Text(event.days == 0 ? "今天" : "还有 \(event.days) 天")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
@@ -214,12 +213,18 @@ struct HomeView: View {
                     HStack(alignment: .top, spacing: 12) {
                         electricityCard
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                         if let holiday = nextHoliday {
                             holidayCard(holiday)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
-                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.insetGrouped)
@@ -373,7 +378,7 @@ struct HomeView: View {
     /// 卡片标题：还没开课 / 上到一半 / 没课了翻明天 / 明天也没课
     private var cardTitle: String {
         if showingTomorrow {
-            return tomorrowBlocks.isEmpty ? "明天没有课，好好休息下吧" : "今天没课了，明天要上这些课："
+            return tomorrowBlocks.isEmpty ? "明天没有课，好好休息下吧" : "明天要上这些课："
         }
         if currentBlock != nil { return "今天还有这些课：" }
         return remainingToday.count == todayBlocks.count ? "今天要上这些课：" : "今天还有这些课："
@@ -419,9 +424,8 @@ struct HomeView: View {
         Button { destination = .electricity } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text("电费")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Text("电费还剩")
+                        .font(.headline)
                     if app.electricityLoading {
                         ProgressView().controlSize(.mini)
                     }

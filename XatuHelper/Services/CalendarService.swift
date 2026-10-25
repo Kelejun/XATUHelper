@@ -17,6 +17,8 @@ enum CalendarService {
         let reason: String
     }
 
+    static let campusOnly = "您无权访问此页面"
+
     enum LoadError: LocalizedError {
         case index(String)
         case page(String)
@@ -25,8 +27,12 @@ enum CalendarService {
 
         var errorDescription: String? {
             switch self {
-            case .index(let reason): return "打不开教务处的校历列表（\(reason)）"
-            case .page(let reason): return "打不开校历正文页（\(reason)）"
+            case .index(let reason): return reason == campusOnly
+                ? "这个页面只有校内网能打开，连上校园网再试"
+                : "打不开教务处的校历列表（\(reason)）"
+            case .page(let reason): return reason == campusOnly
+                ? "这个页面只有校内网能打开，连上校园网再试"
+                : "打不开校历正文页（\(reason)）"
             case .image: return "正文页里没找到校历图片，可能改版了"
             case .download(let reason): return "校历图片下载失败（\(reason)）"
             }
@@ -219,6 +225,10 @@ enum CalendarService {
             guard status == 200 else { return .failure(TextError(reason: "HTTP \(status)")) }
             guard let text = String(data: data, encoding: .utf8) else {
                 return .failure(TextError(reason: "页面不是 UTF-8，\(data.count) 字节"))
+            }
+            // 教务处部分页面只对校内网开放，外面拿到的是「您无权访问此页面」
+            if text.contains("无权访问") || text.contains("无权限访问") {
+                return .failure(TextError(reason: "您无权访问此页面"))
             }
             return .success(text)
         } catch {
