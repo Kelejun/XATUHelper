@@ -30,7 +30,7 @@ struct InfoView: View {
             case .grade: return "每学期的课程成绩"
             case .plan: return "毕业要修多少学分"
             case .bill: return "宿舍还剩多少电费"
-            case .checkin: return "每天点一下，别断签"
+            case .checkin: return "按时点一下，别断签"
             }
         }
 
@@ -68,8 +68,7 @@ struct InfoView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     group("教务", entries: [.exam, .grade, .plan])
-                    group("生活", entries: [.bill])
-                    group("日常", entries: [.checkin])
+                    group("生活", entries: [.bill, .checkin])
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
