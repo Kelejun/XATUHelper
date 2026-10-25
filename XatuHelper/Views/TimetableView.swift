@@ -4,6 +4,7 @@ import UIKit
 struct TimetableView: View {
 
     @EnvironmentObject var app: AppState
+    @State private var showSettings = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
     /// 横向翻页停在第几周，绑定 ScrollView 的 scrollPosition
@@ -211,6 +212,14 @@ struct TimetableView: View {
                             Toggle(kind.title, isOn: isKindOn(kind))
                         }
                     }
+
+                    Section {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("设置", systemImage: "slider.horizontal.3")
+                        }
+                    }
                 } label: {
                     Image(systemName: "line.3.horizontal")
                 }
@@ -235,6 +244,9 @@ struct TimetableView: View {
         .sheet(item: $detail) { block in
             CourseDetailSheet(block: block)
                 .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showSettings) {
+            TimetableSettingsSheet()
         }
         .task {
             await app.ensureShell()
@@ -344,6 +356,39 @@ struct CourseDetailSheet: View {
 struct SettingsSheet: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("账号") {
+                    LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
+                    if let fetchedAt = app.fetchedAt {
+                        LabeledContent(
+                            "上次更新",
+                            value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    }
+                    Button("退出登录", role: .destructive) {
+                        app.logout()
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// 课程表自己的设置：周次校正、隐藏周末、诊断数据都在这
+struct TimetableSettingsSheet: View {
+    @EnvironmentObject var app: AppState
+    @Environment(\.dismiss) private var dismiss
     @State private var draftWeek = 1
     @AppStorage("hideWeekend") private var hideWeekend = false
 
@@ -381,23 +426,8 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
                 }
-
-                Section("账号") {
-                    LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
-                    LabeledContent("课表", value: app.kind.title)
-                    if let fetchedAt = app.fetchedAt {
-                        LabeledContent(
-                            "上次更新",
-                            value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
-                        )
-                    }
-                    Button("退出登录", role: .destructive) {
-                        app.logout()
-                        dismiss()
-                    }
-                }
             }
-            .navigationTitle("设置")
+            .navigationTitle("课程表设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
