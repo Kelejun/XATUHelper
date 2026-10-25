@@ -575,8 +575,9 @@ struct EamsService {
         let termColumn = header.firstIndex { $0.contains("学期") || $0.contains("学年") }
         let creditColumn = column(["学分"])
         let gpaColumn = column(["绩点"])
-        // 教务里这个列有的叫「总评成绩」，有的叫「总成绩」「成绩」
-        let scoreColumn = header.firstIndex { $0.contains("总评") }
+        // 教务里这个列有的叫「最终」「最终成绩」，有的叫「总评成绩」「总成绩」「成绩」
+        let scoreColumn = header.firstIndex { $0.contains("最终") }
+            ?? header.firstIndex { $0.contains("总评") }
             ?? header.firstIndex { $0.contains("总成绩") }
             ?? header.firstIndex { $0 == "成绩" }
             ?? header.firstIndex { $0.contains("成绩") && !$0.contains("绩点") }
