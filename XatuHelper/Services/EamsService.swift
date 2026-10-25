@@ -33,6 +33,8 @@ struct EamsService {
     static var lastExamRaw = ""
     /// 最近一次成绩页的原始 HTML
     static var lastGradeRaw = ""
+    /// 成绩页外壳（带学期控件那一层）
+    static var lastGradeShellRaw = ""
 
     /// 设置页「复制诊断数据」导出的内容
     static var diagnosticDump: String {
@@ -58,7 +60,10 @@ struct EamsService {
         ===== 考试页 stdExamTable.action =====
         \(lastExamRaw.isEmpty ? "(空)" : String(lastExamRaw.prefix(20000)))
 
-        ===== 成绩页 teach/grade/course/person.action =====
+        ===== 成绩外壳 teach/grade/course/person.action =====
+        \(lastGradeShellRaw.isEmpty ? "(空)" : String(lastGradeShellRaw.prefix(8000)))
+
+        ===== 成绩表 person!search.action =====
         \(lastGradeRaw.isEmpty ? "(空)" : String(lastGradeRaw.prefix(20000)))
         """
     }
@@ -393,16 +398,37 @@ struct EamsService {
         return result
     }
 
-    /// 拉指定学期的成绩
+    /// 拉指定学期的成绩。
+    /// 成绩页和考试页一样是两层：外壳 person.action 只给学期控件，
+    /// 真正的表格由 bg.Go('person!search.action?semesterId=…&looked=yes') 拉进来。
+    /// 外壳里的 semesterId 是教务自己的编号，可能和我们学期列表里的 id 不是一个体系，
+    /// 所以先用外壳给的默认值，换学期时再用调用方传进来的 id。
     func fetchGrades(semesterID: String) async throws -> [GradeRecord] {
+        // 把学期带给外壳，外壳会把它的选择回显在 value:"…" 里，
+        // 顺便完成一次"我们的学期编号 → 教务内部编号"的翻译
         let query = semesterID.isEmpty
             ? []
             : [URLQueryItem(name: "semester.id", value: semesterID)]
-        let html = try await examText(
+        let shell = try await examText(
             path: "/eams/teach/grade/course/person.action",
             query: query,
-            label: "成绩页"
+            label: "成绩外壳"
         )
+        EamsService.lastGradeShellRaw = shell
+
+        let resolved = shell.firstMatch(#"semesterCalendar\(\{[^}]*value:"([0-9]+)""#)
+            ?? semesterID
+
+        let html = try await examText(
+            path: "/eams/teach/grade/course/person!search.action",
+            query: [
+                URLQueryItem(name: "semesterId", value: resolved),
+                URLQueryItem(name: "projectType", value: ""),
+                URLQueryItem(name: "looked", value: "yes"),
+            ],
+            label: "成绩表"
+        )
+
         EamsService.lastGradeRaw = html
         return EamsService.parseGrades(html)
     }
@@ -419,8 +445,12 @@ struct EamsService {
                 .map { $0.strippingTags }
         }
 
+        // 成绩页里可能有好几张表，认那种同时有课程列和成绩列的表头
         guard let headerIndex = table.firstIndex(where: { row in
-            row.contains { $0.contains("成绩") || $0.contains("绩点") }
+            let joined = row.joined(separator: "|")
+            let hasCourse = row.contains { $0.contains("课程") || $0.contains("科目") }
+            let hasScore = joined.contains("成绩") || joined.contains("绩点")
+            return hasCourse && hasScore
         }) else { return [] }
 
         let header = table[headerIndex]
