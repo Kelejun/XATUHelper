@@ -137,7 +137,7 @@ struct HomeView: View {
         Button(action: onOpenTimetable) {
             cardContent
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ScheduleCardButtonStyle())
         .foregroundStyle(.primary)
     }
 
@@ -151,6 +151,9 @@ struct HomeView: View {
                 Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
 
             if showingTomorrow {
@@ -286,6 +289,18 @@ struct HomeView: View {
 
     private func timeText(_ block: CourseBlock) -> String {
         PeriodSchedule.range(for: block)
+    }
+}
+
+
+/// 点下去压一层灰，配 .plain 不给反馈
+private struct ScheduleCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.black.opacity(configuration.isPressed ? 0.08 : 0))
+            )
     }
 }
 
