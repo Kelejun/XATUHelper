@@ -378,7 +378,7 @@ struct SettingsSheet: View {
                 Section {
                     Toggle("显示诊断数据", isOn: $showDiagnostics)
                 } footer: {
-                    Text("打开后，课表、考试、成绩、电费这些页面才会出现各自的原始返回复制入口。")
+                    Text("如果出现解析问题，可复制诊断信息给开发者处理")
                 }
             }
             .navigationTitle("设置")
