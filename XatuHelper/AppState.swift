@@ -483,7 +483,6 @@ final class AppState: ObservableObject {
     private func withPay<T>(_ operation: (PayProject) async throws -> T) async throws -> T {
         var value: T?
         try await withRelogin {
-            try await self.pay.loginWithExistingSession()
             let project = try await self.electricProjectOrLoad()
             value = try await operation(project)
         }

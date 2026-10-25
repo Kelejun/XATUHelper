@@ -113,6 +113,15 @@ struct PayService {
         if token() == nil {
             throw AppError.sessionExpired
         }
+        CookieVault.pinAndSave()
+    }
+
+    /// 清掉 jfpay 的凭证，下次 request 会重新换一次
+    func clearToken() {
+        for cookie in HTTPCookieStorage.shared.cookies ?? []
+        where cookie.name == "datalook_reimbursement_token" {
+            HTTPCookieStorage.shared.deleteCookie(cookie)
+        }
     }
 
     /// token 可能挂在 query，也可能挂在 #/middle_page?token=… 这种片段里，两种都抠
@@ -235,7 +244,22 @@ struct PayService {
         try await request(path: path, method: "POST", body: body)
     }
 
+    /// 有凭证就直接打接口；只有没凭证、或平台说凭证过期了，才去 CAS 换一次票。
+    /// 之前是每次查询都先过一遍 CAS，服务端会把那当成一次登录，账号容易被提示"频繁登录"。
     private func request(path: String, method: String, body: [String: Any]?) async throws -> Any {
+        if token() == nil {
+            try await loginWithExistingSession()
+        }
+        do {
+            return try await send(path: path, method: method, body: body)
+        } catch AppError.sessionExpired {
+            clearToken()
+            try await loginWithExistingSession()
+            return try await send(path: path, method: method, body: body)
+        }
+    }
+
+    private func send(path: String, method: String, body: [String: Any]?) async throws -> Any {
         guard let url = URL(string: Self.apiBase + path) else { throw AppError.badURL }
 
         var request = URLRequest(url: url)
