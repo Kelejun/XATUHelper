@@ -358,11 +358,12 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
 
-    /// 1.0.0（1）
+    /// 1.0.0（ec54b89）
     static var versionText: String {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "\(short)（\(build)）"
+        let commit = BuildInfo.commit.isEmpty || BuildInfo.commit == "dev" ? build : BuildInfo.commit
+        return "\(short)（\(commit)）"
     }
 
     var body: some View {
@@ -384,6 +385,10 @@ struct SettingsSheet: View {
 
                 Section {
                     LabeledContent("版本", value: Self.versionText)
+                } footer: {
+                    if !BuildInfo.builtAt.isEmpty {
+                        Text("构建于 \(BuildInfo.builtAt)")
+                    }
                 }
             }
             .navigationTitle("设置")
