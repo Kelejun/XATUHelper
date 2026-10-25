@@ -161,7 +161,7 @@ struct HomeView: View {
     }
 
     private func holidayCard(_ event: HolidayEvent) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.title)
                     .font(.headline)
@@ -194,13 +194,6 @@ struct HomeView: View {
                     }
                 }
 
-                if let holiday = nextHoliday {
-                    Section {
-                        holidayCard(holiday)
-                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                    }
-                }
-
                 Section {
                     scheduleCard
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
@@ -208,6 +201,13 @@ struct HomeView: View {
                 Section {
                     electricityCard
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                }
+
+                if let holiday = nextHoliday {
+                    Section {
+                        holidayCard(holiday)
+                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    }
                 }
             }
             .listStyle(.insetGrouped)
