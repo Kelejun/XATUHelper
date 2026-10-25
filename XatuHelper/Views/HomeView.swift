@@ -455,6 +455,10 @@ ScrollView {
 
     private func row(_ block: CourseBlock) -> some View {
         HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(CoursePalette.color(for: block))
+                .frame(width: 4, height: 34)
+
             Text(timeText(block))
                 .font(.subheadline)
                 .monospacedDigit()
@@ -493,6 +497,13 @@ ScrollView {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 14)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(CoursePalette.color(for: block))
+                .frame(width: 4)
+                .padding(.vertical, 12)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
