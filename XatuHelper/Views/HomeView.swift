@@ -5,6 +5,7 @@ struct HomeView: View {
 
     @EnvironmentObject var app: AppState
     @State private var now = Date()
+    @State private var showSettings = false
 
     // MARK: - 问候语
 
@@ -119,6 +120,19 @@ struct HomeView: View {
             .listStyle(.insetGrouped)
             .contentMargins(.top, titleGap, for: .scrollContent)
             .navigationTitle(greeting)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("设置")
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsSheet()
+            }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .task { await app.refreshElectricityIfNeeded() }

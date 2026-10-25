@@ -4,7 +4,6 @@ import UIKit
 struct TimetableView: View {
 
     @EnvironmentObject var app: AppState
-    @State private var showSettings = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
     /// 横向翻页停在第几周，绑定 ScrollView 的 scrollPosition
@@ -212,14 +211,6 @@ struct TimetableView: View {
                             Toggle(kind.title, isOn: isKindOn(kind))
                         }
                     }
-
-                    Section {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Label("设置", systemImage: "slider.horizontal.3")
-                        }
-                    }
                 } label: {
                     Image(systemName: "line.3.horizontal")
                 }
@@ -244,9 +235,6 @@ struct TimetableView: View {
         .sheet(item: $detail) { block in
             CourseDetailSheet(block: block)
                 .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet()
         }
         .task {
             await app.ensureShell()
