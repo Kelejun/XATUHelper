@@ -218,6 +218,7 @@ final class AppState: ObservableObject {
                 pendingCredentials = nil
             }
             isLoggedIn = true
+            await rescheduleNotifications()
         } catch {
             handle(error)
         }
@@ -270,6 +271,7 @@ final class AppState: ObservableObject {
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         store.clear()
         examStore.clear()
+        Task { await NotificationService.clearAll() }
         exams = []
         occurrences = []
         studentID = ""
@@ -433,6 +435,7 @@ final class AppState: ObservableObject {
             let target = semesterID ?? fallback
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
             examStore.save(exams)
+            await rescheduleNotifications()
         } catch {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
@@ -466,8 +469,26 @@ final class AppState: ObservableObject {
 
     /// 启动时最多做两件事：电费过期先查电费；课表超过 168 小时，隔 60 秒再查
     /// 其他数据（考试、成绩）只在进入对应页面时刷新，首页考试卡片只读缓存
+    /// 按当前开关重排本地通知（内容在排期那一刻固定，所以每次数据变了都要重来一遍）
+    func rescheduleNotifications() async {
+        let classOn = NotificationSettings.classOn
+        let examOn = NotificationSettings.examOn
+        guard classOn || examOn else {
+            await NotificationService.clearAll()
+            return
+        }
+        await NotificationService.reschedule(
+            occurrences: classOn ? occurrences : [],
+            weekOneMonday: semesterStartMonday,
+            exams: examOn ? exams : [],
+            classLeadMinutes: NotificationSettings.classLeadMinutes,
+            examLeadMinutes: NotificationSettings.examLeadMinutes
+        )
+    }
+
     func startupRefreshIfNeeded() async {
         guard isLoggedIn else { return }
+        await rescheduleNotifications()
 
         let electricityIsStale: Bool = {
             guard dorm != nil, electricityBalance != nil else { return dorm != nil }

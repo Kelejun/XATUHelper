@@ -34,6 +34,10 @@ enum PeriodSchedule {
         isJiaoSanEarly(block) ? "10:10-11:40" : range(from: block.startPeriod, to: block.endPeriod)
     }
 
+    static func isJiaoSanEarly(room: String, period: Int) -> Bool {
+        period == 3 && room.contains("教3")
+    }
+
     static func startMinutes(of block: CourseBlock) -> Int {
         isJiaoSanEarly(block) ? minutes("10:10") : startMinutes(block.startPeriod)
     }

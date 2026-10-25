@@ -5,6 +5,7 @@ struct TimetableView: View {
 
     @EnvironmentObject var app: AppState
     @State private var showSettings = false
+    @State private var showNotificationSetup = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
     /// 横向翻页停在第几周，绑定 ScrollView 的 scrollPosition
@@ -248,10 +249,16 @@ struct TimetableView: View {
         .sheet(isPresented: $showSettings) {
             TimetableSettingsSheet()
         }
+        .sheet(isPresented: $showNotificationSetup) {
+            NotificationSetupSheet()
+        }
         .task {
             // 定时刷新交给启动流程，这里只有完全没数据时才拉一次
             if app.occurrences.isEmpty {
                 await app.refresh()
+            }
+            if !NotificationSettings.hasPrompted {
+                showNotificationSetup = true
             }
         }
     }
@@ -427,6 +434,8 @@ struct TimetableSettingsSheet: View {
                 } footer: {
                     Text("学校校历如果和默认的不一样，在这里改一次就行。")
                 }
+
+                NotificationSettingsSection()
 
                 Section("课表") {
                     Toggle("隐藏周末", isOn: $hideWeekend)
