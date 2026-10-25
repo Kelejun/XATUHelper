@@ -62,6 +62,8 @@ final class AppState: ObservableObject {
     private var electricProject: PayProject?
 
     init() {
+        // 先把上次存的登录 cookie 塞回来，再读缓存
+        CookieVault.restore()
         studentID = Preferences.studentID ?? ""
         dorm = Preferences.dorm
         electricityBalance = Preferences.electricityBalance
@@ -173,6 +175,7 @@ final class AppState: ObservableObject {
             selectedSemesterID = currentSemesterID
             await calibrateFromServer()
             try await loadTable()
+            CookieVault.pinAndSave()
             isLoggedIn = true
             pendingCredentials = nil
         } catch {
@@ -194,6 +197,7 @@ final class AppState: ObservableObject {
             await calibrateFromServer()
             try await loadTable()
 
+            CookieVault.pinAndSave()
             if let credentials = pendingCredentials {
                 Keychain.savePassword(credentials.password, account: credentials.student)
                 Preferences.studentID = credentials.student
@@ -249,6 +253,7 @@ final class AppState: ObservableObject {
             Keychain.deletePassword(account: account)
         }
         Preferences.studentID = nil
+        CookieVault.clear()
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         store.clear()
         occurrences = []
@@ -545,6 +550,7 @@ final class AppState: ObservableObject {
         occurrences = parsed.occurrences
         unitCount = parsed.unitCount
         fetchedAt = Date()
+        CookieVault.save()
         persist()
     }
 
