@@ -13,24 +13,21 @@ struct ElectricityView: View {
                     balanceCard
                 }
 
+                Section("近 7 天") {
+                    trendChart
+                    NavigationLink("历史余额") {
+                        ElectricityHistoryView()
+                    }
+                } footer: {
+                    Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
+                }
+
                 Section("宿舍") {
                     LabeledContent("房间", value: dorm.displayName)
                     if !dorm.areaName.isEmpty, dorm.areaName != dorm.buildName {
                         LabeledContent("校区", value: dorm.areaName)
                     }
                     Button("换一个宿舍") { editing = true }
-                }
-
-                Section("近 7 天") {
-                    trendChart
-                }
-
-                Section {
-                    NavigationLink("历史余额") {
-                        ElectricityHistoryView()
-                    }
-                } footer: {
-                    Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
 
                 if let error = app.electricityError {
