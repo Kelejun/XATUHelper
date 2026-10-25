@@ -108,6 +108,12 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
+                Color.clear
+                    .frame(height: titleHeight + 12)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+
                 if let exam = nextExam {
                     Section {
                         examCard(exam)
@@ -128,7 +134,6 @@ struct HomeView: View {
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
             .contentMargins(.top, 0, for: .scrollContent)
-            .padding(.top, titleHeight + 12)
             .safeAreaInset(edge: .top, spacing: 0) {
                 Text(statusLine)
                     .font(.footnote)
