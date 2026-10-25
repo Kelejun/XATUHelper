@@ -27,11 +27,23 @@ struct MainTabView: View {
         }
         .task {
             await app.startupRefreshIfNeeded()
+            await handlePendingRefresh()
             app.publishWidgetSnapshot()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: RefreshRequest.notification)) { _ in
+            Task { await handlePendingRefresh() }
         }
         .sheet(isPresented: $app.showsWebLogin) {
             CASWebLoginSheet()
         }
+    }
+
+    /// 小组件上的刷新按钮：先拉起 App，再在这里真正去查一次电费。
+    private func handlePendingRefresh() async {
+        guard RefreshRequest.pendingElectricityRefresh() else { return }
+        RefreshRequest.clearElectricityRefresh()
+        await app.refreshElectricity()
+        app.publishWidgetSnapshot()
     }
 }
 

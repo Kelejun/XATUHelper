@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0000000000000000000000BC /* XatuHelperWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B0 /* XatuHelperWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0000000000000000000000BD /* XatuHelper/Services/WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */; };
+		0000000000000000000000BF /* XatuHelper/Services/RefreshElectricityIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C0 /* XatuHelper/Services/RefreshElectricityIntent.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +40,7 @@
 		000000000000000000000004 /* XatuHelper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XatuHelper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0000000000000000000000B0 /* XatuHelperWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = XatuHelperWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		0000000000000000000000C0 /* XatuHelper/Services/RefreshElectricityIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/RefreshElectricityIntent.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -95,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */,
+				0000000000000000000000C0 /* XatuHelper/Services/RefreshElectricityIntent.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -234,6 +237,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0000000000000000000000BD /* XatuHelper/Services/WidgetSnapshot.swift in Sources */,
+				0000000000000000000000BF /* XatuHelper/Services/RefreshElectricityIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

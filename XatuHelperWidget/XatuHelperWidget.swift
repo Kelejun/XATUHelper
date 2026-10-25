@@ -207,8 +207,17 @@ struct ElectricityWidgetView: View {
             EmptyHint()
         } else {
             VStack(alignment: .leading, spacing: 4) {
-                Text("电费还剩")
-                    .font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("电费还剩")
+                        .font(.headline)
+                    Spacer(minLength: 0)
+                    Button(intent: RefreshElectricityIntent()) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 Spacer(minLength: 0)
 
