@@ -398,7 +398,7 @@ struct SettingsContent: View {
                 }
             }
 
-            NotificationSettingsSection()
+            ClassNotificationSection()
 
             Section {
                 NavigationLink("查看更多课程表设置...") {
@@ -406,14 +406,20 @@ struct SettingsContent: View {
                 }
             }
 
+            ExamNotificationSection()
+
             Section {
                 Toggle("显示诊断数据", isOn: $showDiagnostics)
+            } header: {
+                Text("诊断")
             } footer: {
                 Text("如果出现解析问题，可复制诊断信息给开发者处理")
             }
 
             Section {
                 LabeledContent("版本", value: Self.versionText)
+            } header: {
+                Text("App")
             } footer: {
                 if !BuildInfo.builtAt.isEmpty {
                     Text("构建于 \(BuildInfo.builtAt)")

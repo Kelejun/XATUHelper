@@ -1,12 +1,42 @@
 import SwiftUI
 import UserNotifications
 
-/// 提醒开关：总设置里直接展开，首次引导也复用
-struct NotificationSettingsSection: View {
+/// 上课提醒单独一节，总设置里夹在中间的入口按钮前面
+struct ClassNotificationSection: View {
     @EnvironmentObject var app: AppState
 
     @AppStorage(NotificationSettings.classEnabled) private var classEnabled = false
     @AppStorage(NotificationSettings.classLead) private var classLead = NotificationSettings.defaultClassLead
+
+    var body: some View {
+        Section {
+            Toggle("上课提醒", isOn: $classEnabled)
+            if classEnabled {
+                Picker("提前", selection: $classLead) {
+                    ForEach(NotificationSettings.classLeadOptions, id: \.self) { minutes in
+                        Text("\(minutes) 分钟").tag(minutes)
+                    }
+                }
+            }
+        } header: {
+            Text("上课提醒")
+        } footer: {
+            Text("通知只管 7 天，期间进入 app 更新。")
+        }
+        .onChange(of: classEnabled) { _, on in
+            Task {
+                if on { await requestAuthorizationIfNeeded() }
+                await app.rescheduleNotifications()
+            }
+        }
+        .onChange(of: classLead) { _, _ in Task { await app.rescheduleNotifications() } }
+    }
+}
+
+/// 考试提醒单独一节
+struct ExamNotificationSection: View {
+    @EnvironmentObject var app: AppState
+
     @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
     @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
     @AppStorage(NotificationSettings.examEve) private var examEveOn = true
@@ -16,57 +46,32 @@ struct NotificationSettingsSection: View {
     @AppStorage(NotificationSettings.examMorningTime) private var examMorningMinutes = 8 * 60
 
     var body: some View {
-        Group {
-            Section {
-                Toggle("上课提醒", isOn: $classEnabled)
-                if classEnabled {
-                    Picker("提前", selection: $classLead) {
-                        ForEach(NotificationSettings.classLeadOptions, id: \.self) { minutes in
+        Section {
+            Toggle("考试提醒", isOn: $examEnabled)
+            if examEnabled {
+                Toggle("前一天提醒", isOn: $examEveOn)
+                if examEveOn {
+                    DatePicker("时间", selection: timeBinding($examEveMinutes),
+                               displayedComponents: .hourAndMinute)
+                }
+
+                Toggle("当天早间提醒", isOn: $examMorningOn)
+                if examMorningOn {
+                    DatePicker("时间", selection: timeBinding($examMorningMinutes),
+                               displayedComponents: .hourAndMinute)
+                }
+
+                Toggle("开考前提醒", isOn: $examLeadOn)
+                if examLeadOn {
+                    Picker("提前", selection: $examLead) {
+                        ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
                             Text("\(minutes) 分钟").tag(minutes)
                         }
                     }
                 }
-            } header: {
-                Text("上课提醒")
-            } footer: {
-                Text("通知只管 7 天，期间进入 app 更新。")
             }
-
-            Section {
-                Toggle("考试提醒", isOn: $examEnabled)
-                if examEnabled {
-                    Toggle("前一天提醒", isOn: $examEveOn)
-                    if examEveOn {
-                        DatePicker("时间", selection: timeBinding($examEveMinutes),
-                                   displayedComponents: .hourAndMinute)
-                    }
-
-                    Toggle("当天早间提醒", isOn: $examMorningOn)
-                    if examMorningOn {
-                        DatePicker("时间", selection: timeBinding($examMorningMinutes),
-                                   displayedComponents: .hourAndMinute)
-                    }
-
-                    Toggle("开考前提醒", isOn: $examLeadOn)
-                    if examLeadOn {
-                        Picker("提前", selection: $examLead) {
-                            ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
-                                Text("\(minutes) 分钟").tag(minutes)
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text("考试提醒")
-            } footer: {
-                Text("三种提醒各自独立，关掉哪个就不发哪一条。")
-            }
-        }
-        .onChange(of: classEnabled) { _, on in
-            Task {
-                if on { await requestAuthorizationIfNeeded() }
-                await app.rescheduleNotifications()
-            }
+        } header: {
+            Text("考试提醒")
         }
         .onChange(of: examEnabled) { _, on in
             Task {
@@ -74,7 +79,6 @@ struct NotificationSettingsSection: View {
                 await app.rescheduleNotifications()
             }
         }
-        .onChange(of: classLead) { _, _ in Task { await app.rescheduleNotifications() } }
         .onChange(of: examLead) { _, _ in Task { await app.rescheduleNotifications() } }
         .onChange(of: examEveOn) { _, _ in Task { await app.rescheduleNotifications() } }
         .onChange(of: examMorningOn) { _, _ in Task { await app.rescheduleNotifications() } }
@@ -97,6 +101,16 @@ struct NotificationSettingsSection: View {
                     + calendar.component(.minute, from: newValue)
             }
         )
+    }
+}
+
+/// 首次引导里两节一起出现
+struct NotificationSettingsSection: View {
+    var body: some View {
+        Group {
+            ClassNotificationSection()
+            ExamNotificationSection()
+        }
     }
 }
 
