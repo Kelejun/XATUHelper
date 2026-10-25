@@ -176,7 +176,7 @@ struct ExamView: View {
                         .foregroundStyle(.tertiary)
                 }
             } header: {
-                Text("排查")
+                Text("诊断")
             } footer: {
                 Text("复制出来发给我，就能对上真实的页面结构。")
             }

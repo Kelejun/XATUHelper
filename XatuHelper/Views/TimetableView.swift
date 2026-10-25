@@ -356,6 +356,7 @@ struct CourseDetailSheet: View {
 struct SettingsSheet: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     var body: some View {
         NavigationStack {
@@ -372,6 +373,12 @@ struct SettingsSheet: View {
                         app.logout()
                         dismiss()
                     }
+                }
+
+                Section {
+                    Toggle("显示诊断数据", isOn: $showDiagnostics)
+                } footer: {
+                    Text("打开后，课表、考试、成绩、电费这些页面才会出现各自的原始返回复制入口。")
                 }
             }
             .navigationTitle("设置")
@@ -418,17 +425,16 @@ struct TimetableSettingsSheet: View {
                     Toggle("隐藏周末", isOn: $hideWeekend)
                 }
 
-                Section {
-                    Toggle("显示诊断数据", isOn: $showDiagnostics)
-                    if showDiagnostics {
-                        Button("复制诊断数据") {
+                if showDiagnostics {
+                    Section {
+                        Button("复制课表诊断数据") {
                             UIPasteboard.general.string = EamsService.diagnosticDump
                         }
+                    } header: {
+                        Text("诊断")
+                    } footer: {
+                        Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
                     }
-                } header: {
-                    Text("诊断")
-                } footer: {
-                    Text("打开后，考试、成绩、电费这些页面才会出现各自的原始返回复制入口。")
                 }
             }
             .navigationTitle("课程表设置")
