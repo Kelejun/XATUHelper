@@ -214,8 +214,10 @@ struct ElectricityWidgetView: View {
                     Spacer(minLength: 0)
                     Button(intent: RefreshElectricityIntent()) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.blue)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(Color.blue.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
                 }
