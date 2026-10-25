@@ -72,6 +72,19 @@ enum Preferences {
         }
     }
 
+    private static let loginTimesKey = "xatu.loginTimes"
+
+    /// 最近自动登录的时间点，用来防止连续登录把账号搞冻结
+    static var loginTimes: [Date] {
+        get {
+            guard let raw = UserDefaults.standard.array(forKey: loginTimesKey) as? [Double] else { return [] }
+            return raw.map { Date(timeIntervalSince1970: $0) }
+        }
+        set {
+            UserDefaults.standard.set(newValue.suffix(10).map { $0.timeIntervalSince1970 }, forKey: loginTimesKey)
+        }
+    }
+
     /// 上次查到的电费余额，存下来才能判断"今天已经查过了"
     static var electricityBalance: String? {
         get { UserDefaults.standard.string(forKey: balanceKey) }

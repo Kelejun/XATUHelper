@@ -67,6 +67,9 @@ final class AppState: ObservableObject {
     private let pay = PayService()
     private var electricProject: PayProject?
 
+    /// 正在进行的自动登录任务，多个请求共用
+    private var reloginTask: Task<Void, Error>?
+
     init() {
         // 先把上次存的登录 cookie 塞回来，再读缓存
         CookieVault.restore()
@@ -175,6 +178,7 @@ final class AppState: ObservableObject {
         pendingCredentials = (student, password)
         do {
             try await cas.login(username: student, password: password)
+            recordLoginTime()
             Keychain.savePassword(password, account: student)
             Preferences.studentID = student
             studentID = student
@@ -329,23 +333,64 @@ final class AppState: ObservableObject {
     }
 
     private func reloginAndRetry(_ operation: () async throws -> Void) async throws {
-        clearXatuCookies()
+        try await performRelogin()
         do {
-            guard let saved = Preferences.studentID,
-                  let password = Keychain.loadPassword(account: saved), !password.isEmpty else {
-                throw AppError.sessionExpired
-            }
-            do {
-                try await cas.login(username: saved, password: password)
-            } catch {
-                EamsService.lastError = "自动重登失败：\(error.localizedDescription)"
-                throw AppError.reloginFailed("登录已过期，自动重新登录没成功（\(error.localizedDescription)），请手动登录一次")
-            }
             try await operation()
         } catch let error as AppError {
             throw error
         } catch {
             throw AppError.network(Net.describe(error))
+        }
+    }
+
+    /// 同一时间只允许一次 CAS 登录；并发调用共用同一个 Task，避免一串请求同时换票把账号打成"登录频繁"
+    private func performRelogin() async throws {
+        if let existing = reloginTask {
+            try await existing.value
+            return
+        }
+
+        let now = Date()
+        let recent = Preferences.loginTimes.filter { now.timeIntervalSince($0) < 3600 }
+        if let last = recent.last {
+            let wait = 60 - now.timeIntervalSince(last)
+            if wait > 0 {
+                throw AppError.reloginFailed("刚刚已经登录过一次了，\(Int(wait.rounded(.up))) 秒后再试。连着登会被学校冻结账号")
+            }
+        }
+        if recent.count >= 4 {
+            throw AppError.reloginFailed("一小时内已经自动登录过 \(recent.count) 次，先别再试了，免得账号被冻结")
+        }
+        Preferences.loginTimes = recent + [now]
+
+        let task = Task<Void, Error> { try await self.rawRelogin() }
+        reloginTask = task
+        do {
+            try await task.value
+            reloginTask = nil
+        } catch {
+            reloginTask = nil
+            throw error
+        }
+    }
+
+    private func recordLoginTime() {
+        let now = Date()
+        Preferences.loginTimes = Preferences.loginTimes.filter { now.timeIntervalSince($0) < 3600 } + [now]
+    }
+
+    private func rawRelogin() async throws {
+        clearXatuCookies()
+        guard let saved = Preferences.studentID,
+              let password = Keychain.loadPassword(account: saved), !password.isEmpty else {
+            throw AppError.sessionExpired
+        }
+        do {
+            try await cas.login(username: saved, password: password)
+            CookieVault.pinAndSave()
+        } catch {
+            EamsService.lastError = "自动重登失败：\(error.localizedDescription)"
+            throw AppError.reloginFailed("登录已过期，自动重新登录没成功（\(error.localizedDescription)），请手动登录一次")
         }
     }
 
@@ -363,17 +408,7 @@ final class AppState: ObservableObject {
     }
 
     private func reloginAndRetryValue<T>(_ operation: () async throws -> T) async throws -> T {
-        clearXatuCookies()
-        guard let saved = Preferences.studentID,
-              let password = Keychain.loadPassword(account: saved), !password.isEmpty else {
-            throw AppError.sessionExpired
-        }
-        do {
-            try await cas.login(username: saved, password: password)
-        } catch {
-            EamsService.lastError = "自动重登失败：\(error.localizedDescription)"
-            throw AppError.reloginFailed("登录已过期，自动重新登录没成功（\(error.localizedDescription)），请手动登录一次")
-        }
+        try await performRelogin()
         do {
             return try await operation()
         } catch let error as AppError {
