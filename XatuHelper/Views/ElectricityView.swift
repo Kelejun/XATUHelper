@@ -55,12 +55,17 @@ struct ElectricityView: View {
                 Button {
                     Task { await app.refreshElectricity() }
                 } label: {
-                    if app.electricityLoading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.title3)
-                            .foregroundStyle(.blue)
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue.opacity(0.12))
+                            .frame(width: 34, height: 34)
+                        if app.electricityLoading {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.blue)
+                        }
                     }
                 }
                 .buttonStyle(.borderless)
