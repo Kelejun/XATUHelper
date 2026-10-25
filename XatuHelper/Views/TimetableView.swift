@@ -2,6 +2,9 @@ import SwiftUI
 import UIKit
 
 struct TimetableView: View {
+    /// 从首页推过来时外层已经有 NavigationStack，这里就不要再套一层
+    var embedded = false
+
     @EnvironmentObject var app: AppState
     @State private var showSettings = false
     @State private var detail: CourseBlock?
@@ -163,92 +166,101 @@ struct TimetableView: View {
 
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                weekBar
-
-                if let message = app.errorMessage {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 6)
-                }
-
-                GeometryReader { proxy in
-                    pager(width: proxy.size.width, height: proxy.size.height)
-                }
+        if embedded {
+            content
+        } else {
+            NavigationStack {
+                content
             }
-            .onAppear {
-                if visibleWeek == nil { visibleWeek = week }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        VStack(spacing: 0) {
+            weekBar
+
+            if let message = app.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
             }
-            .navigationTitle(app.semesterName)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Menu("学年") {
-                            ForEach(years, id: \.self) { year in
-                                Toggle("\(year)学年", isOn: isYearOn(year))
-                            }
-                        }
 
-                        Menu("学期") {
-                            ForEach(terms, id: \.self) { term in
-                                Toggle(term, isOn: isTermOn(term))
-                            }
-                        }
-
-                        Menu("课表") {
-                            ForEach(TableKind.allCases) { kind in
-                                Toggle(kind.title, isOn: isKindOn(kind))
-                            }
-                        }
-
-                        Section {
-                            Button {
-                                showSettings = true
-                            } label: {
-                                Label("设置", systemImage: "slider.horizontal.3")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task {
-                            await app.refresh()
-                            jump(to: week, animated: false)
-                        }
-                    } label: {
-                        if app.isLoading {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+            GeometryReader { proxy in
+                pager(width: proxy.size.width, height: proxy.size.height)
+            }
+        }
+        .onAppear {
+            if visibleWeek == nil { visibleWeek = week }
+        }
+        .navigationTitle(app.semesterName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Menu("学年") {
+                        ForEach(years, id: \.self) { year in
+                            Toggle("\(year)学年", isOn: isYearOn(year))
                         }
                     }
-                    .disabled(app.isLoading)
+
+                    Menu("学期") {
+                        ForEach(terms, id: \.self) { term in
+                            Toggle(term, isOn: isTermOn(term))
+                        }
+                    }
+
+                    Menu("课表") {
+                        ForEach(TableKind.allCases) { kind in
+                            Toggle(kind.title, isOn: isKindOn(kind))
+                        }
+                    }
+
+                    Section {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("设置", systemImage: "slider.horizontal.3")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
                 }
             }
-            .sheet(item: $detail) { block in
-                CourseDetailSheet(block: block)
-                    .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsSheet()
-            }
-            .task {
-                await app.ensureShell()
-                if app.occurrences.isEmpty {
-                    await app.refresh()
-                } else if let fetchedAt = app.fetchedAt,
-                          Date().timeIntervalSince(fetchedAt) > 144 * 3600 {
-                    await app.refresh()
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task {
+                        await app.refresh()
+                        jump(to: week, animated: false)
+                    }
+                } label: {
+                    if app.isLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
+                .disabled(app.isLoading)
+            }
+        }
+        .sheet(item: $detail) { block in
+            CourseDetailSheet(block: block)
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet()
+        }
+        .task {
+            await app.ensureShell()
+            if app.occurrences.isEmpty {
+                await app.refresh()
+            } else if let fetchedAt = app.fetchedAt,
+                      Date().timeIntervalSince(fetchedAt) > 144 * 3600 {
+                await app.refresh()
             }
         }
     }

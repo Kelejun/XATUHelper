@@ -2,8 +2,6 @@ import SwiftUI
 import UIKit
 
 struct HomeView: View {
-    /// 点课程卡片时切到课程表页，由外层 TabView 提供
-    var onOpenTimetable: () -> Void = {}
 
     @EnvironmentObject var app: AppState
     @State private var now = Date()
@@ -119,6 +117,7 @@ struct HomeView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .contentMargins(.top, titleGap, for: .scrollContent)
             .navigationTitle(greeting)
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
@@ -135,7 +134,9 @@ struct HomeView: View {
     }
 
     private var scheduleCard: some View {
-        Button(action: onOpenTimetable) {
+        NavigationLink {
+            TimetableView(embedded: true)
+        } label: {
             cardContent
         }
         .foregroundStyle(.primary)
@@ -151,9 +152,6 @@ struct HomeView: View {
                 Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
             }
 
             if showingTomorrow {

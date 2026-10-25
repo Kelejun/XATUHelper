@@ -13,7 +13,7 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            HomeView(onOpenTimetable: { selection = .timetable })
+            HomeView()
                 .tabItem { Label("首页", systemImage: "house") }
                 .tag(Tab.home)
 
