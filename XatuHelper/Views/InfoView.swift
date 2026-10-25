@@ -41,8 +41,8 @@ struct InfoView: View {
             case .checkin: return "按时点一下，别断签"
             case .calendar: return "什么时候放假"
             case .jwgl: return "成绩、选课、学籍都在里面"
-            case .ehall: return "办事大厅，请假报修都在这"
-            case .settings: return "账号、诊断、版本"
+            case .ehall: return ""
+            case .settings: return ""
             }
         }
 
@@ -172,7 +172,7 @@ struct InfoView: View {
                             .buttonStyle(.plain)
                     } else if entry == .ehall {
                         Button {
-                            webLink = WebLink(title: "一网通办", urlString: "https://ehall.xatu.edu.cn/")
+                            webLink = WebLink(title: "一网通办", urlString: "https://ywtb.xatu.edu.cn/")
                         } label: {
                             card(entry)
                         }
@@ -226,11 +226,14 @@ struct InfoView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text(subtitle(for: entry))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                let subtitle = subtitle(for: entry)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
 
                 Spacer(minLength: 0)
             }
