@@ -107,9 +107,10 @@ struct HomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .offset(y: -8)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 2, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 22, trailing: 16))
 
                 if let exam = nextExam {
                     Section {
