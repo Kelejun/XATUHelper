@@ -30,6 +30,13 @@ struct SchoolCalendarView: View {
                     }
                 }
             } else if let info {
+                if let errorText {
+                    Section {
+                        Text(errorText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 semestersSection(info)
                 if !breakRows(info).isEmpty {
                     breaksSection(info)
@@ -181,6 +188,15 @@ struct SchoolCalendarView: View {
 
     // MARK: - 加载
 
+    private func fallbackToCache(_ reason: String) {
+        if let cached = CalendarCache.load() {
+            info = cached
+            errorText = reason + "。下面显示的是上次的结果。"
+        } else {
+            errorText = reason
+        }
+    }
+
     private func load(force: Bool) async {
         if !force, let cached = CalendarCache.load() {
             info = cached
@@ -196,16 +212,24 @@ struct SchoolCalendarView: View {
         errorText = nil
         defer { isLoading = false }
 
-        guard let page = await CalendarService.loadPage() else {
-            errorText = "没在教务处页面里找到校历图片，可能改版了。"
+        let page: CalendarService.CalendarPage
+        switch await CalendarService.loadPage() {
+        case .success(let value):
+            page = value
+        case .failure(let error):
+            fallbackToCache(error.localizedDescription)
             return
         }
         if !force, let cached = CalendarCache.load(imageURL: page.imageURL.absoluteString) {
             info = cached
             return
         }
-        guard let data = await CalendarService.downloadImage(page.imageURL) else {
-            errorText = "校历图片下载失败，网络不通或者图片被挪走了。"
+        let data: Data
+        switch await CalendarService.downloadImage(page.imageURL) {
+        case .success(let value):
+            data = value
+        case .failure(let error):
+            fallbackToCache(error.localizedDescription)
             return
         }
         let text = await Task.detached(priority: .userInitiated) {

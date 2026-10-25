@@ -13,11 +13,47 @@ enum CalendarService {
         let imageURL: URL
     }
 
-    /// 列表页里第一条校历链接（页面按学年倒序）
-    static func latestCalendarURL() async -> URL? {
-        guard let url = URL(string: indexURL) else { return nil }
-        guard let html = await fetchText(url) else { return nil }
-        return latestLink(in: html)
+    struct TextError: Error {
+        let reason: String
+    }
+
+    enum LoadError: LocalizedError {
+        case index(String)
+        case page(String)
+        case image
+        case download(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .index(let reason): return "打不开教务处的校历列表（\(reason)）"
+            case .page(let reason): return "打不开校历正文页（\(reason)）"
+            case .image: return "正文页里没找到校历图片，可能改版了"
+            case .download(let reason): return "校历图片下载失败（\(reason)）"
+            }
+        }
+    }
+
+    static func loadPage() async -> Result<CalendarPage, LoadError> {
+        guard let listURL = URL(string: indexURL) else { return .failure(.index("地址不对")) }
+
+        switch await fetchHTML(listURL) {
+        case .failure(let reason):
+            return .failure(.index(reason.reason))
+        case .success(let html):
+            guard let pageURL = latestLink(in: html) else {
+                return .failure(.index("列表页里没有带「校历」的链接"))
+            }
+            switch await fetchHTML(pageURL) {
+            case .failure(let reason):
+                return .failure(.page(reason.reason))
+            case .success(let pageHTML):
+                guard let imageURL = calendarImageURL(in: pageHTML, base: pageURL) else {
+                    return .failure(.image)
+                }
+                let title = pageHTMLTitle(pageHTML) ?? "校历"
+                return .success(CalendarPage(title: title, pageURL: pageURL, imageURL: imageURL))
+            }
+        }
     }
 
     static func latestLink(in html: String) -> URL? {
@@ -37,15 +73,6 @@ enum CalendarService {
             return url
         }
         return nil
-    }
-
-    static func loadPage() async -> CalendarPage? {
-        guard let pageURL = await latestCalendarURL(),
-              let html = await fetchText(pageURL) else { return nil }
-
-        let title = pageHTMLTitle(html) ?? "校历"
-        guard let imageURL = calendarImageURL(in: html, base: pageURL) else { return nil }
-        return CalendarPage(title: title, pageURL: pageURL, imageURL: imageURL)
     }
 
     static func pageHTMLTitle(_ html: String) -> String? {
@@ -78,12 +105,18 @@ enum CalendarService {
 
     // MARK: - 图片与 OCR
 
-    static func downloadImage(_ url: URL) async -> Data? {
+    static func downloadImage(_ url: URL) async -> Result<Data, LoadError> {
         var request = URLRequest(url: url)
         request.timeoutInterval = 30
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-        return data
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard status == 200 else { return .failure(.download("HTTP \(status)")) }
+            return .success(data)
+        } catch {
+            return .failure(.download(describe(error)))
+        }
     }
 
     /// 只认底部说明区，再退一次全图
@@ -171,13 +204,39 @@ enum CalendarService {
 
     // MARK: - 工具
 
-    static func fetchText(_ url: URL) async -> String? {
+    static func fetchHTML(_ url: URL) async -> Result<String, TextError> {
         var request = URLRequest(url: url)
         request.timeoutInterval = 20
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-        if let text = String(data: data, encoding: .utf8) { return text }
-        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard status == 200 else { return .failure(TextError(reason: "HTTP \(status)")) }
+            guard let text = String(data: data, encoding: .utf8) else {
+                return .failure(TextError(reason: "页面不是 UTF-8，\(data.count) 字节"))
+            }
+            return .success(text)
+        } catch {
+            return .failure(TextError(reason: describe(error)))
+        }
+    }
+
+    static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        var parts = ["\(ns.domain) \(ns.code)"]
+        if let url = ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String,
+           let host = URL(string: url)?.host {
+            parts.append(host)
+        }
+        if !ns.localizedDescription.isEmpty {
+            parts.append(ns.localizedDescription)
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
