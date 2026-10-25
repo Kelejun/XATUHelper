@@ -191,9 +191,18 @@ struct SchoolCalendarView: View {
                 rows.append(BreakRow(title: "暑假", start: start, end: end))
             }
         } else if let start = shifted(info.semesters.last!.end, by: 1) {
-            rows.append(BreakRow(title: "暑假", start: start, end: "开学另行通知"))
+            // 校历按一整学年 52 周排（两学期各 26 周），最后一天就是暑假的最后一天
+            let yearEnd = academicYearEnd(startOf: first.start) ?? "开学另行通知"
+            rows.append(BreakRow(title: "暑假", start: start, end: yearEnd))
         }
         return rows
+    }
+
+    /// 校历图上那一格：学年第一天 + 363 天（52 周整），比如 2026-08-31 → 2027-08-29
+    private func academicYearEnd(startOf key: String) -> String? {
+        guard let start = keyFormatter.date(from: key),
+              let end = Calendar.current.date(byAdding: .day, value: 363, to: start) else { return nil }
+        return keyFormatter.string(from: end)
     }
 
     private func shifted(_ key: String, by days: Int) -> String? {
