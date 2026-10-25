@@ -125,7 +125,7 @@ struct HomeView: View {
                     Button {
                         showSettings = true
                     } label: {
-                        Image(systemName: "slider.horizontal.3")
+                        Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("设置")
                 }

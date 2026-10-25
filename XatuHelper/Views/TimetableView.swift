@@ -217,7 +217,7 @@ struct TimetableView: View {
                         Button {
                             showSettings = true
                         } label: {
-                            Label("设置", systemImage: "slider.horizontal.3")
+                            Label("设置", systemImage: "gearshape")
                         }
                     }
                 } label: {
