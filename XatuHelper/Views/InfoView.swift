@@ -35,7 +35,7 @@ struct InfoView: View {
             case .plan: return "毕业要修多少学分"
             case .bill: return "宿舍还剩多少电费"
             case .checkin: return "按时点一下，别断签"
-            case .calendar: return "这学期什么时候放寒假"
+            case .calendar: return "什么时候放假"
             case .jwgl: return "成绩、选课、学籍都在里面"
             }
         }
