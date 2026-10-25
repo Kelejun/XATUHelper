@@ -90,6 +90,12 @@ private struct WebPage: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading = false
+            // 网页里如果重新登过，把新 cookie 回写给 app，别让两边各登一次
+            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                for cookie in cookies where cookie.domain.contains("xatu.edu.cn") {
+                    HTTPCookieStorage.shared.setCookie(cookie)
+                }
+            }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
