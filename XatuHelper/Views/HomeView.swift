@@ -93,6 +93,11 @@ struct HomeView: View {
 
     private let weekdayNames = ["一", "二", "三", "四", "五", "六", "日"]
 
+    /// 大标题那一行的高度，用来给卡片让出位置（跟着动态字体缩放）
+    private var titleHeight: CGFloat {
+        UIFont.preferredFont(forTextStyle: .largeTitle).lineHeight
+    }
+
     private func isoWeekday(of date: Date) -> Int {
         let weekday = Calendar.current.component(.weekday, from: date)
         return weekday == 1 ? 7 : weekday - 1
@@ -103,15 +108,6 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                Text(statusLine)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .offset(y: -8)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 22, trailing: 16))
-
                 if let exam = nextExam {
                     Section {
                         examCard(exam)
@@ -131,8 +127,18 @@ struct HomeView: View {
             .listStyle(.insetGrouped)
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
+            .contentMargins(.top, titleHeight, for: .scrollContent)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Text(statusLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 16)
+                    .padding(.trailing, 16)
+                    .padding(.top, 2)
+                    .padding(.bottom, 4)
+            }
             .background(alignment: .top) { homeBackground }
-            .contentMargins(.top, 0, for: .scrollContent)
             .navigationTitle(greeting)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
