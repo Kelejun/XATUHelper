@@ -31,6 +31,10 @@ final class AppState: ObservableObject {
     @Published var examsLoading = false
     @Published var examsError: String?
 
+    @Published var grades: [GradeRecord] = []
+    @Published var gradesLoading = false
+    @Published var gradesError: String?
+
     @Published var weekOneMonday: Date = AppState.fallStart
     /// 需要验证码/动态码时弹出网页登录
     @Published var showsWebLogin = false
@@ -381,6 +385,22 @@ final class AppState: ObservableObject {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
         examsLoading = false
+    }
+
+    // MARK: - 成绩
+
+    func refreshGrades(semesterID: String? = nil) async {
+        guard !gradesLoading else { return }
+        gradesLoading = true
+        gradesError = nil
+        do {
+            let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+            let target = semesterID ?? fallback
+            grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
+        } catch {
+            gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
+        gradesLoading = false
     }
 
     // MARK: - 电费

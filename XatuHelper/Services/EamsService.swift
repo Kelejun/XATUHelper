@@ -31,6 +31,8 @@ struct EamsService {
     static var lastExamShellRaw = ""
     /// 最近一次考试表（stdExamTable!examTable.action）的原始 HTML
     static var lastExamRaw = ""
+    /// 最近一次成绩页的原始 HTML
+    static var lastGradeRaw = ""
 
     /// 设置页「复制诊断数据」导出的内容
     static var diagnosticDump: String {
@@ -55,6 +57,9 @@ struct EamsService {
 
         ===== 考试页 stdExamTable.action =====
         \(lastExamRaw.isEmpty ? "(空)" : String(lastExamRaw.prefix(20000)))
+
+        ===== 成绩页 teach/grade/course/person.action =====
+        \(lastGradeRaw.isEmpty ? "(空)" : String(lastGradeRaw.prefix(20000)))
         """
     }
 
@@ -382,6 +387,89 @@ struct EamsService {
                     room: room,
                     seat: cell(seatColumn),
                     note: cell(noteColumn)
+                )
+            )
+        }
+        return result
+    }
+
+    /// 拉指定学期的成绩
+    func fetchGrades(semesterID: String) async throws -> [GradeRecord] {
+        let query = semesterID.isEmpty
+            ? []
+            : [URLQueryItem(name: "semester.id", value: semesterID)]
+        let html = try await examText(
+            path: "/eams/teach/grade/course/person.action",
+            query: query,
+            label: "成绩页"
+        )
+        EamsService.lastGradeRaw = html
+        return EamsService.parseGrades(html)
+    }
+
+    /// 成绩页也是服务端直出的表格。表头里的「平时成绩」「期末成绩」这类都当分项，
+    /// 「总成绩」才是最终成绩，「绩点」单独一列。
+    static func parseGrades(_ html: String) -> [GradeRecord] {
+        let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#).compactMap { $0.first }
+        guard !rows.isEmpty else { return [] }
+
+        let table = rows.map { row -> [String] in
+            row.regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags }
+        }
+
+        guard let headerIndex = table.firstIndex(where: { row in
+            row.contains { $0.contains("成绩") || $0.contains("绩点") }
+        }) else { return [] }
+
+        let header = table[headerIndex]
+        func column(_ keywords: [String]) -> Int? {
+            header.firstIndex { head in keywords.contains { head.contains($0) } }
+        }
+
+        let courseColumn = header.firstIndex { $0.contains("课程名称") } ?? column(["科目", "课程"])
+        let codeColumn = header.firstIndex { $0.contains("课程序号") || $0.contains("课程号") || $0.contains("课程代码") }
+        let creditColumn = column(["学分"])
+        let gpaColumn = column(["绩点"])
+        let scoreColumn = header.firstIndex { $0 == "总成绩" || $0 == "成绩" || $0.contains("总成绩") }
+
+        // 除总成绩以外的「xx成绩」列都当分项
+        let componentColumns: [(index: Int, name: String)] = header.enumerated().compactMap { index, head in
+            guard head.contains("成绩"), index != scoreColumn else { return nil }
+            return (index, head)
+        }
+
+        guard courseColumn != nil || scoreColumn != nil else { return [] }
+
+        var result: [GradeRecord] = []
+        for (offset, row) in table[(headerIndex + 1)...].enumerated() {
+            guard row.count > 1 else { continue }
+            func cell(_ index: Int?) -> String {
+                guard let index, index < row.count else { return "" }
+                let value = row[index]
+                return (value == "-" || value == "—" || value == "--") ? "" : value
+            }
+
+            let course = cell(courseColumn)
+            let score = cell(scoreColumn)
+            if course.isEmpty && score.isEmpty { continue }
+
+            let components = componentColumns.compactMap { item -> GradeComponent? in
+                let value = cell(item.index)
+                guard !value.isEmpty else { return nil }
+                return GradeComponent(id: "\(offset)-\(item.name)", name: item.name, score: value)
+            }
+
+            result.append(
+                GradeRecord(
+                    id: "\(offset)-\(course)-\(score)",
+                    course: course,
+                    code: cell(codeColumn),
+                    credit: cell(creditColumn),
+                    score: score,
+                    gpa: cell(gpaColumn),
+                    components: components
                 )
             )
         }

@@ -115,6 +115,13 @@ struct InfoView: View {
                             card(entry)
                         }
                         .buttonStyle(.plain)
+                    } else if entry == .grade {
+                        NavigationLink {
+                            GradeView()
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
                     } else if entry == .checkin {
                         Button { showsCheckin = true } label: { card(entry) }
                             .buttonStyle(.plain)
