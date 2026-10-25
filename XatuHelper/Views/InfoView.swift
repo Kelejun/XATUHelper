@@ -13,6 +13,8 @@ struct InfoView: View {
         case checkin
         case calendar
         case jwgl
+        case ehall
+        case settings
 
         var id: String { rawValue }
 
@@ -25,6 +27,8 @@ struct InfoView: View {
             case .checkin: return "签到"
             case .calendar: return "校历"
             case .jwgl: return "教务系统"
+            case .ehall: return "一网通办"
+            case .settings: return "设置"
             }
         }
 
@@ -37,6 +41,8 @@ struct InfoView: View {
             case .checkin: return "按时点一下，别断签"
             case .calendar: return "什么时候放假"
             case .jwgl: return "成绩、选课、学籍都在里面"
+            case .ehall: return "办事大厅，请假报修都在这"
+            case .settings: return "账号、诊断、版本"
             }
         }
 
@@ -49,6 +55,8 @@ struct InfoView: View {
             case .checkin: return "checkmark.seal.fill"
             case .calendar: return "calendar"
             case .jwgl: return "graduationcap.fill"
+            case .ehall: return "square.grid.2x2.fill"
+            case .settings: return "gearshape.fill"
             }
         }
 
@@ -61,12 +69,15 @@ struct InfoView: View {
             case .checkin: return .pink
             case .calendar: return .purple
             case .jwgl: return .teal
+            case .ehall: return .indigo
+            case .settings: return .gray
             }
         }
     }
 
     @State private var pending: Entry?
     @State private var showsCheckin = false
+    @State private var showsSettings = false
     @State private var webLink: WebLink?
     @State private var resolvingCalendar = false
 
@@ -87,6 +98,7 @@ struct InfoView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     group("教务", entries: [.exam, .grade, .calendar, .jwgl])
                     group("生活", entries: [.bill, .checkin])
+                    group("杂项", entries: [.ehall, .settings])
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -103,6 +115,9 @@ struct InfoView: View {
             }
             .sheet(item: $webLink) { link in
                 WebSheet(title: link.title, urlString: link.urlString)
+            }
+            .sheet(isPresented: $showsSettings) {
+                SettingsSheet()
             }
             .sheet(isPresented: $showsCheckin) {
                 WebSheet(
@@ -154,6 +169,16 @@ struct InfoView: View {
                             .buttonStyle(.plain)
                     } else if entry == .calendar {
                         Button { openCalendar() } label: { card(entry) }
+                            .buttonStyle(.plain)
+                    } else if entry == .ehall {
+                        Button {
+                            webLink = WebLink(title: "一网通办", urlString: "https://ehall.xatu.edu.cn/")
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
+                    } else if entry == .settings {
+                        Button { showsSettings = true } label: { card(entry) }
                             .buttonStyle(.plain)
                     } else if entry == .jwgl {
                         Button {
