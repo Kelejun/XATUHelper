@@ -13,11 +13,13 @@ struct ElectricityView: View {
                     balanceCard
                 }
 
-                Section("近 7 天") {
+                Section {
                     trendChart
                     NavigationLink("历史余额") {
                         ElectricityHistoryView()
                     }
+                } header: {
+                    Text("近 7 天")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
