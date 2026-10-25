@@ -51,9 +51,21 @@ private struct WebPage: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
 
+        // WKWebView 自带的 navigator.geolocation 是空的，签到这类页面会一直转圈。
+        // 注入一段垫片，把定位请求转给原生 CLLocationManager。
+        let controller = WKUserContentController()
+        controller.add(context.coordinator, name: "location")
+        controller.addUserScript(WKUserScript(
+            source: Self.locationShim,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
+        config.userContentController = controller
+
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
+        context.coordinator.webView = web
 
         // 把 app 已经拿到的 xatu cookie 带进 WebKit 的存储，少登一次。
         // setCookie 是异步的，等全部落盘再发第一个请求，否则第一次会被踢去登录页。
@@ -77,11 +89,103 @@ private struct WebPage: UIViewRepresentable {
         Coordinator(isLoading: $isLoading)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    /// 把 navigator.geolocation 接到 window.webkit.messageHandlers.location
+    private static let locationShim = """
+    (function(){
+      if (!window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.location) return;
+      if (!navigator.geolocation) {
+        try { Object.defineProperty(navigator, 'geolocation', {value: {}, configurable: true}); } catch (e) { return; }
+      }
+      var bridge = window.webkit.messageHandlers.location;
+      var seq = 0, pending = {}, watches = {};
+      function reply(id, ok, lat, lng, acc, msg){
+        var cb = pending[id] || watches[id];
+        if (!cb) return;
+        if (ok) {
+          cb.success && cb.success({
+            coords: {latitude: lat, longitude: lng, accuracy: acc, altitude: null, altitudeAccuracy: null, heading: null, speed: null},
+            timestamp: Date.now()
+          });
+          if (!watches[id]) delete pending[id];
+        } else {
+          cb.error && cb.error({code: 2, message: msg || '定位失败', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3});
+          delete pending[id];
+          delete watches[id];
+        }
+      }
+      window.__xatuLocation = reply;
+      navigator.geolocation.getCurrentPosition = function(success, error){
+        var id = ++seq;
+        pending[id] = {success: success, error: error};
+        bridge.postMessage({id: id, watch: false});
+      };
+      navigator.geolocation.watchPosition = function(success, error){
+        var id = ++seq;
+        watches[id] = {success: success, error: error};
+        bridge.postMessage({id: id, watch: true});
+        return id;
+      };
+      navigator.geolocation.clearWatch = function(id){
+        delete watches[id];
+        bridge.postMessage({id: id, clear: true});
+      };
+      if (navigator.permissions && navigator.permissions.query) {
+        var query = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = function(desc){
+          if (desc && desc.name === 'geolocation') return Promise.resolve({state: 'granted', onchange: null});
+          return query(desc);
+        };
+      }
+    })();
+    """
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
+        weak var webView: WKWebView?
+        private let location = LocationBridge()
 
         init(isLoading: Binding<Bool>) {
             _isLoading = isLoading
+        }
+
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "location",
+                  let body = message.body as? [String: Any],
+                  let id = body["id"] as? Int else { return }
+            if body["clear"] as? Bool == true {
+                location.stopWatching(id: id)
+                return
+            }
+            let isWatch = body["watch"] as? Bool ?? false
+            if isWatch {
+                location.startWatching(id: id) { [weak self] location in
+                    guard let self, let location else { return }
+                    self.reply(id: id, location: location)
+                }
+            } else {
+                location.request { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case let .success(location):
+                        self.reply(id: id, location: location)
+                    case let .failure(error):
+                        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        self.reply(id: id, error: message)
+                    }
+                }
+            }
+        }
+
+        private func reply(id: Int, location: CLLocation) {
+            let js = "window.__xatuLocation && window.__xatuLocation(\(id), true, \(location.coordinate.latitude), \(location.coordinate.longitude), \(location.horizontalAccuracy), '')"
+            webView?.evaluateJavaScript(js)
+        }
+
+        private func reply(id: Int, error: String) {
+            let escaped = error.replacingOccurrences(of: "'", with: "\\'")
+            let js = "window.__xatuLocation && window.__xatuLocation(\(id), false, 0, 0, 0, '\(escaped)')"
+            webView?.evaluateJavaScript(js)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
