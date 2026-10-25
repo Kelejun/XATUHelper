@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 考试安排。数据来自教务「我的考试」，按日期分组排。
 struct ExamView: View {
@@ -73,6 +74,10 @@ struct ExamView: View {
                         )
                     }
                 }
+
+                if app.exams.isEmpty {
+                    debugSection
+                }
             } else {
                 ForEach(groups, id: \.key) { group in
                     Section {
@@ -120,6 +125,42 @@ struct ExamView: View {
         .task {
             if app.exams.isEmpty { await app.refreshExams(semesterID: effectiveSemesterID) }
         }
+    }
+
+    /// 空列表时给一点现场信息，方便判断是"真没考试"还是"没解析出来"
+    @ViewBuilder
+    private var debugSection: some View {
+        let raw = EamsService.lastExamRaw
+        Section {
+            Text("接口返回 \(raw.count) 个字符")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !raw.isEmpty {
+                Button {
+                    UIPasteboard.general.string = raw
+                } label: {
+                    Label("复制原始返回", systemImage: "doc.on.doc")
+                }
+
+                Text(summary(of: raw))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        } header: {
+            Text("排查")
+        } footer: {
+            Text("复制出来发给我，就能对上真实的页面结构。")
+        }
+    }
+
+    private func summary(of raw: String) -> String {
+        var parts: [String] = []
+        if raw.contains("pwdEncryptSalt") || raw.contains("authserver") { parts.append("像是登录页") }
+        if raw.contains("gridtable") { parts.append("有 gridtable") }
+        if raw.contains("<table") { parts.append("有表格") }
+        if raw.contains("没有") && raw.contains("考试") { parts.append("页面里写了没有考试") }
+        return parts.isEmpty ? "没看出明显特征" : parts.joined(separator: "、")
     }
 
     private func row(_ exam: ExamRecord) -> some View {
