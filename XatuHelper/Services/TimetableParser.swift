@@ -37,7 +37,8 @@ enum TimetableParser {
 
             let (code, displayName) = splitCodeName(nameRaw, fallbackCode: codeRaw)
             let teacher = teacherNames(before: chunks[index - 1])
-            let weeks = mask.enumerated().compactMap { $0.element == "1" ? $0.offset + 1 : nil }
+            // 树维的周次掩码是按「周序号」直接落位的：第 1 周在 index 1，index 0 空着
+            let weeks = mask.enumerated().compactMap { $0.element == "1" && $0.offset > 0 ? $0.offset : nil }
             guard !weeks.isEmpty else { continue }
             rawCount += 1
 
