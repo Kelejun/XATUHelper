@@ -2,6 +2,9 @@ import SwiftUI
 import UIKit
 
 struct HomeView: View {
+    /// 点课程卡片时切到课程表页，由外层 TabView 提供
+    var onOpenTimetable: () -> Void = {}
+
     @EnvironmentObject var app: AppState
     @State private var now = Date()
 
@@ -131,6 +134,14 @@ struct HomeView: View {
     }
 
     private var scheduleCard: some View {
+        Button(action: onOpenTimetable) {
+            cardContent
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(cardTitle)
