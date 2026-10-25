@@ -7,6 +7,12 @@ struct HomeView: View {
     @State private var now = Date()
     @State private var showSettings = false
     @State private var calendarInfo: CalendarService.Info?
+    @State private var destination: HomeDestination?
+
+    private enum HomeDestination: Hashable {
+        case electricity
+        case calendar
+    }
 
     // MARK: - 问候语
 
@@ -161,19 +167,25 @@ struct HomeView: View {
     }
 
     private func holidayCard(_ event: HolidayEvent) -> some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
+        Button { destination = .calendar } label: {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(event.title)
-                    .font(.headline)
-                Text(event.dateText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(event.days == 0 ? "今天" : "还有 \(event.days) 天")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.teal)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(event.dateText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer()
-            Text(event.days == 0 ? "今天" : "还有 \(event.days) 天")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(.teal)
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
     }
 
     // MARK: - 视图
@@ -199,15 +211,15 @@ struct HomeView: View {
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                 }
                 Section {
-                    electricityCard
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                }
-
-                if let holiday = nextHoliday {
-                    Section {
-                        holidayCard(holiday)
-                            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    HStack(alignment: .top, spacing: 12) {
+                        electricityCard
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let holiday = nextHoliday {
+                            holidayCard(holiday)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                 }
             }
             .listStyle(.insetGrouped)
@@ -238,6 +250,12 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsSheet()
+            }
+            .navigationDestination(item: $destination) { dest in
+                switch dest {
+                case .electricity: ElectricityView()
+                case .calendar: SchoolCalendarView()
+                }
             }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
@@ -398,52 +416,56 @@ struct HomeView: View {
 
     /// 电费卡片：余额低于 10 元变黄
     private var electricityCard: some View {
-        NavigationLink {
-            ElectricityView()
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
+        Button { destination = .electricity } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
                     Text("电费")
-                        .font(.headline)
-                    Spacer(minLength: 8)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     if app.electricityLoading {
-                        ProgressView().controlSize(.small)
+                        ProgressView().controlSize(.mini)
                     }
                 }
 
                 if let balance = app.electricityBalance {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text("¥")
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(balance)
-                            .font(.system(size: 30, weight: .semibold, design: .rounded))
+                            .font(.system(size: 22, weight: .semibold, design: .rounded))
                             .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                     }
-                    HStack(spacing: 6) {
-                        if let dorm = app.dorm {
-                            Text(dorm.displayName)
-                        }
-                        if let checked = app.electricityCheckedAt {
-                            Text("·")
-                            Text(checked.formatted(date: .omitted, time: .shortened) + " 更新")
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                } else if app.dorm != nil {
-                    Text(app.electricityError ?? "还没查到余额")
-                        .font(.subheadline)
-                        .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("还没选宿舍，点一下选")
-                        .font(.subheadline)
+                    Text(electricityCaption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else if app.dorm == nil {
+                    Text("还没选宿舍")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(app.electricityError == nil ? "还没查到" : "查询失败")
+                        .font(.caption)
+                        .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
+                        .lineLimit(1)
                 }
             }
         }
+        .buttonStyle(.plain)
         .foregroundStyle(.primary)
+    }
+
+    private var electricityCaption: String {
+        var parts: [String] = []
+        if let dorm = app.dorm { parts.append(dorm.buildName.isEmpty ? dorm.roomName : dorm.buildName) }
+        if let checked = app.electricityCheckedAt {
+            parts.append(checked.formatted(date: .omitted, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func row(_ block: CourseBlock) -> some View {
