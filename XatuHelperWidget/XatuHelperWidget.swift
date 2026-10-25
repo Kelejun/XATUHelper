@@ -214,7 +214,7 @@ struct ElectricityWidgetView: View {
 
                 if let balance = entry.snapshot.balance {
                     Text("¥\(String(format: "%.2f", balance))")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -256,14 +256,14 @@ struct BreakWidgetView: View {
             EmptyHint()
         } else if let item = entry.snapshot.upcomingBreak {
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
+                Text("\(item.title)还有")
                     .font(.headline)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
 
-                Text(item.days == 0 ? "今天" : "还有 \(item.days) 天")
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                Text(item.days == 0 ? "今天" : "\(item.days) 天")
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .foregroundStyle(.teal)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)

@@ -169,11 +169,11 @@ struct HomeView: View {
     private func holidayCard(_ event: HolidayEvent) -> some View {
         Button { destination = .calendar } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Text(event.title)
+                Text("\(event.title)还有")
                     .font(.headline)
                     .lineLimit(1)
-                Text(event.days == 0 ? "今天" : "还有 \(event.days) 天")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                Text(event.days == 0 ? "今天" : "\(event.days) 天")
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
                     .foregroundStyle(.teal)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -421,7 +421,7 @@ ScrollView {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(balance)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded))
+                            .font(.system(size: 28, weight: .semibold, design: .rounded))
                             .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
