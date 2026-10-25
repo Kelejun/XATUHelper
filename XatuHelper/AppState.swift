@@ -26,6 +26,8 @@ final class AppState: ObservableObject {
     @Published var electricityCheckedAt: Date?
     @Published var electricityLoading = false
     @Published var electricityError: String?
+    /// 按天的余额存档，画曲线和历史页都用它
+    @Published var electricityHistory: [ElectricityRecord] = []
 
     @Published var exams: [ExamRecord] = []
     @Published var examsLoading = false
@@ -72,6 +74,7 @@ final class AppState: ObservableObject {
         dorm = Preferences.dorm
         electricityBalance = Preferences.electricityBalance
         electricityCheckedAt = Preferences.electricityCheckedAt
+        electricityHistory = ElectricityHistoryStore.load()
         if let snapshot = store.load() {
             occurrences = snapshot.occurrences
             unitCount = snapshot.unitCount
@@ -445,10 +448,32 @@ final class AppState: ObservableObject {
             electricityCheckedAt = Date()
             Preferences.electricityBalance = balance
             Preferences.electricityCheckedAt = electricityCheckedAt
+            recordElectricity(balance: balance)
         } catch {
             electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
         electricityLoading = false
+    }
+
+    /// 一天只留一条，刷新多少次都只是覆盖当天这条
+    private func recordElectricity(balance: String) {
+        guard let value = Double(balance) else { return }
+        let record = ElectricityRecord(day: ElectricityRecord.dayString(), balance: value)
+        electricityHistory = ElectricityHistoryStore.upserting(record, into: electricityHistory)
+        ElectricityHistoryStore.save(electricityHistory)
+    }
+
+    /// 最近几天的记录，够画曲线用
+    func electricityTrend(days: Int = 7) -> [ElectricityRecord] {
+        Array(electricityHistory.suffix(days))
+    }
+
+    /// 某天的用量 = 前一天的余额 - 当天的余额（前一天没记录就是 nil）
+    func electricityUsage(on record: ElectricityRecord) -> Double? {
+        guard let index = electricityHistory.firstIndex(of: record), index > 0 else { return nil }
+        let previous = electricityHistory[index - 1]
+        guard previous.day != record.day else { return nil }
+        return previous.balance - record.balance
     }
 
     /// 余额低于十块就当快没电了，用橙色提醒一下

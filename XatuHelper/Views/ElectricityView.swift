@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 /// 电费页：没选过宿舍就引导去选，选过就直接显示余额。
@@ -18,6 +19,18 @@ struct ElectricityView: View {
                         LabeledContent("校区", value: dorm.areaName)
                     }
                     Button("换一个宿舍") { editing = true }
+                }
+
+                Section("近 7 天") {
+                    trendChart
+                }
+
+                Section {
+                    NavigationLink("历史余额") {
+                        ElectricityHistoryView()
+                    }
+                } footer: {
+                    Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
 
                 if let error = app.electricityError {
@@ -80,6 +93,59 @@ struct ElectricityView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// 近几天的余额曲线；点太少就直说，别画一条没有意义的线
+    @ViewBuilder
+    private var trendChart: some View {
+        let trend = app.electricityTrend()
+
+        if trend.count < 2 {
+            Text("再攒几天就能看到曲线了")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Chart(trend) { record in
+                    LineMark(
+                        x: .value("日期", record.date),
+                        y: .value("余额", record.balance)
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(.blue)
+
+                    PointMark(
+                        x: .value("日期", record.date),
+                        y: .value("余额", record.balance)
+                    )
+                    .foregroundStyle(.blue)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let amount = value.as(Double.self) {
+                                Text("¥\(Int(amount))")
+                            }
+                        }
+                    }
+                }
+                .frame(height: 150)
+
+                if let used = usageText(trend) {
+                    Text(used)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func usageText(_ trend: [ElectricityRecord]) -> String? {
+        guard let first = trend.first, let last = trend.last, trend.count >= 2 else { return nil }
+        let used = first.balance - last.balance
+        return String(format: "这几天用了 ¥%.2f", used)
     }
 
     @ViewBuilder
