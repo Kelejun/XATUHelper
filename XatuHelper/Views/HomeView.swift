@@ -106,9 +106,10 @@ struct HomeView: View {
                 Text(statusLine)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 2, trailing: 18))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 2, trailing: 16))
 
                 if let exam = nextExam {
                     Section {
@@ -130,7 +131,7 @@ struct HomeView: View {
             .listSectionSpacing(14)
             .scrollContentBackground(.hidden)
             .background(alignment: .top) { homeBackground }
-            .contentMargins(.top, 6, for: .scrollContent)
+            .contentMargins(.top, 0, for: .scrollContent)
             .navigationTitle(greeting)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
