@@ -332,7 +332,7 @@ struct EamsService {
         }
 
         let courseColumn = column(["课程", "科目"])
-        let timeColumn = column(["时间"])
+        let timeColumn = column(["时间", "日期"])
         let roomColumn = column(["考场", "教室", "地点"])
         let seatColumn = column(["座位"])
         let noteColumn = column(["备注", "说明"])
@@ -349,7 +349,19 @@ struct EamsService {
                 return (value == "-" || value == "—" || value == "--") ? "" : value
             }
 
-            let time = cell(timeColumn)
+            var time = cell(timeColumn)
+            // 有的版本时间不单独成列，整行只有一处带日期，就在整行里找
+            if ExamRecord.dateKey(in: time).isEmpty {
+                if let located = row.first(where: { !ExamRecord.dateKey(in: $0).isEmpty }) {
+                    time = located
+                }
+            }
+            // 日期和时间分两列时，把钟点补上
+            if !time.isEmpty && !time.contains(":"),
+               let clock = row.first(where: { $0.range(of: #"\d{1,2}:\d{2}"#, options: .regularExpression) != nil }),
+               clock != time {
+                time += " " + clock
+            }
             let room = cell(roomColumn)
             if time.isEmpty && room.isEmpty { continue }
 

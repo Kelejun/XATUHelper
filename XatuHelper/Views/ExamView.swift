@@ -32,19 +32,28 @@ struct ExamView: View {
     }
 
     private var groups: [(key: String, items: [ExamRecord])] {
-        let grouped = Dictionary(grouping: app.exams) { $0.dateKey }
-        return grouped
+        Dictionary(grouping: app.exams) { $0.dateKey }
             .map { (key: $0.key, items: $0.value.sorted { $0.time < $1.time }) }
+            .sorted { $0.key < $1.key }
+    }
+
+    /// 今天及以后、而且认得出日期的，正常排在前面
+    private var upcomingGroups: [(key: String, items: [ExamRecord])] {
+        groups.filter { !$0.key.isEmpty && $0.key >= todayKey }
+    }
+
+    /// 已经考完的、以及日期都认不出来的，统一压到最后
+    private var bottomExams: [ExamRecord] {
+        app.exams
+            .filter { $0.dateKey.isEmpty || $0.dateKey < todayKey }
             .sorted { lhs, rhs in
-                // 认不出日期的排最后
-                switch (lhs.key.isEmpty, rhs.key.isEmpty) {
-                case (false, false): return lhs.key < rhs.key
-                case (false, true): return true
-                case (true, false): return false
-                default: return false
-                }
+                if lhs.dateKey.isEmpty != rhs.dateKey.isEmpty { return !lhs.dateKey.isEmpty }
+                if lhs.dateKey != rhs.dateKey { return lhs.dateKey > rhs.dateKey }
+                return lhs.time < rhs.time
             }
     }
+
+    private var todayKey: String { ExamView.dayFormatter.string(from: Date()) }
 
     var body: some View {
         List {
@@ -79,13 +88,23 @@ struct ExamView: View {
                     debugSection
                 }
             } else {
-                ForEach(groups, id: \.key) { group in
+                ForEach(upcomingGroups, id: \.key) { group in
                     Section {
                         ForEach(group.items) { exam in
                             row(exam)
                         }
                     } header: {
                         Text(headerText(for: group.key, count: group.items.count))
+                    }
+                }
+
+                if !bottomExams.isEmpty {
+                    Section {
+                        ForEach(bottomExams) { exam in
+                            row(exam)
+                        }
+                    } header: {
+                        Text("已结束 / 待定")
                     }
                 }
             }
@@ -189,7 +208,7 @@ struct ExamView: View {
                     Label(exam.room, systemImage: "mappin.and.ellipse")
                 }
                 if !exam.seat.isEmpty {
-                    Label("座位 \(exam.seat)", systemImage: "chair.lounge")
+                    Text("座位 \(exam.seat)")
                 }
             }
             .font(.caption)
@@ -257,6 +276,13 @@ struct ExamView: View {
         formatter.dateFormat = "M月d日 EEEE"
         return formatter.string(from: date)
     }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     private static let parser: DateFormatter = {
         let formatter = DateFormatter()
