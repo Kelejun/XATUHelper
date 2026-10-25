@@ -67,7 +67,7 @@ struct InfoView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    group("教务", entries: [.exam, .grade, .plan])
+                    group("教务", entries: [.exam, .grade])
                     group("生活", entries: [.bill, .checkin])
                 }
                 .padding(.horizontal, 20)
