@@ -25,6 +25,23 @@ enum PeriodSchedule {
         "\(startTime(from))-\(endTime(to))"
     }
 
+    /// 教3 楼早上 3-4 节的作息跟其他楼不一样，教务排的是 10:10-11:40
+    static func isJiaoSanEarly(_ block: CourseBlock) -> Bool {
+        block.startPeriod == 3 && block.endPeriod == 4 && block.room.contains("教3")
+    }
+
+    static func range(for block: CourseBlock) -> String {
+        isJiaoSanEarly(block) ? "10:10-11:40" : range(from: block.startPeriod, to: block.endPeriod)
+    }
+
+    static func startMinutes(of block: CourseBlock) -> Int {
+        isJiaoSanEarly(block) ? minutes("10:10") : startMinutes(block.startPeriod)
+    }
+
+    static func endMinutes(of block: CourseBlock) -> Int {
+        isJiaoSanEarly(block) ? minutes("11:40") : endMinutes(block.endPeriod)
+    }
+
     private static func value(_ list: [String], _ index: Int) -> String {
         guard index >= 0, index < list.count else { return "" }
         return list[index]

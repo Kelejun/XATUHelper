@@ -56,6 +56,8 @@ final class AppState: ObservableObject {
     init() {
         studentID = Preferences.studentID ?? ""
         dorm = Preferences.dorm
+        electricityBalance = Preferences.electricityBalance
+        electricityCheckedAt = Preferences.electricityCheckedAt
         if let snapshot = store.load() {
             occurrences = snapshot.occurrences
             unitCount = snapshot.unitCount
@@ -351,6 +353,8 @@ final class AppState: ObservableObject {
             }
             electricityBalance = balance
             electricityCheckedAt = Date()
+            Preferences.electricityBalance = balance
+            Preferences.electricityCheckedAt = electricityCheckedAt
         } catch {
             electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
@@ -369,6 +373,8 @@ final class AppState: ObservableObject {
         Preferences.dorm = selection
         electricityBalance = nil
         electricityCheckedAt = nil
+        Preferences.electricityBalance = nil
+        Preferences.electricityCheckedAt = nil
         await refreshElectricity()
     }
 
@@ -377,6 +383,8 @@ final class AppState: ObservableObject {
         Preferences.dorm = nil
         electricityBalance = nil
         electricityCheckedAt = nil
+        Preferences.electricityBalance = nil
+        Preferences.electricityCheckedAt = nil
         electricityError = nil
     }
 

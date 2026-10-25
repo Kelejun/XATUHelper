@@ -46,6 +46,8 @@ enum Keychain {
 enum Preferences {
     private static let studentKey = "xatu.studentID"
     private static let dormKey = "xatu.dorm"
+    private static let balanceKey = "xatu.electricityBalance"
+    private static let checkedKey = "xatu.electricityCheckedAt"
 
     static var studentID: String? {
         get { UserDefaults.standard.string(forKey: studentKey) }
@@ -66,6 +68,29 @@ enum Preferences {
                 UserDefaults.standard.set(data, forKey: dormKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: dormKey)
+            }
+        }
+    }
+
+    /// 上次查到的电费余额，存下来才能判断"今天已经查过了"
+    static var electricityBalance: String? {
+        get { UserDefaults.standard.string(forKey: balanceKey) }
+        set {
+            if let newValue { UserDefaults.standard.set(newValue, forKey: balanceKey) }
+            else { UserDefaults.standard.removeObject(forKey: balanceKey) }
+        }
+    }
+
+    static var electricityCheckedAt: Date? {
+        get {
+            let stamp = UserDefaults.standard.double(forKey: checkedKey)
+            return stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+        }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue.timeIntervalSince1970, forKey: checkedKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: checkedKey)
             }
         }
     }

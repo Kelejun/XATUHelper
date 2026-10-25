@@ -51,15 +51,15 @@ struct HomeView: View {
     private var currentBlock: CourseBlock? {
         guard !isLateNight else { return nil }
         return todayBlocks.first {
-            PeriodSchedule.startMinutes($0.startPeriod) <= nowMinutes
-                && nowMinutes < PeriodSchedule.endMinutes($0.endPeriod)
+            PeriodSchedule.startMinutes(of: $0) <= nowMinutes
+                && nowMinutes < PeriodSchedule.endMinutes(of: $0)
         }
     }
 
     /// 还没开始的课
     private var remainingToday: [CourseBlock] {
         guard !isLateNight else { return [] }
-        return todayBlocks.filter { PeriodSchedule.startMinutes($0.startPeriod) > nowMinutes }
+        return todayBlocks.filter { PeriodSchedule.startMinutes(of: $0) > nowMinutes }
     }
 
     /// 今天没有正在上的、也没有剩下的，就翻到明天
@@ -274,7 +274,7 @@ struct HomeView: View {
     }
 
     private func timeText(_ block: CourseBlock) -> String {
-        "\(PeriodSchedule.startTime(block.startPeriod))-\(PeriodSchedule.endTime(block.endPeriod))"
+        PeriodSchedule.range(for: block)
     }
 }
 
