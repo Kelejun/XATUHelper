@@ -10,6 +10,7 @@ struct InfoView: View {
         case grade
         case plan
         case bill
+        case checkin
 
         var id: String { rawValue }
 
@@ -19,6 +20,7 @@ struct InfoView: View {
             case .grade: return "成绩"
             case .plan: return "培养计划"
             case .bill: return "电费"
+            case .checkin: return "签到"
             }
         }
 
@@ -28,6 +30,7 @@ struct InfoView: View {
             case .grade: return "每学期的课程成绩"
             case .plan: return "毕业要修多少学分"
             case .bill: return "宿舍还剩多少电费"
+            case .checkin: return "每天点一下，别断签"
             }
         }
 
@@ -37,6 +40,7 @@ struct InfoView: View {
             case .grade: return "chart.bar.fill"
             case .plan: return "list.bullet.rectangle.fill"
             case .bill: return "bolt.fill"
+            case .checkin: return "checkmark.seal.fill"
             }
         }
 
@@ -46,11 +50,13 @@ struct InfoView: View {
             case .grade: return .blue
             case .plan: return .green
             case .bill: return .yellow
+            case .checkin: return .pink
             }
         }
     }
 
     @State private var pending: Entry?
+    @State private var showsCheckin = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -63,6 +69,7 @@ struct InfoView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     group("教务", entries: [.exam, .grade, .plan])
                     group("生活", entries: [.bill])
+                    group("日常", entries: [.checkin])
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -70,6 +77,12 @@ struct InfoView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("校园")
+            .sheet(isPresented: $showsCheckin) {
+                WebSheet(
+                    title: "签到",
+                    urlString: "https://ehall.xatu.edu.cn/xsfw/sys/swmqdzsapp/*default/index.do#/jrqd"
+                )
+            }
             .alert(item: $pending) { entry in
                 Alert(
                     title: Text(entry.title),
@@ -95,6 +108,9 @@ struct InfoView: View {
                             card(entry)
                         }
                         .buttonStyle(.plain)
+                    } else if entry == .checkin {
+                        Button { showsCheckin = true } label: { card(entry) }
+                            .buttonStyle(.plain)
                     } else {
                         Button { pending = entry } label: { card(entry) }
                             .buttonStyle(.plain)
