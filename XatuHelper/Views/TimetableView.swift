@@ -381,6 +381,18 @@ struct SettingsSheet: View {
                     }
                 }
 
+                Section("通知") {
+                    NavigationLink("通知设置") {
+                        NotificationSettingsPage()
+                    }
+                }
+
+                Section {
+                    NavigationLink("查看更多课程表设置...") {
+                        TimetableSettingsContent()
+                    }
+                }
+
                 Section {
                     Toggle("显示诊断数据", isOn: $showDiagnostics)
                 } footer: {
@@ -408,6 +420,24 @@ struct SettingsSheet: View {
 
 /// 课程表自己的设置：周次校正、隐藏周末、诊断数据都在这
 struct TimetableSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            TimetableSettingsContent()
+                .navigationTitle("课程表设置")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { dismiss() }
+                    }
+                }
+        }
+    }
+}
+
+/// 抽出来一份不带 NavigationStack 的，总设置里也能跳进来
+struct TimetableSettingsContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var draftWeek = 1
@@ -417,58 +447,55 @@ struct TimetableSettingsSheet: View {
     private static let weekRange = 1...30
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Picker("现在实际是第几周", selection: $draftWeek) {
-                        ForEach(Self.weekRange, id: \.self) { value in
-                            Text("第 \(value) 周").tag(value)
-                        }
+        Form {
+            Section {
+                Picker("现在实际是第几周", selection: $draftWeek) {
+                    ForEach(Self.weekRange, id: \.self) { value in
+                        Text("第 \(value) 周").tag(value)
                     }
-                    Button("按这个周次校正") {
-                        app.calibrate(currentWeek: draftWeek)
-                        dismiss()
+                }
+                Button("按这个周次校正") {
+                    app.calibrate(currentWeek: draftWeek)
+                    dismiss()
+                }
+            } header: {
+                Text("周次校正")
+            } footer: {
+                Text("学校校历如果和默认的不一样，在这里改一次就行。")
+            }
+
+            Section {
+                NavigationLink("查看课程表通知设置...") {
+                    NotificationSettingsPage()
+                }
+            }
+
+            Section("课表") {
+                Toggle("隐藏周末", isOn: $hideWeekend)
+                if let fetchedAt = app.fetchedAt {
+                    LabeledContent(
+                        "上次更新",
+                        value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                }
+            }
+
+            if showDiagnostics {
+                Section {
+                    Button("复制课表诊断数据") {
+                        UIPasteboard.general.string = EamsService.diagnosticDump
                     }
                 } header: {
-                    Text("周次校正")
+                    Text("诊断")
                 } footer: {
-                    Text("学校校历如果和默认的不一样，在这里改一次就行。")
-                }
-
-                NotificationSettingsSection()
-
-                Section("课表") {
-                    Toggle("隐藏周末", isOn: $hideWeekend)
-                    if let fetchedAt = app.fetchedAt {
-                        LabeledContent(
-                            "上次更新",
-                            value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
-                        )
-                    }
-                }
-
-                if showDiagnostics {
-                    Section {
-                        Button("复制课表诊断数据") {
-                            UIPasteboard.general.string = EamsService.diagnosticDump
-                        }
-                    } header: {
-                        Text("诊断")
-                    } footer: {
-                        Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
-                    }
+                    Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
                 }
             }
-            .navigationTitle("课程表设置")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
-                }
-            }
-            .onAppear {
-                draftWeek = app.currentWeek
-            }
+        }
+        .navigationTitle("课程表设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            draftWeek = app.currentWeek
         }
     }
 }

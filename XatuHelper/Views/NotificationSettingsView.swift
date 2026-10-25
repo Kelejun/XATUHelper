@@ -9,6 +9,9 @@ struct NotificationSettingsSection: View {
     @AppStorage(NotificationSettings.classLead) private var classLead = NotificationSettings.defaultClassLead
     @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
     @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
+    @AppStorage(NotificationSettings.examEve) private var examEveOn = true
+    @AppStorage(NotificationSettings.examMorning) private var examMorningOn = true
+    @AppStorage(NotificationSettings.examLeadOn) private var examLeadOn = true
 
     var body: some View {
         Section {
@@ -23,9 +26,14 @@ struct NotificationSettingsSection: View {
 
             Toggle("考试提醒", isOn: $examEnabled)
             if examEnabled {
-                Picker("开考前", selection: $examLead) {
-                    ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
-                        Text("\(minutes) 分钟").tag(minutes)
+                Toggle("前一天 21:00", isOn: $examEveOn)
+                Toggle("当天 08:00", isOn: $examMorningOn)
+                Toggle("开考前", isOn: $examLeadOn)
+                if examLeadOn {
+                    Picker("提前", selection: $examLead) {
+                        ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
+                            Text("\(minutes) 分钟").tag(minutes)
+                        }
                     }
                 }
             }
@@ -44,6 +52,15 @@ struct NotificationSettingsSection: View {
             Task { await app.rescheduleNotifications() }
         }
         .onChange(of: examLead) { _, _ in
+            Task { await app.rescheduleNotifications() }
+        }
+        .onChange(of: examEveOn) { _, _ in
+            Task { await app.rescheduleNotifications() }
+        }
+        .onChange(of: examMorningOn) { _, _ in
+            Task { await app.rescheduleNotifications() }
+        }
+        .onChange(of: examLeadOn) { _, _ in
             Task { await app.rescheduleNotifications() }
         }
     }
@@ -172,5 +189,16 @@ struct ExamNotificationSetupSheet: View {
         _ = await NotificationService.requestAuthorization()
         await app.rescheduleNotifications()
         dismiss()
+    }
+}
+
+/// 通知设置页，总设置和课程表设置都能跳进来
+struct NotificationSettingsPage: View {
+    var body: some View {
+        Form {
+            NotificationSettingsSection()
+        }
+        .navigationTitle("通知设置")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -9,6 +9,9 @@ enum NotificationSettings {
     static let examLead = "notify.exam.lead"
     static let prompted = "notify.prompted"
     static let examPrompted = "notify.examPrompted"
+    static let examEve = "notify.exam.eve"
+    static let examMorning = "notify.exam.morning"
+    static let examLeadOn = "notify.exam.leadOn"
 
     static let defaultClassLead = 30
     static let defaultExamLead = 30
@@ -35,6 +38,19 @@ enum NotificationSettings {
     static var hasPrompted: Bool {
         get { UserDefaults.standard.bool(forKey: prompted) }
         set { UserDefaults.standard.set(newValue, forKey: prompted) }
+    }
+
+    /// 默认开着的子开关
+    static var examEveOn: Bool {
+        UserDefaults.standard.object(forKey: examEve) as? Bool ?? true
+    }
+
+    static var examMorningOn: Bool {
+        UserDefaults.standard.object(forKey: examMorning) as? Bool ?? true
+    }
+
+    static var examLeadEnabled: Bool {
+        UserDefaults.standard.object(forKey: examLeadOn) as? Bool ?? true
     }
 
     static var hasPromptedExam: Bool {
@@ -159,7 +175,8 @@ enum NotificationService {
                 .joined(separator: " · ")
 
             // 前一天 21:00
-            if let fire = calendar.date(bySettingHour: 21, minute: 0, second: 0, of: day),
+            if NotificationSettings.examEveOn,
+               let fire = calendar.date(bySettingHour: 21, minute: 0, second: 0, of: day),
                let eve = calendar.date(byAdding: .day, value: -1, to: fire),
                eve > now {
                 result.append((eve, request(
@@ -171,7 +188,8 @@ enum NotificationService {
             }
 
             // 当天 08:00
-            if let fire = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: day), fire > now {
+            if NotificationSettings.examMorningOn,
+               let fire = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: day), fire > now {
                 result.append((fire, request(
                     id: "exam-\(exam.id)-morning",
                     title: "今天考试：\(exam.course)",
@@ -181,7 +199,7 @@ enum NotificationService {
             }
 
             // 开考前 N 分钟
-            if let start = startOfExam(exam.time, on: day) {
+            if NotificationSettings.examLeadEnabled, let start = startOfExam(exam.time, on: day) {
                 let fire = start.addingTimeInterval(TimeInterval(-leadMinutes * 60))
                 if fire > now {
                     let formatter = DateFormatter()
