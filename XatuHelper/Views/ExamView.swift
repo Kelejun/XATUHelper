@@ -4,6 +4,7 @@ import UIKit
 /// 考试安排。数据来自教务「我的考试」，按日期分组排。
 struct ExamView: View {
     @EnvironmentObject var app: AppState
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     /// 空表示跟当前学期走；选了历史学期就钉住那一个
     @State private var semesterID = ""
@@ -151,32 +152,34 @@ struct ExamView: View {
     private var debugSection: some View {
         let raw = EamsService.lastExamRaw
         let shell = EamsService.lastExamShellRaw
-        Section {
-            Text("外壳 \(shell.count) 字符 · 考试表 \(raw.count) 字符")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        if showDiagnostics {
+            Section {
+                Text("外壳 \(shell.count) 字符 · 考试表 \(raw.count) 字符")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            if !raw.isEmpty {
-                Button {
-                    UIPasteboard.general.string = """
-                    ===== 外壳 stdExamTable.action =====
-                    \(shell)
+                if !raw.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = """
+                        ===== 外壳 stdExamTable.action =====
+                        \(shell)
 
-                    ===== 考试表 stdExamTable!examTable.action =====
-                    \(raw)
-                    """
-                } label: {
-                    Label("复制原始返回", systemImage: "doc.on.doc")
+                        ===== 考试表 stdExamTable!examTable.action =====
+                        \(raw)
+                        """
+                    } label: {
+                        Label("复制原始返回", systemImage: "doc.on.doc")
+                    }
+
+                    Text(summary(of: raw))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
-
-                Text(summary(of: raw))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            } header: {
+                Text("排查")
+            } footer: {
+                Text("复制出来发给我，就能对上真实的页面结构。")
             }
-        } header: {
-            Text("排查")
-        } footer: {
-            Text("复制出来发给我，就能对上真实的页面结构。")
         }
     }
 

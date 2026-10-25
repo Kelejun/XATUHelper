@@ -4,6 +4,7 @@ import UIKit
 /// 成绩页。左边课名，右边「成绩 / 绩点」，点开看分项。
 struct GradeView: View {
     @EnvironmentObject var app: AppState
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     /// 空表示跟当前学期走
     @State private var semesterID = ""
@@ -288,22 +289,24 @@ struct GradeView: View {
     @ViewBuilder
     private var debugSection: some View {
         let raw = EamsService.lastGradeRaw
-        Section {
-            Text("接口返回 \(raw.count) 个字符")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        if showDiagnostics {
+            Section {
+                Text("接口返回 \(raw.count) 个字符")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            if !raw.isEmpty {
-                Button {
-                    UIPasteboard.general.string = raw
-                } label: {
-                    Label("复制原始返回", systemImage: "doc.on.doc")
+                if !raw.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = raw
+                    } label: {
+                        Label("复制原始返回", systemImage: "doc.on.doc")
+                    }
                 }
+            } header: {
+                Text("排查")
+            } footer: {
+                Text("复制出来发给我，就能对上真实的页面结构。")
             }
-        } header: {
-            Text("排查")
-        } footer: {
-            Text("复制出来发给我，就能对上真实的页面结构。")
         }
     }
 

@@ -391,6 +391,7 @@ struct TimetableSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draftWeek = 1
     @AppStorage("hideWeekend") private var hideWeekend = false
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     private static let weekRange = 1...30
 
@@ -418,13 +419,16 @@ struct TimetableSettingsSheet: View {
                 }
 
                 Section {
-                    Button("复制诊断数据") {
-                        UIPasteboard.general.string = EamsService.diagnosticDump
+                    Toggle("显示诊断数据", isOn: $showDiagnostics)
+                    if showDiagnostics {
+                        Button("复制诊断数据") {
+                            UIPasteboard.general.string = EamsService.diagnosticDump
+                        }
                     }
                 } header: {
                     Text("诊断")
                 } footer: {
-                    Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
+                    Text("打开后，考试、成绩、电费这些页面才会出现各自的原始返回复制入口。")
                 }
             }
             .navigationTitle("课程表设置")

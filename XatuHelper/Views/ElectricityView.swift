@@ -214,6 +214,7 @@ struct ElectricityView: View {
 struct DormPickerView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     @State private var schools: [DormOption] = []
     @State private var buildings: [DormOption] = []
@@ -228,12 +229,14 @@ struct DormPickerView: View {
                 Section {
                     Text(error).font(.footnote).foregroundStyle(.red)
                     Button("重试") { Task { await loadSchools() } }
-                    Button("复制电费诊断数据") {
-                        UIPasteboard.general.string = [
-                            PayService.lastLogin ?? "(没有登录记录)",
-                            PayService.lastRaw ?? "(没有接口返回)",
-                            PayService.lastError ?? "(没有错误记录)"
-                        ].joined(separator: "\n\n")
+                    if showDiagnostics {
+                        Button("复制电费诊断数据") {
+                            UIPasteboard.general.string = [
+                                PayService.lastLogin ?? "(没有登录记录)",
+                                PayService.lastRaw ?? "(没有接口返回)",
+                                PayService.lastError ?? "(没有错误记录)"
+                            ].joined(separator: "\n\n")
+                        }
                     }
                 }
             }
