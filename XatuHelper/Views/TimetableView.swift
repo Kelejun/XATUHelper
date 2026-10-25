@@ -358,6 +358,24 @@ struct CourseDetailSheet: View {
 }
 
 struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            SettingsContent()
+                .navigationTitle("设置")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { dismiss() }
+                    }
+                }
+        }
+    }
+}
+
+/// 不带 NavigationStack 的总设置，课程表设置里也能跳进来
+struct SettingsContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
@@ -371,50 +389,39 @@ struct SettingsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("账号") {
-                    LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
-                    Button("退出登录", role: .destructive) {
-                        app.logout()
-                        dismiss()
-                    }
-                }
-
-                Section("通知") {
-                    NavigationLink("通知设置") {
-                        NotificationSettingsPage()
-                    }
-                }
-
-                Section {
-                    NavigationLink("查看更多课程表设置...") {
-                        TimetableSettingsContent()
-                    }
-                }
-
-                Section {
-                    Toggle("显示诊断数据", isOn: $showDiagnostics)
-                } footer: {
-                    Text("如果出现解析问题，可复制诊断信息给开发者处理")
-                }
-
-                Section {
-                    LabeledContent("版本", value: Self.versionText)
-                } footer: {
-                    if !BuildInfo.builtAt.isEmpty {
-                        Text("构建于 \(BuildInfo.builtAt)")
-                    }
+        Form {
+            Section("账号") {
+                LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
+                Button("退出登录", role: .destructive) {
+                    app.logout()
+                    dismiss()
                 }
             }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+
+            NotificationSettingsSection()
+
+            Section {
+                NavigationLink("查看更多课程表设置...") {
+                    TimetableSettingsContent()
+                }
+            }
+
+            Section {
+                Toggle("显示诊断数据", isOn: $showDiagnostics)
+            } footer: {
+                Text("如果出现解析问题，可复制诊断信息给开发者处理")
+            }
+
+            Section {
+                LabeledContent("版本", value: Self.versionText)
+            } footer: {
+                if !BuildInfo.builtAt.isEmpty {
+                    Text("构建于 \(BuildInfo.builtAt)")
                 }
             }
         }
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -466,7 +473,7 @@ struct TimetableSettingsContent: View {
 
             Section {
                 NavigationLink("查看课程表通知设置...") {
-                    NotificationSettingsPage()
+                    SettingsContent()
                 }
             }
 

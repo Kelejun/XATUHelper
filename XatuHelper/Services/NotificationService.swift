@@ -12,6 +12,8 @@ enum NotificationSettings {
     static let examEve = "notify.exam.eve"
     static let examMorning = "notify.exam.morning"
     static let examLeadOn = "notify.exam.leadOn"
+    static let examEveTime = "notify.exam.eve.minutes"
+    static let examMorningTime = "notify.exam.morning.minutes"
 
     static let defaultClassLead = 30
     static let defaultExamLead = 30
@@ -47,6 +49,14 @@ enum NotificationSettings {
 
     static var examMorningOn: Bool {
         UserDefaults.standard.object(forKey: examMorning) as? Bool ?? true
+    }
+
+    static var examEveMinutes: Int {
+        UserDefaults.standard.object(forKey: examEveTime) as? Int ?? 21 * 60
+    }
+
+    static var examMorningMinutes: Int {
+        UserDefaults.standard.object(forKey: examMorningTime) as? Int ?? 8 * 60
     }
 
     static var examLeadEnabled: Bool {
@@ -175,8 +185,10 @@ enum NotificationService {
                 .joined(separator: " · ")
 
             // 前一天 21:00
+            let eveMinutes = NotificationSettings.examEveMinutes
             if NotificationSettings.examEveOn,
-               let fire = calendar.date(bySettingHour: 21, minute: 0, second: 0, of: day),
+               let fire = calendar.date(bySettingHour: eveMinutes / 60, minute: eveMinutes % 60,
+                                        second: 0, of: day),
                let eve = calendar.date(byAdding: .day, value: -1, to: fire),
                eve > now {
                 result.append((eve, request(
@@ -188,8 +200,11 @@ enum NotificationService {
             }
 
             // 当天 08:00
+            let morningMinutes = NotificationSettings.examMorningMinutes
             if NotificationSettings.examMorningOn,
-               let fire = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: day), fire > now {
+               let fire = calendar.date(bySettingHour: morningMinutes / 60, minute: morningMinutes % 60,
+                                        second: 0, of: day),
+               fire > now {
                 result.append((fire, request(
                     id: "exam-\(exam.id)-morning",
                     title: "今天考试：\(exam.course)",

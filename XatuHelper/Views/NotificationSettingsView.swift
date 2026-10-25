@@ -1,7 +1,7 @@
 import SwiftUI
 import UserNotifications
 
-/// 提醒开关，课程表设置和首次引导共用
+/// 提醒开关：总设置里直接展开，首次引导也复用
 struct NotificationSettingsSection: View {
     @EnvironmentObject var app: AppState
 
@@ -12,67 +12,91 @@ struct NotificationSettingsSection: View {
     @AppStorage(NotificationSettings.examEve) private var examEveOn = true
     @AppStorage(NotificationSettings.examMorning) private var examMorningOn = true
     @AppStorage(NotificationSettings.examLeadOn) private var examLeadOn = true
+    @AppStorage(NotificationSettings.examEveTime) private var examEveMinutes = 21 * 60
+    @AppStorage(NotificationSettings.examMorningTime) private var examMorningMinutes = 8 * 60
 
     var body: some View {
-        Section {
-            Toggle("上课提醒", isOn: $classEnabled)
-            if classEnabled {
-                Picker("提前", selection: $classLead) {
-                    ForEach(NotificationSettings.classLeadOptions, id: \.self) { minutes in
-                        Text("\(minutes) 分钟").tag(minutes)
-                    }
-                }
-            }
-
-            Toggle("考试提醒", isOn: $examEnabled)
-            if examEnabled {
-                Toggle("前一天 21:00", isOn: $examEveOn)
-                Toggle("当天 08:00", isOn: $examMorningOn)
-                Toggle("开考前", isOn: $examLeadOn)
-                if examLeadOn {
-                    Picker("提前", selection: $examLead) {
-                        ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
+        Group {
+            Section {
+                Toggle("上课提醒", isOn: $classEnabled)
+                if classEnabled {
+                    Picker("提前", selection: $classLead) {
+                        ForEach(NotificationSettings.classLeadOptions, id: \.self) { minutes in
                             Text("\(minutes) 分钟").tag(minutes)
                         }
                     }
                 }
+            } header: {
+                Text("上课提醒")
+            } footer: {
+                Text("通知只管 7 天，期间进入 app 更新。")
             }
-        } header: {
-            Text("提醒")
-        } footer: {
-            Text("上课提醒只排未来 7 天，每次刷新课表会重新排。考试提醒会在前一天 21:00、当天 08:00 和开考前再各弹一次。")
+
+            Section {
+                Toggle("考试提醒", isOn: $examEnabled)
+                if examEnabled {
+                    Toggle("前一天提醒", isOn: $examEveOn)
+                    if examEveOn {
+                        DatePicker("时间", selection: timeBinding($examEveMinutes),
+                                   displayedComponents: .hourAndMinute)
+                    }
+
+                    Toggle("当天早间提醒", isOn: $examMorningOn)
+                    if examMorningOn {
+                        DatePicker("时间", selection: timeBinding($examMorningMinutes),
+                                   displayedComponents: .hourAndMinute)
+                    }
+
+                    Toggle("开考前提醒", isOn: $examLeadOn)
+                    if examLeadOn {
+                        Picker("提前", selection: $examLead) {
+                            ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
+                                Text("\(minutes) 分钟").tag(minutes)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("考试提醒")
+            } footer: {
+                Text("三种提醒各自独立，关掉哪个就不发哪一条。")
+            }
         }
         .onChange(of: classEnabled) { _, on in
-            Task { await update(classOn: on) }
+            Task {
+                if on { await requestAuthorizationIfNeeded() }
+                await app.rescheduleNotifications()
+            }
         }
         .onChange(of: examEnabled) { _, on in
-            Task { await update(examOn: on) }
+            Task {
+                if on { await requestAuthorizationIfNeeded() }
+                await app.rescheduleNotifications()
+            }
         }
-        .onChange(of: classLead) { _, _ in
-            Task { await app.rescheduleNotifications() }
-        }
-        .onChange(of: examLead) { _, _ in
-            Task { await app.rescheduleNotifications() }
-        }
-        .onChange(of: examEveOn) { _, _ in
-            Task { await app.rescheduleNotifications() }
-        }
-        .onChange(of: examMorningOn) { _, _ in
-            Task { await app.rescheduleNotifications() }
-        }
-        .onChange(of: examLeadOn) { _, _ in
-            Task { await app.rescheduleNotifications() }
-        }
+        .onChange(of: classLead) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examLead) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examEveOn) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examMorningOn) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examLeadOn) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examEveMinutes) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: examMorningMinutes) { _, _ in Task { await app.rescheduleNotifications() } }
     }
 
-    private func update(classOn: Bool) async {
-        if classOn { await requestAuthorizationIfNeeded() }
-        await app.rescheduleNotifications()
-    }
-
-    private func update(examOn: Bool) async {
-        if examOn { await requestAuthorizationIfNeeded() }
-        await app.rescheduleNotifications()
+    /// 把「从零点算起的分钟数」包成时间选择器要的 Date
+    private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding(
+            get: {
+                let calendar = Calendar.current
+                let base = calendar.startOfDay(for: Date())
+                return calendar.date(byAdding: .minute, value: minutes.wrappedValue, to: base) ?? base
+            },
+            set: { newValue in
+                let calendar = Calendar.current
+                minutes.wrappedValue = calendar.component(.hour, from: newValue) * 60
+                    + calendar.component(.minute, from: newValue)
+            }
+        )
     }
 }
 
@@ -83,8 +107,6 @@ struct NotificationSetupSheet: View {
 
     @AppStorage(NotificationSettings.classEnabled) private var classEnabled = false
     @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
-    @AppStorage(NotificationSettings.classLead) private var classLead = NotificationSettings.defaultClassLead
-    @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
 
     var body: some View {
         NavigationStack {
@@ -92,7 +114,7 @@ struct NotificationSetupSheet: View {
                 Section {
                     Text("要不要在每节课前提醒你？")
                         .font(.headline)
-                    Text("通知由系统到点弹出，App 不用开着。内容用的是本地缓存的课表，所以课表改了记得刷新一次。")
+                    Text("通知由系统到点弹出，App 不用开着。内容用的是本地缓存的课表，课表改了记得刷新一次。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -127,20 +149,12 @@ struct NotificationSetupSheet: View {
     }
 }
 
-/// 打开开关时顺手要一下系统权限
-func requestAuthorizationIfNeeded() async {
-    let status = await NotificationService.authorizationStatus()
-    guard status == .notDetermined else { return }
-    _ = await NotificationService.requestAuthorization()
-}
-
 /// 第一次进考试页时单独问一次考试提醒
 struct ExamNotificationSetupSheet: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
-    @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
 
     var body: some View {
         NavigationStack {
@@ -148,21 +162,12 @@ struct ExamNotificationSetupSheet: View {
                 Section {
                     Text("考试要不要提前提醒？")
                         .font(.headline)
-                    Text("会在前一天 21:00、当天 08:00 和开考前再各弹一次，内容用本地缓存的考试安排。")
+                    Text("前一天、当天早间和开考前各弹一次，内容用本地缓存的考试安排。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section {
-                    Toggle("考试提醒", isOn: $examEnabled)
-                    if examEnabled {
-                        Picker("开考前", selection: $examLead) {
-                            ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
-                                Text("\(minutes) 分钟").tag(minutes)
-                            }
-                        }
-                    }
-                }
+                NotificationSettingsSection()
 
                 Section {
                     Button("开启提醒") {
@@ -177,9 +182,6 @@ struct ExamNotificationSetupSheet: View {
             }
             .navigationTitle("考试提醒")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                if !NotificationSettings.examOn { examEnabled = true }
-            }
         }
     }
 
@@ -192,13 +194,9 @@ struct ExamNotificationSetupSheet: View {
     }
 }
 
-/// 通知设置页，总设置和课程表设置都能跳进来
-struct NotificationSettingsPage: View {
-    var body: some View {
-        Form {
-            NotificationSettingsSection()
-        }
-        .navigationTitle("通知设置")
-        .navigationBarTitleDisplayMode(.inline)
-    }
+/// 打开开关时顺手要一下系统权限
+func requestAuthorizationIfNeeded() async {
+    let status = await NotificationService.authorizationStatus()
+    guard status == .notDetermined else { return }
+    _ = await NotificationService.requestAuthorization()
 }
