@@ -10,6 +10,7 @@ struct InfoView: View {
         case grade
         case plan
         case bill
+        case netfee
         case checkin
         case leave
         case calendar
@@ -25,6 +26,7 @@ struct InfoView: View {
             case .grade: return "成绩"
             case .plan: return "培养计划"
             case .bill: return "电费"
+            case .netfee: return "校园网充值"
             case .checkin: return "签到"
             case .leave: return "请销假"
             case .calendar: return "校历"
@@ -40,6 +42,7 @@ struct InfoView: View {
             case .grade: return "每学期的课程成绩"
             case .plan: return "毕业要修多少学分"
             case .bill: return "宿舍还剩多少电费"
+            case .netfee: return "续费、查套餐"
             case .checkin: return "按时点一下，别断签"
             case .leave: return "请假、销假都在这里"
             case .calendar: return "什么时候放假"
@@ -55,6 +58,7 @@ struct InfoView: View {
             case .grade: return "chart.bar.fill"
             case .plan: return "list.bullet.rectangle.fill"
             case .bill: return "bolt.fill"
+            case .netfee: return "wifi"
             case .checkin: return "checkmark.seal.fill"
             case .leave: return "doc.text.fill"
             case .calendar: return "calendar"
@@ -70,6 +74,7 @@ struct InfoView: View {
             case .grade: return .blue
             case .plan: return .green
             case .bill: return .yellow
+            case .netfee: return .cyan
             case .checkin: return .pink
             case .leave: return .brown
             case .calendar: return .purple
@@ -101,7 +106,7 @@ struct InfoView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     group("教务", entries: [.exam, .grade, .calendar, .jwgl])
-                    group("生活", entries: [.bill, .checkin, .leave])
+                    group("生活", entries: [.bill, .netfee, .checkin, .leave])
                     group("杂项", entries: [.ehall, .settings])
                 }
                 .padding(.horizontal, 20)
@@ -157,6 +162,16 @@ struct InfoView: View {
                     } else if entry == .grade {
                         NavigationLink {
                             GradeView()
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
+                    } else if entry == .netfee {
+                        Button {
+                            webLink = WebLink(
+                                title: "校园网充值",
+                                urlString: "https://self.xatu.edu.cn/Self/service/packageDisclaimer"
+                            )
                         } label: {
                             card(entry)
                         }
