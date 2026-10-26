@@ -24,11 +24,30 @@ extension AppState {
             )
         }.sorted { $0.startMinutes < $1.startMinutes }
 
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let tomorrowWeekday = (calendar.component(.weekday, from: tomorrow) + 5) % 7 + 1
+        let tomorrowWeek = self.week(of: tomorrow)
+        let tomorrowCourses = occurrences(in: tomorrowWeek)
+            .courseBlocks()
+            .filter { $0.day == tomorrowWeekday && !$0.isPlaceholder && !$0.isRemote }
+            .map { block in
+                WidgetSnapshot.Course(
+                    id: block.id,
+                    name: block.name,
+                    room: block.shortRoom,
+                    startMinutes: PeriodSchedule.startMinutes(of: block),
+                    endMinutes: PeriodSchedule.endMinutes(of: block)
+                )
+            }
+            .sorted { $0.startMinutes < $1.startMinutes }
+
         let snapshot = WidgetSnapshot(
             generatedAt: Date(),
             week: week,
             weekday: weekdayIndex,
             courses: courses,
+            tomorrowCourses: tomorrowCourses,
+            tomorrowWeekday: tomorrowWeekday,
             balance: electricityBalance.flatMap(Double.init),
             balanceUpdatedAt: electricityCheckedAt,
             roomName: dorm?.displayName,

@@ -26,6 +26,8 @@ struct WidgetSnapshot: Codable {
     var week: Int
     var weekday: Int
     var courses: [Course]
+    var tomorrowCourses: [Course]? = nil
+    var tomorrowWeekday: Int? = nil
     var balance: Double?
     var balanceUpdatedAt: Date?
     var roomName: String?
@@ -46,10 +48,12 @@ struct WidgetSnapshot: Codable {
         loggedIn: false
     )
 
-    var weekdayLabel: String {
+    var weekdayLabel: String { Self.weekdayLabel(weekday) }
+
+    static func weekdayLabel(_ index: Int) -> String {
         let names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        guard weekday >= 1, weekday <= names.count else { return "" }
-        return names[weekday - 1]
+        guard index >= 1, index <= names.count else { return "" }
+        return names[index - 1]
     }
 
     static func clock(_ minutes: Int) -> String {

@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import UIKit
 import WidgetKit
@@ -61,16 +62,60 @@ enum PreviewData {
     }()
 }
 
+// MARK: - 课程小组件的配置
+
+struct CourseWidgetConfigIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "课程表"
+    static var description = IntentDescription("选择课程卡显示今天还是明天的课")
+
+    @Parameter(title: "显示明天的课", default: false)
+    var showTomorrow: Bool
+}
+
+struct CourseEntry: TimelineEntry {
+    let date: Date
+    let snapshot: WidgetSnapshot
+    let showTomorrow: Bool
+}
+
+struct CourseProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> CourseEntry {
+        CourseEntry(date: Date(), snapshot: PreviewData.snapshot, showTomorrow: false)
+    }
+
+    func snapshot(for configuration: CourseWidgetConfigIntent, in context: Context) async -> CourseEntry {
+        CourseEntry(
+            date: Date(),
+            snapshot: WidgetStore.read() ?? PreviewData.snapshot,
+            showTomorrow: configuration.showTomorrow
+        )
+    }
+
+    func timeline(for configuration: CourseWidgetConfigIntent, in context: Context) async -> Timeline<CourseEntry> {
+        let entry = CourseEntry(
+            date: Date(),
+            snapshot: WidgetStore.read() ?? PreviewData.snapshot,
+            showTomorrow: configuration.showTomorrow
+        )
+        let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
+        return Timeline(entries: [entry], policy: .after(refresh))
+    }
+}
+
 // MARK: - 小组件
 
 struct CourseWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "CourseWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
+        AppIntentConfiguration(
+            kind: "CourseWidget",
+            intent: CourseWidgetConfigIntent.self,
+            provider: CourseProvider()
+        ) { entry in
             CourseWidgetView(entry: entry)
                 .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("课程")
-        .description("今天要上的课。")
+        .description("今天或明天的课，可以在编辑小组件时切换。")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -103,7 +148,7 @@ struct BreakWidget: Widget {
 
 struct CourseWidgetView: View {
     @Environment(\.widgetFamily) private var family
-    let entry: TodayEntry
+    let entry: CourseEntry
 
     var body: some View {
         if !entry.snapshot.loggedIn {
@@ -115,18 +160,29 @@ struct CourseWidgetView: View {
         }
     }
 
+    /// 今天还是明天
+    private var courses: [WidgetSnapshot.Course] {
+        guard entry.showTomorrow else { return entry.snapshot.courses }
+        return entry.snapshot.tomorrowCourses ?? []
+    }
+
+    private var emptyText: String {
+        if entry.showTomorrow { return "明天没课" }
+        return entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了"
+    }
+
     private var smallLayout: some View {
         VStack(alignment: .leading, spacing: 5) {
             header
             Spacer(minLength: 0)
-            if remaining.isEmpty {
-                Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
+            if visibleCourses.isEmpty {
+                Text(emptyText)
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
             } else {
-                ForEach(remaining.prefix(3)) { course in
+                ForEach(visibleCourses.prefix(3)) { course in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(course.name)
                             .font(.system(size: 12, weight: .semibold))
@@ -147,14 +203,14 @@ struct CourseWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             header
             Spacer(minLength: 0)
-            if remaining.isEmpty {
-                Text(entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了")
+            if visibleCourses.isEmpty {
+                Text(emptyText)
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
             } else {
-                ForEach(remaining.prefix(4)) { course in
+                ForEach(visibleCourses.prefix(4)) { course in
                     HStack(spacing: 8) {
                         Text(WidgetSnapshot.clock(course.startMinutes))
                             .font(.system(size: 11, design: .rounded))
@@ -186,17 +242,22 @@ struct CourseWidgetView: View {
     }
 
     private var headerText: String {
-        entry.snapshot.week > 0
+        if entry.showTomorrow {
+            let label = WidgetSnapshot.weekdayLabel(entry.snapshot.tomorrowWeekday ?? 0)
+            return label.isEmpty ? "明天" : "\(label) · 明天"
+        }
+        return entry.snapshot.week > 0
             ? "\(entry.snapshot.weekdayLabel) · 第 \(entry.snapshot.week) 周"
             : entry.snapshot.weekdayLabel
     }
 
-    private var remaining: [WidgetSnapshot.Course] {
+    /// 今天只列还没上完的；明天全列
+    private var visibleCourses: [WidgetSnapshot.Course] {
+        guard !entry.showTomorrow else { return courses }
         let calendar = Calendar.current
         let minutes = calendar.component(.hour, from: entry.date) * 60
             + calendar.component(.minute, from: entry.date)
-        let list = entry.snapshot.courses.filter { $0.endMinutes >= minutes }
-        return list.isEmpty ? [] : list
+        return courses.filter { $0.endMinutes >= minutes }
     }
 }
 
