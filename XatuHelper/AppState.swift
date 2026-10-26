@@ -46,6 +46,9 @@ final class AppState: ObservableObject {
     /// 成绩页看的是当前学期还是所有学期
     @Published var gradeScope: GradeScope = .current
     @Published var gradesLoading = false
+    @Published var plan: PlanSnapshot = .empty
+    @Published var planLoading = false
+    @Published var planError: String?
     @Published var gradesError: String?
     /// 成绩页自带的汇总（门数/总学分/平均绩点），页面里有就用页面的
     @Published var gradeSummary: EamsService.GradeSummary?
@@ -475,6 +478,23 @@ final class AppState: ObservableObject {
         gradesLoading = false
     }
 
+    // MARK: - 培养计划
+
+    func refreshPlan() async {
+        guard !planLoading else { return }
+        planLoading = true
+        planError = nil
+        do {
+            plan = try await withReloginValue { try await self.eams.fetchPlan() }
+            if plan.rows.isEmpty {
+                planError = "没从页面里认出学分要求，可能是页面改了"
+            }
+        } catch {
+            planError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
+        planLoading = false
+    }
+
     // MARK: - 电费
 
     /// 启动时最多做两件事：电费过期先查电费；课表超过 168 小时，隔 60 秒再查
@@ -603,13 +623,6 @@ final class AppState: ObservableObject {
         Preferences.electricityBalance = nil
         Preferences.electricityCheckedAt = nil
         electricityError = nil
-    }
-
-    /// 充值页地址：缴费平台的充值路由按电费项目的 factoryCode 分，比如 /#/chargeElectricityE011
-    /// 充值页：直接打开缴费平台首页，让页面自己走登录和路由。
-    /// 试过直接开充值路由、注入 token、CAS 落地再跳，都会被页面的登录态校验拦成「系统维护」。
-    func chargePage() async -> (url: String, hash: String?)? {
-        (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
     }
 
     func loadSchools() async throws -> [DormOption] {

@@ -105,7 +105,7 @@ struct InfoView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    group("教务", entries: [.exam, .grade, .calendar, .jwgl])
+                    group("教务", entries: [.exam, .grade, .plan, .calendar, .jwgl])
                     group("生活", entries: [.bill, .netfee, .checkin, .leave])
                     group("杂项", entries: [.ehall, .settings])
                 }
@@ -162,6 +162,13 @@ struct InfoView: View {
                     } else if entry == .grade {
                         NavigationLink {
                             GradeView()
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
+                    } else if entry == .plan {
+                        NavigationLink {
+                            PlanView()
                         } label: {
                             card(entry)
                         }

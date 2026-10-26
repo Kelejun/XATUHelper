@@ -35,6 +35,8 @@ struct EamsService {
     static var lastGradeRaw = ""
     /// 成绩页外壳（带学期控件那一层）
     static var lastGradeShellRaw = ""
+    /// 最近一次培养计划（完成情况）页的原始 HTML
+    static var lastPlanRaw = ""
 
     /// 成绩页底部/顶部自带的汇总（门数、总学分、平均绩点），有就直接用页面上的，
     /// 没有才退回自己算。
@@ -333,6 +335,60 @@ struct EamsService {
             throw AppError.sessionExpired
         }
         return html
+    }
+
+    /// 拉培养计划完成情况：myPlanCompl.action 这张表就是「模块 / 要求学分 / 已修学分」。
+    func fetchPlan() async throws -> PlanSnapshot {
+        var last: PlanSnapshot = .empty
+        for path in ["/eams/myPlanCompl.action", "/eams/myPlan.action"] {
+            let html = try await examText(path: path, query: [], label: "培养计划")
+            EamsService.lastPlanRaw = html
+            let parsed = EamsService.parsePlan(html)
+            if !parsed.rows.isEmpty { return parsed }
+            last = parsed
+        }
+        return last
+    }
+
+    /// 培养计划表格解析：一行一个模块，取「名称 + 两个学分数字」。
+    /// 树维不同版本列顺序会变，所以不认列名，只在整行里抓数字：要求学分通常不小于已修，用这个兜底排序。
+    static func parsePlan(_ html: String) -> PlanSnapshot {
+        let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#)
+        var result: [PlanRow] = []
+        var used = Set<String>()
+
+        for match in rows {
+            let rowHTML = match.first ?? ""
+            let cells = rowHTML.regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard cells.count >= 3 else { continue }
+            if cells.contains(where: { $0.contains("要求") && $0.contains("学分") && $0.count < 12 }) { continue }
+
+            guard let name = cells.first(where: { $0.range(of: #"^[0-9.\s]+$"#, options: .regularExpression) == nil }),
+                  name.count >= 2, name.count <= 40 else { continue }
+
+            let numbers = cells.compactMap { cell -> Double? in
+                guard cell.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
+                return Double(cell)
+            }
+            guard numbers.count >= 2 else { continue }
+
+            // 一般列是「要求学分 | 已修学分」或反过来；取较大者为要求、较小者为已修
+            let required = numbers.max() ?? 0
+            let earned = numbers.min() ?? 0
+            guard required > 0, earned <= required else { continue }
+
+            let key = "\(name)|\(required)|\(earned)"
+            guard !used.contains(key) else { continue }
+            used.insert(key)
+            result.append(PlanRow(id: key, module: name, required: required, earned: earned))
+        }
+
+        let totalRequired = result.reduce(0) { $0 + $1.required }
+        let totalEarned = result.reduce(0) { $0 + $1.earned }
+        return PlanSnapshot(rows: result, totalRequired: totalRequired, totalEarned: totalEarned)
     }
 
     /// 外壳页里的考试批次下拉
