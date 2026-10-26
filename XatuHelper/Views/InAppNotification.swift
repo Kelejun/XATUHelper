@@ -17,7 +17,7 @@ struct InAppNotificationBanner: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             onTap()
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(
                         LinearGradient(
@@ -35,16 +35,8 @@ struct InAppNotificationBanner: View {
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("XATU Helper")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer(minLength: 0)
-                        Text("现在")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                     Text(title)
-                        .font(.subheadline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(message)
@@ -119,7 +111,7 @@ struct InAppNotificationHost: View {
                 guard !appeared else { return }
                 appeared = true
                 try? await Task.sleep(nanoseconds: 400 * 1_000_000)
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                withAnimation(Self.bannerAnimation) {
                     isShowing = true
                 }
                 // 6 秒后自动收回去，给用户留够点击时间
@@ -129,7 +121,8 @@ struct InAppNotificationHost: View {
     }
 
     private func dismiss() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) {
+        // 和出现用同一条曲线，退回去才和进来对称
+        withAnimation(Self.bannerAnimation) {
             isShowing = false
         }
     }
