@@ -340,6 +340,13 @@ final class AppState: ObservableObject {
         planStore.clear()
         Task { await NotificationService.clearAll() }
         exams = []
+        examsFetchedAt = nil
+        grades = []
+        gradesFetchedAt = nil
+        plan = PlanSnapshot.empty
+        planFetchedAt = nil
+        planCatalog = PlanCatalog(updatedAt: Date(), courses: [])
+        PlanCatalogStore.clear()
         occurrences = []
         studentID = ""
         semesters = []
