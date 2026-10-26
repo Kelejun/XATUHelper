@@ -244,7 +244,7 @@ ScrollView {
                 showsContent = true
                 return
             }
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(250))
             withAnimation(.smooth(duration: 0.8)) { showsContent = true }
             app.hasPlayedIntro = true
         }
