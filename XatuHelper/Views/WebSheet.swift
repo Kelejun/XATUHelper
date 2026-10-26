@@ -5,6 +5,8 @@ import WebKit
 struct WebSheet: View {
     let title: String
     let urlString: String
+    /// 网页登录/换票完成后要跳的路由，比如 jfpay 的 "#/chargeElectricityE011"
+    var followUpHash: String? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
@@ -27,7 +29,7 @@ struct WebSheet: View {
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText)
+                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash)
                         .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
@@ -67,6 +69,7 @@ private struct WebPage: UIViewRepresentable {
     let url: URL
     @Binding var isLoading: Bool
     @Binding var errorText: String?
+    let followUpHash: String?
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -107,7 +110,7 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading, errorText: $errorText)
+        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash)
     }
 
     /// 把 navigator.geolocation 接到 window.webkit.messageHandlers.location
@@ -163,12 +166,15 @@ private struct WebPage: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
         @Binding private var errorText: String?
+        private let followUpHash: String?
+        private var appliedFollowUp = false
         weak var webView: WKWebView?
         private let location = LocationBridge()
 
-        init(isLoading: Binding<Bool>, errorText: Binding<String?>) {
+        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpHash: String?) {
             _isLoading = isLoading
             _errorText = errorText
+            self.followUpHash = followUpHash
         }
 
         func userContentController(_ userContentController: WKUserContentController,
@@ -217,6 +223,7 @@ private struct WebPage: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading = false
+            applyFollowUpIfNeeded(webView)
             // 网页里如果重新登过，把新 cookie 回写给 app，别让两边各登一次
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
                 for cookie in cookies where cookie.domain.contains("xatu.edu.cn") {
@@ -235,6 +242,17 @@ private struct WebPage: UIViewRepresentable {
                      withError error: Error) {
             isLoading = false
             record(error)
+        }
+
+        /// 换票落地后，把 SPA 带到指定路由
+        private func applyFollowUpIfNeeded(_ webView: WKWebView) {
+            guard !appliedFollowUp,
+                  let hash = followUpHash,
+                  let host = webView.url?.host,
+                  host.contains("jfpay.xatu.edu.cn") else { return }
+            appliedFollowUp = true
+            let js = "location.href = 'https://jfpay.xatu.edu.cn/\(hash)'"
+            webView.evaluateJavaScript(js)
         }
 
         /// 只有真的打不开才提示，用户自己取消（-999）之类的忽略

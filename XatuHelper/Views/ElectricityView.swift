@@ -7,6 +7,7 @@ struct ElectricityView: View {
     @State private var editing = false
     @State private var showingCharge = false
     @State private var chargeURL: String?
+    @State private var chargeHash: String?
     @State private var preparingCharge = false
 
     var body: some View {
@@ -58,7 +59,7 @@ struct ElectricityView: View {
         }
         .sheet(isPresented: $showingCharge) {
             if let chargeURL {
-                WebSheet(title: "充值", urlString: chargeURL)
+                WebSheet(title: "充值", urlString: chargeURL, followUpHash: chargeHash)
             }
         }
         .task {
@@ -71,8 +72,9 @@ struct ElectricityView: View {
         Button {
             Task {
                 preparingCharge = true
-                if let url = await app.chargePageURL() {
-                    chargeURL = url.absoluteString
+                if let page = await app.chargePage() {
+                    chargeURL = page.url
+                    chargeHash = page.hash
                     showingCharge = true
                 } else {
                     app.electricityError = "没拿到充值页地址，先换一个宿舍再试"

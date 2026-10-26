@@ -606,13 +606,17 @@ final class AppState: ObservableObject {
     }
 
     /// 充值页地址：缴费平台的充值路由按电费项目的 factoryCode 分，比如 /#/chargeElectricityE011
-    func chargePageURL() async -> URL? {
+    /// 充值页：先用 jzcas 换票地址进 SFTP，票换完再跳到充值路由。
+    /// 直接开 #/chargeElectricity 的话 SPA 没有登录态，接口会回「系统维护」。
+    func chargePage() async -> (url: String, hash: String)? {
         var project = electricProject
         if project == nil {
             project = try? await withPay { $0 }
         }
         guard let code = project?.factoryCode, !code.isEmpty else { return nil }
-        return URL(string: "https://jfpay.xatu.edu.cn/#/chargeElectricity\(code)")
+        let sid = studentID.isEmpty ? "" : studentID
+        let exchange = "https://jfpay.xatu.edu.cn/api/pay/web/jzcas/casLogin/\(sid)/1"
+        return (exchange, "#/chargeElectricity\(code)")
     }
 
     func loadSchools() async throws -> [DormOption] {
