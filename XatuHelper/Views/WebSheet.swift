@@ -257,15 +257,17 @@ private struct WebPage: UIViewRepresentable {
             record(error)
         }
 
-        /// 换票落地后，把 SPA 带到指定路由
+        /// 换票落地后，把 SPA 带到指定路由。等一会儿是因为落地页要先在 mounted 里写 cookie。
         private func applyFollowUpIfNeeded(_ webView: WKWebView) {
             guard !appliedFollowUp,
                   let hash = followUpHash,
                   let host = webView.url?.host,
                   host.contains("jfpay.xatu.edu.cn") else { return }
             appliedFollowUp = true
-            let js = "location.href = 'https://jfpay.xatu.edu.cn/\(hash)'"
-            webView.evaluateJavaScript(js)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak webView] in
+                let js = "location.href = 'https://jfpay.xatu.edu.cn/\(hash)'"
+                webView?.evaluateJavaScript(js)
+            }
         }
 
         /// 只有真的打不开才提示，用户自己取消（-999）之类的忽略

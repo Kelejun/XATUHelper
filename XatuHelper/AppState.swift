@@ -607,20 +607,17 @@ final class AppState: ObservableObject {
 
     /// 充值页地址：缴费平台的充值路由按电费项目的 factoryCode 分，比如 /#/chargeElectricityE011
     /// 充值页。
-    /// SPA 的 token 是页面里用 js-cookie 读 `datalook_reimbursement_token`，而且只认 path=/。
-    /// 我们接口拿到的 cookie 可能挂在 /api 上，页面看不见，就会一直回「系统维护」。
-    /// 所以进页面前用 document.cookie 再写一份到根路径。
-    func chargePage() async -> (url: String, cookies: [String: String])? {
+    /// SPA 的 token 是落地页 middle_page 用 JS 写进根路径 cookie 的；
+    /// 直接开 #/chargeElectricity 或手工塞 cookie 都不算数，接口会回「系统维护」。
+    /// 所以先把 WebView 领进真正的 CAS 登录链（我们已有票据，不会要密码），
+    /// 落地后由页面自己把 token 写好，再跳到充值路由。
+    func chargePage() async -> (url: String, hash: String)? {
         var project = electricProject
         if project == nil {
             project = try? await withPay { $0 }
         }
         guard let code = project?.factoryCode, !code.isEmpty else { return nil }
-        var cookies: [String: String] = ["datalook_login_status": "true"]
-        if let token = Self.xatuCookie(named: "datalook_reimbursement_token") {
-            cookies["datalook_reimbursement_token"] = token
-        }
-        return ("https://jfpay.xatu.edu.cn/#/chargeElectricity\(code)", cookies)
+        return ("https://jfpay.xatu.edu.cn/casLogin/", "#/chargeElectricity\(code)")
     }
 
     private static func xatuCookie(named name: String) -> String? {
