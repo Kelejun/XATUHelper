@@ -32,5 +32,11 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
+        .overlay(alignment: .top) {
+            InAppNotificationHost(
+                title: "通知权限还没打开",
+                message: "点一下去设置里打开通知，上课和考试前才会提醒你。"
+            )
+        }
     }
 }
