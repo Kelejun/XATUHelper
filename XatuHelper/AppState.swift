@@ -48,6 +48,7 @@ final class AppState: ObservableObject {
     @Published var gradesLoading = false
     @Published var plan: PlanSnapshot = .empty
     @Published var planNeedsLogin = false
+    @Published var planCatalog: PlanCatalog = PlanCatalogStore.load()
     @Published var planLoading = false
     @Published var planError: String?
     @Published var gradesError: String?
@@ -489,6 +490,7 @@ final class AppState: ObservableObject {
         do {
             // 不在这里自动重登：培养计划页一进来就拉，自动重登会把 CAS 登录次数打满
             plan = try await eams.fetchPlan()
+            await refreshPlanCatalogIfNeeded()
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
             }
@@ -501,12 +503,34 @@ final class AppState: ObservableObject {
         planLoading = false
     }
 
+    /// 教学计划里的课程信息（开课学期 / 学时 / 是否必修）取到一次就存本地
+    func refreshPlanCatalogIfNeeded(force: Bool = false) async {
+        guard force || planCatalog.courses.isEmpty else { return }
+        do {
+            let courses = try await eams.fetchPlanCatalog()
+            guard !courses.isEmpty else { return }
+            planCatalog = PlanCatalog(updatedAt: Date(), courses: courses)
+            PlanCatalogStore.save(planCatalog)
+        } catch {
+            // 拿不到就安静留着旧的，计划完成情况照常显示
+            EamsService.lastError = "教学计划没取到：\(error.localizedDescription)"
+        }
+    }
+
+    func courseInfo(for course: PlanCourse) -> PlanCourseInfo? {
+        planCatalog.courses.first { info in
+            if !course.code.isEmpty, info.code == course.code { return true }
+            return info.name == course.name
+        }
+    }
+
     /// 用户手动点「重新登录」，只走一次，不受自动重登的冷却限制
     func reloginNow() async {
         do {
             try await rawRelogin()
             recordLoginTime()
             planNeedsLogin = false
+            await refreshPlanCatalogIfNeeded(force: true)
             await refreshPlan()
         } catch {
             planError = (error as? AppError)?.errorDescription ?? error.localizedDescription

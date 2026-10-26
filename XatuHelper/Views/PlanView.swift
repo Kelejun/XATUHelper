@@ -47,7 +47,10 @@ struct PlanView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await app.refreshPlan() }
+                    Task {
+                        await app.refreshPlanCatalogIfNeeded(force: true)
+                        await app.refreshPlan()
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -159,6 +162,11 @@ struct PlanView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                if let info = app.courseInfo(for: course) {
+                    Text(detailText(info))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
             Text("\(number(course.earned)) / \(number(course.required))")
@@ -190,6 +198,14 @@ struct PlanView: View {
             walk(section, path: [])
         }
         return result
+    }
+
+    private func detailText(_ info: PlanCourseInfo) -> String {
+        var parts: [String] = []
+        if !info.term.isEmpty { parts.append(info.term.contains("学期") || info.term.contains("第") ? info.term : "\(info.term) 学期") }
+        if !info.hours.isEmpty { parts.append("\(info.hours) 学时") }
+        if !info.nature.isEmpty { parts.append(info.nature) }
+        return parts.joined(separator: " · ")
     }
 
     private func number(_ value: Double) -> String {

@@ -37,6 +37,7 @@ struct EamsService {
     static var lastGradeShellRaw = ""
     /// 最近一次培养计划（完成情况）页的原始 HTML
     static var lastPlanRaw = ""
+    static var lastPlanCatalogRaw = ""
 
     /// 成绩页底部/顶部自带的汇总（门数、总学分、平均绩点），有就直接用页面上的，
     /// 没有才退回自己算。
@@ -348,6 +349,70 @@ struct EamsService {
             last = parsed
         }
         return last
+    }
+
+    /// 拉「教学计划」：每门课的开课学期、学时、课程性质都在这张表里。
+    /// 表头按关键词认列，认不出来就返回空，不影响计划完成情况页。
+    func fetchPlanCatalog() async throws -> [PlanCourseInfo] {
+        let html = try await examText(path: "/eams/myPlan.action", query: [], label: "教学计划")
+        EamsService.lastPlanCatalogRaw = html
+        return EamsService.parsePlanCatalog(html)
+    }
+
+    /// 教学计划表格解析：先找表头行，再按关键词认列。
+    static func parsePlanCatalog(_ html: String) -> [PlanCourseInfo] {
+        let rows = html.regexGroups(#"(<tr[^>]*>)([\s\S]*?)</tr>"#)
+        var header: [String] = []
+        var index: [String: Int] = [:]
+        var result: [PlanCourseInfo] = []
+
+        func column(_ keys: [String]) -> Int? {
+            for key in keys {
+                if let found = header.firstIndex(where: { $0.contains(key) }) { return found }
+            }
+            return nil
+        }
+
+        for rowMatch in rows {
+            guard rowMatch.count >= 2 else { continue }
+            let cells = rowMatch[1].regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags.replacingOccurrences(of: "&nbsp;", with: " ").trimmingCharacters(in: .whitespacesAndNewlines) }
+
+            if header.isEmpty {
+                if cells.contains(where: { $0.contains("课程名称") }) {
+                    header = cells
+                }
+                continue
+            }
+
+            guard let nameIndex = index["name"] ?? column(["课程名称"]) else { continue }
+            if index.isEmpty {
+                index["code"] = column(["课程代码", "课程序号", "课程编号"]) ?? -1
+                index["name"] = nameIndex
+                index["nature"] = column(["课程性质", "修读性质", "课程类别", "课程属性"]) ?? -1
+                index["credit"] = column(["学分"]) ?? -1
+                index["hours"] = column(["学时"]) ?? -1
+                index["term"] = column(["开课学期", "学期"]) ?? -1
+            }
+
+            func value(_ key: String) -> String {
+                guard let i = index[key], i >= 0, i < cells.count else { return "" }
+                return cells[i]
+            }
+
+            let name = value("name")
+            guard !name.isEmpty, name != "课程名称" else { continue }
+            result.append(PlanCourseInfo(
+                code: value("code"),
+                name: name,
+                nature: value("nature"),
+                credit: value("credit"),
+                hours: value("hours"),
+                term: value("term")
+            ))
+        }
+        return result
     }
 
     /// 培养计划表格解析。
