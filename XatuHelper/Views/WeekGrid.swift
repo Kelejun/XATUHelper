@@ -169,63 +169,37 @@ struct WeekGrid: View {
         return Button {
             onSelect(block)
         } label: {
-            HStack(alignment: .top, spacing: 0) {
-                Capsule()
+            HStack(alignment: .top, spacing: 3) {
+                RoundedRectangle(cornerRadius: 1.5)
                     .fill(tint)
-                    .frame(width: 3.5)
-                    .padding(.vertical, 5)
+                    .frame(width: 2.5)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(block.name)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 10.5, weight: .semibold))
                         .lineLimit(block.span >= 2 ? 4 : 2)
-                        .minimumScaleFactor(0.75)
-
-                    if block.span >= 3, !block.room.isEmpty {
-                        Text(block.shortRoom)
-                            .font(.system(size: 9))
-                            .opacity(0.75)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
+                        .minimumScaleFactor(0.8)
 
                     Spacer(minLength: 0)
 
-                    if block.span >= 2 {
-                        Text(startText(block))
-                            .font(.system(size: 9, weight: .medium))
-                            .opacity(0.7)
+                    if block.span >= 2, !block.room.isEmpty {
+                        Text(block.shortRoom)
+                            .font(.system(size: 9))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, 4)
-                .padding(.vertical, 5)
+                .padding(.vertical, 3)
 
                 Spacer(minLength: 0)
             }
+            .padding(.leading, 3)
+            .padding(.trailing, 4)
             .foregroundStyle(tint)
             .frame(width: dayWidth - 3, height: height, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [tint.opacity(0.22), tint.opacity(0.12)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(tint.opacity(0.25), lineWidth: 0.5)
-            )
+            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-    }
-
-    private func startText(_ block: CourseBlock) -> String {
-        let minutes = PeriodSchedule.startMinutes(of: block)
-        return String(format: "%d:%02d", minutes / 60, minutes % 60)
     }
 
     private func color(for block: CourseBlock) -> Color {
