@@ -194,7 +194,7 @@ struct CourseWidgetView: View {
                     .multilineTextAlignment(.center)
             } else {
                 ForEach(visibleCourses.prefix(3)) { course in
-                    courseRow(course, showsRoom: false)
+                    courseRow(course, showsRoom: false, wrapsName: true)
                 }
             }
             Spacer(minLength: 0)
@@ -214,7 +214,7 @@ struct CourseWidgetView: View {
                     .multilineTextAlignment(.center)
             } else {
                 ForEach(visibleCourses.prefix(4)) { course in
-                    courseRow(course, showsRoom: true)
+                    courseRow(course, showsRoom: true, wrapsName: false)
                 }
             }
             Spacer(minLength: 0)
@@ -223,7 +223,7 @@ struct CourseWidgetView: View {
     }
 
     /// 一节课 = 一根色条 + 淡渐变底，和 app 里首页的课程行一个路数
-    private func courseRow(_ course: WidgetSnapshot.Course, showsRoom: Bool) -> some View {
+    private func courseRow(_ course: WidgetSnapshot.Course, showsRoom: Bool, wrapsName: Bool) -> some View {
         let tint = Self.color(for: course)
         return HStack(spacing: 6) {
             Capsule()
@@ -235,7 +235,9 @@ struct CourseWidgetView: View {
                 Text(course.name)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
-                    .lineLimit(1)
+                    .lineLimit(wrapsName ? 2 : 1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .minimumScaleFactor(0.8)
 
                 if showsRoom, !course.room.isEmpty {
