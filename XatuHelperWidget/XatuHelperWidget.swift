@@ -68,7 +68,7 @@ struct CourseWidgetConfigIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "课程表"
     static var description = IntentDescription("选择课程卡显示今天还是明天的课")
 
-    @Parameter(title: "显示明天的课", default: false)
+    @Parameter(title: "上完课后显示明天的课", default: false)
     var showTomorrow: Bool
 }
 
@@ -115,7 +115,7 @@ struct CourseWidget: Widget {
                 .containerBackground(for: .widget) { WidgetBackdrop() }
         }
         .configurationDisplayName("课程")
-        .description("今天或明天的课，可以在编辑小组件时切换。")
+        .description("今天还没上完的课；今天的课上完后接着显示明天的。")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -160,14 +160,25 @@ struct CourseWidgetView: View {
         }
     }
 
-    /// 今天还是明天
-    private var courses: [WidgetSnapshot.Course] {
-        guard entry.showTomorrow else { return entry.snapshot.courses }
-        return entry.snapshot.tomorrowCourses ?? []
+    /// 今天还没上完的课
+    private var todayRemaining: [WidgetSnapshot.Course] {
+        let calendar = Calendar.current
+        let minutes = calendar.component(.hour, from: entry.date) * 60
+            + calendar.component(.minute, from: entry.date)
+        return entry.snapshot.courses.filter { $0.endMinutes >= minutes }
+    }
+
+    /// 开关打开 && 今天已经没课了，才切到明天
+    private var showingTomorrow: Bool {
+        entry.showTomorrow && todayRemaining.isEmpty
+    }
+
+    private var visibleCourses: [WidgetSnapshot.Course] {
+        showingTomorrow ? (entry.snapshot.tomorrowCourses ?? []) : todayRemaining
     }
 
     private var emptyText: String {
-        if entry.showTomorrow { return "明天没课" }
+        if showingTomorrow { return "明天没课" }
         return entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了"
     }
 
@@ -242,22 +253,13 @@ struct CourseWidgetView: View {
     }
 
     private var headerText: String {
-        if entry.showTomorrow {
+        if showingTomorrow {
             let label = WidgetSnapshot.weekdayLabel(entry.snapshot.tomorrowWeekday ?? 0)
             return label.isEmpty ? "明天" : "\(label) · 明天"
         }
         return entry.snapshot.week > 0
             ? "\(entry.snapshot.weekdayLabel) · 第 \(entry.snapshot.week) 周"
             : entry.snapshot.weekdayLabel
-    }
-
-    /// 今天只列还没上完的；明天全列
-    private var visibleCourses: [WidgetSnapshot.Course] {
-        guard !entry.showTomorrow else { return courses }
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
-        return courses.filter { $0.endMinutes >= minutes }
     }
 }
 
