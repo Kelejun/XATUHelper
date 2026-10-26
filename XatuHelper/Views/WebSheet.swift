@@ -8,12 +8,27 @@ struct WebSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
+    @State private var errorText: String?
+    @State private var reloadToken = 0
 
     var body: some View {
         NavigationStack {
             Group {
-                if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading)
+                if let message = errorText {
+                    ContentUnavailableView {
+                        Label("打不开这个页面", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button("重试") {
+                            errorText = nil
+                            isLoading = true
+                            reloadToken += 1
+                        }
+                    }
+                } else if let url = Self.makeURL(urlString) {
+                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText)
+                        .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
                 }
@@ -51,6 +66,7 @@ struct WebSheet: View {
 private struct WebPage: UIViewRepresentable {
     let url: URL
     @Binding var isLoading: Bool
+    @Binding var errorText: String?
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -91,7 +107,7 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading)
+        Coordinator(isLoading: $isLoading, errorText: $errorText)
     }
 
     /// 把 navigator.geolocation 接到 window.webkit.messageHandlers.location
@@ -146,11 +162,13 @@ private struct WebPage: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
+        @Binding private var errorText: String?
         weak var webView: WKWebView?
         private let location = LocationBridge()
 
-        init(isLoading: Binding<Bool>) {
+        init(isLoading: Binding<Bool>, errorText: Binding<String?>) {
             _isLoading = isLoading
+            _errorText = errorText
         }
 
         func userContentController(_ userContentController: WKUserContentController,
@@ -209,12 +227,28 @@ private struct WebPage: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             isLoading = false
+            record(error)
         }
 
         func webView(_ webView: WKWebView,
                      didFailProvisionalNavigation navigation: WKNavigation!,
                      withError error: Error) {
             isLoading = false
+            record(error)
+        }
+
+        /// 只有真的打不开才提示，用户自己取消（-999）之类的忽略
+        private func record(_ error: Error) {
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
+            let detail = ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
+            if ns.code == NSURLErrorNotConnectedToInternet || ns.code == NSURLErrorCannotFindHost {
+                errorText = "这个页面要连校内网才能打开，先连上校园网再试。"
+            } else if let detail {
+                errorText = "\(ns.localizedDescription)\n\(detail)"
+            } else {
+                errorText = ns.localizedDescription
+            }
         }
     }
 }
