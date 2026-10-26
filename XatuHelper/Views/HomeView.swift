@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var now = Date()
     @State private var calendarInfo: CalendarService.Info?
     @State private var destination: HomeDestination?
+    @State private var showsGreeting = false
     @State private var showsContent = false
 
     private enum HomeDestination: Hashable {
@@ -191,9 +192,12 @@ ScrollView {
                     Color.clear
                         .frame(height: 150)
 
-                    Text(greeting)
-                        .font(.largeTitle.weight(.bold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsGreeting {
+                        Text(greeting)
+                            .font(.largeTitle.weight(.bold))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(.offset(y: 40).combined(with: .opacity))
+                    }
 
                     if showsContent {
                         VStack(alignment: .leading, spacing: 14) {
@@ -241,12 +245,14 @@ ScrollView {
         .onAppear { calendarInfo = CalendarCache.load() }
         .task {
             guard !app.hasPlayedIntro else {
+                showsGreeting = true
                 showsContent = true
                 return
             }
-            try? await Task.sleep(for: .milliseconds(250))
-            withAnimation(.smooth(duration: 0.8)) { showsContent = true }
             app.hasPlayedIntro = true
+            withAnimation(.smooth(duration: 0.8)) { showsGreeting = true }
+            try? await Task.sleep(for: .milliseconds(300))
+            withAnimation(.smooth(duration: 0.8)) { showsContent = true }
         }
     }
 
