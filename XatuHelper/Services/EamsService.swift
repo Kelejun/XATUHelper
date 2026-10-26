@@ -92,6 +92,12 @@ struct EamsService {
 
         ===== 成绩表 person!search.action =====
         \(lastGradeRaw.isEmpty ? "(空)" : String(lastGradeRaw.prefix(20000)))
+
+        ===== 培养计划（完成情况）myPlanCompl.action =====
+        \(lastPlanRaw.isEmpty ? "(空)" : String(lastPlanRaw.prefix(20000)))
+
+        ===== 教学计划 myPlan.action =====
+        \(lastPlanCatalogRaw.isEmpty ? "(空)" : String(lastPlanCatalogRaw.prefix(20000)))
         """
     }
 
@@ -356,7 +362,15 @@ struct EamsService {
     func fetchPlanCatalog() async throws -> [PlanCourseInfo] {
         let html = try await examText(path: "/eams/myPlan.action", query: [], label: "教学计划")
         EamsService.lastPlanCatalogRaw = html
-        return EamsService.parsePlanCatalog(html)
+        let courses = EamsService.parsePlanCatalog(html)
+        if courses.isEmpty {
+            let hasTable = html.contains("planInfoTable")
+            let rowCount = html.components(separatedBy: "<tr").count - 1
+            EamsService.lastError = "教学计划解析出 0 门课（页面 \(html.count) 字符，planInfoTable: \(hasTable)，tr: \(rowCount)）"
+        } else {
+            EamsService.lastError = "教学计划解析到 \(courses.count) 门课"
+        }
+        return courses
     }
 
     /// 教学计划表格解析（myPlan.action 的 planInfoTable）。
