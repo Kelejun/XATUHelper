@@ -39,16 +39,19 @@ final class AppState: ObservableObject {
     @Published var electricityHistory: [ElectricityRecord] = []
 
     @Published var exams: [ExamRecord] = []
+    @Published var examsFetchedAt: Date?
     @Published var examsLoading = false
     @Published var examsError: String?
 
     @Published var grades: [GradeRecord] = []
     /// 成绩页看的是当前学期还是所有学期
     @Published var gradeScope: GradeScope = .current
+    @Published var gradesFetchedAt: Date?
     @Published var gradesLoading = false
     @Published var plan: PlanSnapshot = .empty
     @Published var planNeedsLogin = false
     @Published var planCatalog: PlanCatalog = PlanCatalogStore.load()
+    @Published var planFetchedAt: Date?
     @Published var planLoading = false
     @Published var planError: String?
     @Published var gradesError: String?
@@ -84,6 +87,8 @@ final class AppState: ObservableObject {
     /// 正在进行的自动登录任务，多个请求共用
     private var reloginTask: Task<Void, Error>?
     private let examStore = ExamStore()
+    private let gradeStore = GradeStore()
+    private let planStore = PlanStore()
 
     init() {
         // 先把上次存的登录 cookie 塞回来，再读缓存
@@ -93,7 +98,18 @@ final class AppState: ObservableObject {
         electricityBalance = Preferences.electricityBalance
         electricityCheckedAt = Preferences.electricityCheckedAt
         electricityHistory = ElectricityHistoryStore.load()
-        exams = examStore.load()
+        if let payload = examStore.load() {
+            exams = payload.exams
+            examsFetchedAt = payload.fetchedAt
+        }
+        if let payload = gradeStore.load() {
+            grades = payload.grades
+            gradesFetchedAt = payload.fetchedAt
+        }
+        if let payload = planStore.load() {
+            plan = payload.plan
+            planFetchedAt = payload.fetchedAt
+        }
         if let snapshot = store.load() {
             occurrences = snapshot.occurrences
             unitCount = snapshot.unitCount
@@ -107,6 +123,40 @@ final class AppState: ObservableObject {
                 kind = parsed
             }
             isLoggedIn = true
+        }
+    }
+
+    // MARK: - 缓存策略
+
+    /// 某类数据是否已经过期（没数据也算过期）
+    func isStale(_ kind: CacheKind) -> Bool {
+        switch kind {
+        case .timetable:
+            guard let fetched = fetchedAt else { return true }
+            return Date().timeIntervalSince(fetched) >= kind.lifetime
+        case .plan:
+            guard !plan.sections.isEmpty, let fetched = planFetchedAt else { return true }
+            return Date().timeIntervalSince(fetched) >= kind.lifetime
+        case .grades:
+            guard !grades.isEmpty, let fetched = gradesFetchedAt else { return true }
+            return Date().timeIntervalSince(fetched) >= kind.lifetime
+        case .exams:
+            guard let fetched = examsFetchedAt else { return true }
+            return Date().timeIntervalSince(fetched) >= kind.lifetime
+        }
+    }
+
+    /// 按类型刷新一份数据
+    func refresh(_ kind: CacheKind) async {
+        switch kind {
+        case .timetable:
+            await refresh()
+        case .plan:
+            await refreshPlan()
+        case .grades:
+            await refreshGrades()
+        case .exams:
+            await refreshExams(semesterID: isCurrentSemester ? nil : selectedSemesterID)
         }
     }
 
@@ -286,6 +336,8 @@ final class AppState: ObservableObject {
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         store.clear()
         examStore.clear()
+        gradeStore.clear()
+        planStore.clear()
         Task { await NotificationService.clearAll() }
         exams = []
         occurrences = []
@@ -455,7 +507,8 @@ final class AppState: ObservableObject {
             let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
             let target = semesterID ?? fallback
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
-            examStore.save(exams)
+            examsFetchedAt = Date()
+            examStore.save(exams, at: examsFetchedAt ?? Date())
             await rescheduleNotifications()
         } catch {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
@@ -480,6 +533,8 @@ final class AppState: ObservableObject {
                 grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
             }
             gradeSummary = EamsService.lastGradeSummary
+            gradesFetchedAt = Date()
+            gradeStore.save(grades, at: gradesFetchedAt ?? Date())
         } catch {
             gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
@@ -496,6 +551,8 @@ final class AppState: ObservableObject {
         do {
             // 不在这里自动重登：培养计划页一进来就拉，自动重登会把 CAS 登录次数打满
             plan = try await eams.fetchPlan()
+            planFetchedAt = Date()
+            planStore.save(plan, at: planFetchedAt ?? Date())
             await refreshPlanCatalogIfNeeded()
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
@@ -583,15 +640,28 @@ final class AppState: ObservableObject {
             await refreshElectricity()
         }
 
-        let timetableIsStale: Bool = {
-            guard let fetched = fetchedAt else { return true }
-            return Date().timeIntervalSince(fetched) >= 168 * 3600
-        }()
-        guard timetableIsStale else { return }
+        // 四份数据错峰过期，启动时最多补一份最该补的，避免一窝蜂联网
+        let overdue: [CacheKind] = CacheKind.allCases.filter { isStale($0) }
+        guard let target = overdue.max(by: { overdueRatio($0) < overdueRatio($1) }) else { return }
 
         try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
         guard !Task.isCancelled else { return }
-        await refresh()
+        await refresh(target)
+    }
+
+    /// 过期了多少（按各自有效期归一化），用来挑最该更新的那一份
+    private func overdueRatio(_ kind: CacheKind) -> Double {
+        guard let date = lastUpdated(kind) else { return .greatestFiniteMagnitude }
+        return Date().timeIntervalSince(date) / kind.lifetime
+    }
+
+    private func lastUpdated(_ kind: CacheKind) -> Date? {
+        switch kind {
+        case .timetable: return fetchedAt
+        case .plan: return planFetchedAt
+        case .grades: return gradesFetchedAt
+        case .exams: return examsFetchedAt
+        }
     }
 
     /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做

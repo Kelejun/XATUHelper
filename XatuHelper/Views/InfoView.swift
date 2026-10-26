@@ -24,7 +24,7 @@ struct InfoView: View {
             switch self {
             case .exam: return "考试安排"
             case .grade: return "成绩"
-            case .plan: return "培养计划"
+            case .plan: return "学业完成情况"
             case .bill: return "电费"
             case .netfee: return "校园网充值"
             case .checkin: return "签到"

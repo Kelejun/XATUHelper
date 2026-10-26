@@ -148,7 +148,7 @@ struct GradeView: View {
             }
         }
         .task {
-            if app.grades.isEmpty {
+            if app.isStale(.grades) {
                 await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope)
             }
         }

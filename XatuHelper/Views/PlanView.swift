@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 培养计划：拿「要求学分 / 实修学分」算毕业进度。
+/// 学业完成情况：拿「要求学分 / 实修学分」算毕业进度。
 struct PlanView: View {
     @EnvironmentObject var app: AppState
     @State private var showWebPage = false
@@ -12,7 +12,7 @@ struct PlanView: View {
                 Section {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("正在读培养计划…").foregroundStyle(.secondary)
+                        Text("正在读学业完成情况…").foregroundStyle(.secondary)
                     }
                 }
             }
@@ -41,7 +41,7 @@ struct PlanView: View {
                 }
             }
         }
-        .navigationTitle("培养计划")
+        .navigationTitle("学业完成情况")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
         .toolbar {
@@ -65,7 +65,7 @@ struct PlanView: View {
             WebSheet(title: "计划完成情况", urlString: "http://jwgl2018.xatu.edu.cn/eams/myPlanCompl.action")
         }
         .task {
-            if app.plan.sections.isEmpty { await app.refreshPlan() }
+            if app.isStale(.plan) { await app.refreshPlan() }
             await app.refreshPlanCatalogIfNeeded()
         }
     }

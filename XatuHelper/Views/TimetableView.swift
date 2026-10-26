@@ -253,8 +253,8 @@ struct TimetableView: View {
             NotificationSetupSheet()
         }
         .task {
-            // 定时刷新交给启动流程，这里只有完全没数据时才拉一次
-            if app.occurrences.isEmpty {
+            // 平时靠启动流程按有效期补；这里只在数据过期时兜一次
+            if app.isStale(.timetable) {
                 await app.refresh()
             }
             if !NotificationSettings.hasPrompted {
