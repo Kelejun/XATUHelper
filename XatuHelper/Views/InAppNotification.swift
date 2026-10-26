@@ -83,6 +83,8 @@ struct InAppNotificationBanner: View {
 
 /// 把横幅挂在最上层的容器：进来先播一次，点一下跳系统设置。
 struct InAppNotificationHost: View {
+    private static let bannerAnimation = Animation.spring(response: 0.45, dampingFraction: 0.82)
+
     var title: String
     var message: String
     @State private var isShowing = false
