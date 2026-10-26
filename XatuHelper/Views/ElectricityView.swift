@@ -146,12 +146,33 @@ struct ElectricityView: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Chart(points) { point in
-                    BarMark(
+                    AreaMark(
                         x: .value("日期", point.date, unit: .day),
                         y: .value("用量", point.usage)
                     )
-                    .foregroundStyle(.blue.gradient)
-                    .cornerRadius(4)
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(
+                        .linearGradient(
+                            colors: [.blue.opacity(0.30), .blue.opacity(0.02)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("日期", point.date, unit: .day),
+                        y: .value("用量", point.usage)
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+
+                    PointMark(
+                        x: .value("日期", point.date, unit: .day),
+                        y: .value("用量", point.usage)
+                    )
+                    .foregroundStyle(.blue)
+                    .symbolSize(26)
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
