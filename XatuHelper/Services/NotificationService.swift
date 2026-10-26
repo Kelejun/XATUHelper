@@ -134,10 +134,9 @@ enum NotificationService {
         let limit = calendar.date(byAdding: .day, value: daysAhead, to: now) ?? now
         var result: [(Date, UNNotificationRequest)] = []
 
-        for item in occurrences where !item.isPlaceholder && !item.isRemote {
-            let startMinutes = PeriodSchedule.isJiaoSanEarly(room: item.room, period: item.period)
-                ? 10 * 60 + 10
-                : PeriodSchedule.startMinutes(item.period)
+        // 按合并后的课程块排提醒，否则一门两节连排的课会在第 1、2 节各弹一次
+        for item in occurrences.courseBlocks() where !item.isPlaceholder && !item.isRemote {
+            let startMinutes = PeriodSchedule.startMinutes(of: item)
             for week in item.weeks {
                 guard let day = calendar.date(
                     byAdding: .day,
@@ -158,7 +157,7 @@ enum NotificationService {
                     dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire),
                     repeats: false
                 )
-                let identifier = "class-\(item.courseKey)-\(week)-\(item.day)-\(item.period)"
+                let identifier = "class-\(item.courseKey)-\(week)-\(item.day)-\(item.startPeriod)"
                 result.append((fire, UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)))
             }
         }
