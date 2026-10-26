@@ -7,6 +7,8 @@ struct WebSheet: View {
     let urlString: String
     /// 网页登录/换票完成后要跳的路由，比如 jfpay 的 "#/chargeElectricityE011"
     var followUpHash: String? = nil
+    /// 进页面前用 document.cookie 写进去的键值（绕开 path 不匹配）
+    var cookies: [String: String] = [:]
 
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
@@ -29,7 +31,7 @@ struct WebSheet: View {
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash)
+                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash, cookies: cookies)
                         .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
@@ -70,6 +72,7 @@ private struct WebPage: UIViewRepresentable {
     @Binding var isLoading: Bool
     @Binding var errorText: String?
     let followUpHash: String?
+    let cookies: [String: String]
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -84,6 +87,16 @@ private struct WebPage: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
+        if !cookies.isEmpty {
+            let js = cookies.map { "document.cookie = '\($0.key)=\($0.value); path=/; max-age=86400';" }
+                .joined(separator: "\n")
+            controller.addUserScript(WKUserScript(
+                source: js,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            ))
+        }
+
         config.userContentController = controller
 
         let web = WKWebView(frame: .zero, configuration: config)

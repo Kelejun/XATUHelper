@@ -7,7 +7,7 @@ struct ElectricityView: View {
     @State private var editing = false
     @State private var showingCharge = false
     @State private var chargeURL: String?
-    @State private var chargeHash: String?
+    @State private var chargeCookies: [String: String] = [:]
     @State private var preparingCharge = false
 
     var body: some View {
@@ -59,7 +59,7 @@ struct ElectricityView: View {
         }
         .sheet(isPresented: $showingCharge) {
             if let chargeURL {
-                WebSheet(title: "充值", urlString: chargeURL, followUpHash: chargeHash)
+                WebSheet(title: "充值", urlString: chargeURL, cookies: chargeCookies)
             }
         }
         .task {
@@ -74,7 +74,7 @@ struct ElectricityView: View {
                 preparingCharge = true
                 if let page = await app.chargePage() {
                     chargeURL = page.url
-                    chargeHash = page.hash
+                    chargeCookies = page.cookies
                     showingCharge = true
                 } else {
                     app.electricityError = "没拿到充值页地址，先换一个宿舍再试"
