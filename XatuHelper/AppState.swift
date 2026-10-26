@@ -17,6 +17,9 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoggedIn = false
 
+    /// 本次启动是否已经播过首页入场动画（只在进程内有效）
+    var hasPlayedIntro = false
+
     /// 所有学期
     @Published var semesters: [Semester] = []
     /// 当前正在看的学期

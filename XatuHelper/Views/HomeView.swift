@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var now = Date()
     @State private var calendarInfo: CalendarService.Info?
     @State private var destination: HomeDestination?
+    @State private var showsContent = false
 
     private enum HomeDestination: Hashable {
         case electricity
@@ -190,32 +191,37 @@ ScrollView {
                     Color.clear
                         .frame(height: 150)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(greeting)
-                            .font(.largeTitle.weight(.bold))
-                        Text(statusLine)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(greeting)
+                        .font(.largeTitle.weight(.bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if let exam = nextExam {
-                        examCard(exam)
-                            .cardStyle()
-                    }
-
-                    scheduleCard
-                        .cardStyle()
-
-                    HStack(alignment: .top, spacing: 12) {
-                        electricityCard
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .cardStyle()
-                        if let holiday = nextHoliday {
-                            holidayCard(holiday)
+                    if showsContent {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(statusLine)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if let exam = nextExam {
+                                examCard(exam)
+                                    .cardStyle()
+                            }
+
+                            scheduleCard
                                 .cardStyle()
+
+                            HStack(alignment: .top, spacing: 12) {
+                                electricityCard
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .cardStyle()
+                                if let holiday = nextHoliday {
+                                    holidayCard(holiday)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .cardStyle()
+                                }
+                            }
                         }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, 20)
@@ -233,6 +239,15 @@ ScrollView {
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .onAppear { calendarInfo = CalendarCache.load() }
+        .task {
+            guard !app.hasPlayedIntro else {
+                showsContent = true
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+            withAnimation(.smooth(duration: 0.55)) { showsContent = true }
+            app.hasPlayedIntro = true
+        }
     }
 
     /// 顶部那片浅蓝渐变，往下化到页面底色，跟健康 App 的摘要页一个意思
