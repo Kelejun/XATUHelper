@@ -170,7 +170,7 @@ struct InfoView: View {
                         Button {
                             webLink = WebLink(
                                 title: "校园网充值",
-                                urlString: "https://self.xatu.edu.cn/Self/service/packageDisclaimer"
+                                urlString: "http://self.xatu.edu.cn/Self/service/packageDisclaimer"
                             )
                         } label: {
                             card(entry)
