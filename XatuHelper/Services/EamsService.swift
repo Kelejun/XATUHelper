@@ -359,57 +359,70 @@ struct EamsService {
         return EamsService.parsePlanCatalog(html)
     }
 
-    /// 教学计划表格解析：先找表头行，再按关键词认列。
+    /// 教学计划表格解析（myPlan.action 的 planInfoTable）。
+    /// 真实结构：表头两行，课程行前面会带若干 `class="group"` 的合并分类格（只有每组第一行才有），
+    /// 所以不能按表头下标取列，只能先找到 `class="course"` 的课程名格，再按相对偏移取值：
+    /// 课程名 +1 学分、+2 总学时、+8 开课学期、+10 是否必修；课程名前一格是课程代码。
     static func parsePlanCatalog(_ html: String) -> [PlanCourseInfo] {
-        let rows = html.regexGroups(#"(<tr[^>]*>)([\s\S]*?)</tr>"#)
-        var header: [String] = []
-        var index: [String: Int] = [:]
         var result: [PlanCourseInfo] = []
+        var seen = Set<String>()
 
-        func column(_ keys: [String]) -> Int? {
-            for key in keys {
-                if let found = header.firstIndex(where: { $0.contains(key) }) { return found }
-            }
-            return nil
-        }
-
-        for rowMatch in rows {
+        for rowMatch in html.regexGroups(#"(<tr[^>]*>)([\s\S]*?)</tr>"#) {
             guard rowMatch.count >= 2 else { continue }
-            let cells = rowMatch[1].regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
-                .compactMap { $0.first }
-                .map { $0.strippingTags.replacingOccurrences(of: "&nbsp;", with: " ").trimmingCharacters(in: .whitespacesAndNewlines) }
+            let cellMatches = rowMatch[1].regexGroups(#"(<td\b[^>]*>)([\s\S]*?)</td>"#)
+            guard !cellMatches.isEmpty else { continue }
 
-            if header.isEmpty {
-                if cells.contains(where: { $0.contains("课程名称") }) {
-                    header = cells
-                }
-                continue
+            var attrs: [String] = []
+            var texts: [String] = []
+            for cell in cellMatches {
+                guard cell.count >= 2 else { attrs.append(""); texts.append(""); continue }
+                attrs.append(cell[0].lowercased())
+                let raw = cell[1].strippingTags
+                    .replacingOccurrences(of: "&nbsp;", with: " ")
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                texts.append(raw.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines))
             }
 
-            guard let nameIndex = index["name"] ?? column(["课程名称"]) else { continue }
-            if index.isEmpty {
-                index["code"] = column(["课程代码", "课程序号", "课程编号"]) ?? -1
-                index["name"] = nameIndex
-                index["nature"] = column(["课程性质", "修读性质", "课程类别", "课程属性"]) ?? -1
-                index["credit"] = column(["学分"]) ?? -1
-                index["hours"] = column(["学时"]) ?? -1
-                index["term"] = column(["开课学期", "学期"]) ?? -1
+            guard let nameIndex = attrs.firstIndex(where: { $0.contains("course") && $0.contains("class") }) else { continue }
+
+            func text(_ offset: Int) -> String {
+                let i = nameIndex + offset
+                guard i >= 0, i < texts.count else { return "" }
+                return texts[i]
             }
 
-            func value(_ key: String) -> String {
-                guard let i = index[key], i >= 0, i < cells.count else { return "" }
-                return cells[i]
+            var name = text(0)
+            // 课程名格子里带「序号 + 名称」，去掉前面的序号。
+            if let stripped = name.firstMatch(#"^(?:\d+)\s+(.+)$"#), !stripped.isEmpty {
+                name = stripped
+            }
+            name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, name != "课程名称", !name.contains("学分小计") else { continue }
+
+            let credit = text(1)
+            let hours = text(2)
+            guard credit.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { continue }
+
+            var code = nameIndex > 0 ? texts[nameIndex - 1] : ""
+            if code.range(of: #"^[0-9A-Za-z]+$"#, options: .regularExpression) == nil {
+                code = ""
             }
 
-            let name = value("name")
-            guard !name.isEmpty, name != "课程名称" else { continue }
+            let required = text(10)
+            let nature = required.contains("是") ? "必修" : (required.contains("否") ? "选修" : "")
+
+            let key = code.isEmpty ? name : code
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+
             result.append(PlanCourseInfo(
-                code: value("code"),
+                code: code,
                 name: name,
-                nature: value("nature"),
-                credit: value("credit"),
-                hours: value("hours"),
-                term: value("term")
+                nature: nature,
+                credit: credit,
+                hours: hours,
+                term: text(8)
             ))
         }
         return result
