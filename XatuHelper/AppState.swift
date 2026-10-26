@@ -606,24 +606,10 @@ final class AppState: ObservableObject {
     }
 
     /// 充值页地址：缴费平台的充值路由按电费项目的 factoryCode 分，比如 /#/chargeElectricityE011
-    /// 充值页。
-    /// SPA 的 token 是落地页 middle_page 用 JS 写进根路径 cookie 的；
-    /// 直接开 #/chargeElectricity 或手工塞 cookie 都不算数，接口会回「系统维护」。
-    /// 所以先把 WebView 领进真正的 CAS 登录链（我们已有票据，不会要密码），
-    /// 落地后由页面自己把 token 写好，再跳到充值路由。
-    func chargePage() async -> (url: String, hash: String)? {
-        var project = electricProject
-        if project == nil {
-            project = try? await withPay { $0 }
-        }
-        guard let code = project?.factoryCode, !code.isEmpty else { return nil }
-        return ("https://jfpay.xatu.edu.cn/casLogin/", "https://jfpay.xatu.edu.cn/#/chargeElectricity\(code)")
-    }
-
-    private static func xatuCookie(named name: String) -> String? {
-        HTTPCookieStorage.shared.cookies?
-            .first { $0.name == name && $0.domain.contains("xatu.edu.cn") }?
-            .value
+    /// 充值页：直接打开缴费平台首页，让页面自己走登录和路由。
+    /// 试过直接开充值路由、注入 token、CAS 落地再跳，都会被页面的登录态校验拦成「系统维护」。
+    func chargePage() async -> (url: String, hash: String?)? {
+        (url: "https://jfpay.xatu.edu.cn/", hash: nil)
     }
 
     func loadSchools() async throws -> [DormOption] {
