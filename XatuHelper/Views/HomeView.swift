@@ -221,7 +221,7 @@ ScrollView {
                                 }
                             }
                         }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(.offset(y: 40).combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, 20)
@@ -244,8 +244,8 @@ ScrollView {
                 showsContent = true
                 return
             }
-            try? await Task.sleep(for: .milliseconds(500))
-            withAnimation(.smooth(duration: 0.55)) { showsContent = true }
+            try? await Task.sleep(for: .milliseconds(100))
+            withAnimation(.smooth(duration: 0.8)) { showsContent = true }
             app.hasPlayedIntro = true
         }
     }
