@@ -379,6 +379,7 @@ struct SettingsContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
+    @AppStorage("autoRefreshElectricity") private var autoRefreshElectricity = true
 
     /// 1.0.0（ec54b89）
     static var versionText: String {
@@ -396,6 +397,14 @@ struct SettingsContent: View {
                     app.logout()
                     dismiss()
                 }
+            }
+
+            Section {
+                Toggle("每日自动刷新电费余额", isOn: $autoRefreshElectricity)
+            } header: {
+                Text("电费")
+            } footer: {
+                Text("打开后每天第一次进 app 会自动查一次余额，关掉就只能手动刷新。")
             }
 
             ClassNotificationSection()
@@ -418,6 +427,9 @@ struct SettingsContent: View {
 
             Section {
                 LabeledContent("版本", value: Self.versionText)
+                Link(destination: URL(string: "https://github.com/Kelejun/XATUHelper")!) {
+                    LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper")
+                }
             } header: {
                 Text("App")
             } footer: {
@@ -481,6 +493,8 @@ struct TimetableSettingsContent: View {
                 NavigationLink("查看课程表通知设置...") {
                     SettingsContent()
                 }
+            } header: {
+                Text("通知")
             }
 
             Section("课表") {

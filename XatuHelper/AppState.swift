@@ -519,8 +519,13 @@ final class AppState: ObservableObject {
 
     /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做
     /// 每天第一次打开 app 才自动查一次，其余情况只靠用户手动刷新
+    /// 每日自动刷新开关，默认打开
+    var autoRefreshElectricity: Bool {
+        UserDefaults.standard.object(forKey: "autoRefreshElectricity") as? Bool ?? true
+    }
+
     func refreshElectricityIfNeeded() async {
-        guard dorm != nil else { return }
+        guard dorm != nil, autoRefreshElectricity else { return }
         if let checked = electricityCheckedAt,
            Calendar.current.isDateInToday(checked),
            electricityBalance != nil {

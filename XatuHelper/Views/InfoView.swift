@@ -11,6 +11,7 @@ struct InfoView: View {
         case plan
         case bill
         case checkin
+        case leave
         case calendar
         case jwgl
         case ehall
@@ -25,6 +26,7 @@ struct InfoView: View {
             case .plan: return "培养计划"
             case .bill: return "电费"
             case .checkin: return "签到"
+            case .leave: return "请销假"
             case .calendar: return "校历"
             case .jwgl: return "教务系统"
             case .ehall: return "一网通办"
@@ -39,6 +41,7 @@ struct InfoView: View {
             case .plan: return "毕业要修多少学分"
             case .bill: return "宿舍还剩多少电费"
             case .checkin: return "按时点一下，别断签"
+            case .leave: return "请假、销假都在这里"
             case .calendar: return "什么时候放假"
             case .jwgl: return "成绩、选课、学籍都在里面"
             case .ehall: return ""
@@ -53,6 +56,7 @@ struct InfoView: View {
             case .plan: return "list.bullet.rectangle.fill"
             case .bill: return "bolt.fill"
             case .checkin: return "checkmark.seal.fill"
+            case .leave: return "doc.text.fill"
             case .calendar: return "calendar"
             case .jwgl: return "graduationcap.fill"
             case .ehall: return "square.grid.2x2.fill"
@@ -67,6 +71,7 @@ struct InfoView: View {
             case .plan: return .green
             case .bill: return .yellow
             case .checkin: return .pink
+            case .leave: return .brown
             case .calendar: return .purple
             case .jwgl: return .teal
             case .ehall: return .indigo
@@ -96,7 +101,7 @@ struct InfoView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     group("教务", entries: [.exam, .grade, .calendar, .jwgl])
-                    group("生活", entries: [.bill, .checkin])
+                    group("生活", entries: [.bill, .checkin, .leave])
                     group("杂项", entries: [.ehall, .settings])
                 }
                 .padding(.horizontal, 20)
@@ -159,6 +164,16 @@ struct InfoView: View {
                     } else if entry == .checkin {
                         Button { showsCheckin = true } label: { card(entry) }
                             .buttonStyle(.plain)
+                    } else if entry == .leave {
+                        Button {
+                            webLink = WebLink(
+                                title: "请销假",
+                                urlString: "https://ehall.xatu.edu.cn/xsfw/sys/swmxsqjapp/*default/index.do?wxType=1"
+                            )
+                        } label: {
+                            card(entry)
+                        }
+                        .buttonStyle(.plain)
                     } else if entry == .calendar {
                         NavigationLink { SchoolCalendarView() } label: { card(entry) }
                             .buttonStyle(.plain)

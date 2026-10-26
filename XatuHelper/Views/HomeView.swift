@@ -5,7 +5,6 @@ struct HomeView: View {
 
     @EnvironmentObject var app: AppState
     @State private var now = Date()
-    @State private var showSettings = false
     @State private var calendarInfo: CalendarService.Info?
     @State private var destination: HomeDestination?
 
@@ -225,19 +224,6 @@ ScrollView {
             .background(alignment: .top) { homeBackground }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("设置")
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsSheet()
-            }
             .navigationDestination(item: $destination) { dest in
                 switch dest {
                 case .electricity: ElectricityView()
