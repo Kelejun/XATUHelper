@@ -116,9 +116,7 @@ struct GradeView: View {
         }
         .navigationTitle("成绩")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            searchBar
-        }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
         .refreshable { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -161,33 +159,6 @@ struct GradeView: View {
     /// 教务页面自己带着汇总就用它的，算不出来才退回本地计算
     private var hasPageSummary: Bool {
         !(app.gradeSummary?.isEmpty ?? true)
-    }
-
-    private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.secondary)
-            TextField("搜索课程名称", text: $searchText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.bar, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .padding(.top, 4)
     }
 
     private var displayCount: String {
