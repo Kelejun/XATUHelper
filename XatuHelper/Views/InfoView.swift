@@ -45,7 +45,7 @@ struct InfoView: View {
             case .netfee: return "续费、查套餐"
             case .checkin: return "按时点一下，别断签"
             case .leave: return "请假、销假都在这里"
-            case .calendar: return "什么时候放假"
+            case .calendar: return "什么时候放假？"
             case .jwgl: return ""
             case .ehall: return ""
             case .settings: return ""
@@ -105,9 +105,9 @@ struct InfoView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    group("教务", entries: [.exam, .grade, .plan, .calendar, .jwgl])
+                    group("教务", entries: [.exam, .grade, .plan, .calendar])
                     group("生活", entries: [.bill, .netfee, .checkin, .leave])
-                    group("杂项", entries: [.ehall, .settings])
+                    group("杂项", entries: [.ehall, .jwgl])
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -115,6 +115,16 @@ struct InfoView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("校园")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("设置")
+                }
+            }
             .sheet(item: $webLink) { link in
                 WebSheet(title: link.title, urlString: link.urlString)
             }
