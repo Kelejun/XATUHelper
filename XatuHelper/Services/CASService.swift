@@ -116,6 +116,22 @@ struct CASService {
         return components?.url ?? URL(string: loginPage)!
     }
 
+    /// 只拿现有的统一认证票据换一次票，不填密码。
+    /// 浏览器就是这么做的：cookie 还在，CAS 直接 302 带 ticket 回来。
+    static func silentRenew() async -> Bool {
+        guard var components = URLComponents(string: loginPage) else { return false }
+        components.queryItems = [URLQueryItem(name: "service", value: service)]
+        guard let url = components.url else { return false }
+        do {
+            let (data, response) = try await Net.session.data(from: url)
+            let host = response.url?.host ?? ""
+            let html = String(data: data, encoding: .utf8) ?? ""
+            return !host.contains("authserver") && !html.contains("pwdEncryptSalt")
+        } catch {
+            return false
+        }
+    }
+
     /// 用学号密码登录，成功后 cookie 落在共享存储里，jwgl2018 那边就能用了。
     func login(username: String, password: String) async throws {
         guard var components = URLComponents(string: Self.loginPage) else { throw AppError.badURL }

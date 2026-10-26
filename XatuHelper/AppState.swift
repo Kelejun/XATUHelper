@@ -371,6 +371,12 @@ final class AppState: ObservableObject {
             return
         }
 
+        // 统一认证那边的票还在的话，静默换一次就够了：不碰密码，也不算一次登录。
+        if await CASService.silentRenew() {
+            CookieVault.pinAndSave()
+            return
+        }
+
         let now = Date()
         let recent = Preferences.loginTimes.filter { now.timeIntervalSince($0) < 3600 }
         if let last = recent.last {

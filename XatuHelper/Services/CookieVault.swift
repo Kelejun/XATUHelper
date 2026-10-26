@@ -15,7 +15,7 @@ enum CookieVault {
     private static let account = "xatu"
     private static let domainKeyword = "xatu.edu.cn"
     /// 给会话 cookie 补的过期时间，够长就行，服务端该失效还是会失效
-    private static let pinLifetime: TimeInterval = 14 * 24 * 3600
+    private static let pinLifetime: TimeInterval = 30 * 24 * 3600
 
     private struct StoredCookie: Codable {
         var name: String
