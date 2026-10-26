@@ -419,6 +419,11 @@ struct SettingsContent: View {
 
             Section {
                 Toggle("显示诊断数据", isOn: $showDiagnostics)
+                if showDiagnostics {
+                    Button("复制诊断数据") {
+                        UIPasteboard.general.string = EamsService.diagnosticDump
+                    }
+                }
             } header: {
                 Text("诊断")
             } footer: {
@@ -504,18 +509,6 @@ struct TimetableSettingsContent: View {
                         "上次更新",
                         value: fetchedAt.formatted(date: .abbreviated, time: .shortened)
                     )
-                }
-            }
-
-            if showDiagnostics {
-                Section {
-                    Button("复制课表诊断数据") {
-                        UIPasteboard.general.string = EamsService.diagnosticDump
-                    }
-                } header: {
-                    Text("诊断")
-                } footer: {
-                    Text("把课表外壳页和学期接口的原始返回整个复制出来，学期列表不对时发给开发者。")
                 }
             }
         }

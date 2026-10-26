@@ -52,7 +52,11 @@ struct PlanView: View {
                         await app.refreshPlan()
                     }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if app.planLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .disabled(app.planLoading)
             }
@@ -122,7 +126,7 @@ struct PlanView: View {
     private func moduleSection(_ section: PlanSection) -> some View {
         Section {
             DisclosureGroup {
-                PlanSectionContent(section: section, number: number)
+                PlanSectionContent(section: section, number: number, detail: detailFor)
             } label: {
                 sectionRow(section)
             }
@@ -201,6 +205,11 @@ struct PlanView: View {
         return result
     }
 
+    private func detailFor(_ course: PlanCourse) -> String? {
+        guard let info = app.courseInfo(for: course) else { return nil }
+        return detailText(info)
+    }
+
     private func detailText(_ info: PlanCourseInfo) -> String {
         var parts: [String] = []
         if !info.term.isEmpty { parts.append(info.term.contains("学期") || info.term.contains("第") ? info.term : "\(info.term) 学期") }
@@ -221,11 +230,12 @@ struct PlanView: View {
 private struct PlanSectionContent: View {
     let section: PlanSection
     let number: (Double) -> String
+    let detail: (PlanCourse) -> String?
 
     var body: some View {
         ForEach(section.children) { child in
             DisclosureGroup {
-                PlanSectionContent(section: child, number: number)
+                PlanSectionContent(section: child, number: number, detail: detail)
             } label: {
                 label(child)
             }
@@ -259,6 +269,11 @@ private struct PlanSectionContent: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                if let detail = detail(course) {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
             Text("\(number(course.earned)) / \(number(course.required))")
