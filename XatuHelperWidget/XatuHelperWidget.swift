@@ -194,15 +194,7 @@ struct CourseWidgetView: View {
                     .multilineTextAlignment(.center)
             } else {
                 ForEach(visibleCourses.prefix(3)) { course in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(course.name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Text(WidgetSnapshot.clock(course.startMinutes))
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
+                    courseRow(course, showsRoom: false)
                 }
             }
             Spacer(minLength: 0)
@@ -222,27 +214,71 @@ struct CourseWidgetView: View {
                     .multilineTextAlignment(.center)
             } else {
                 ForEach(visibleCourses.prefix(4)) { course in
-                    HStack(spacing: 8) {
-                        Text(WidgetSnapshot.clock(course.startMinutes))
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 38, alignment: .leading)
-                        Text(course.name)
-                            .font(.system(size: 12))
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        if !course.room.isEmpty {
-                            Text(course.room)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
+                    courseRow(course, showsRoom: true)
                 }
             }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 一节课 = 一根色条 + 淡渐变底，和 app 里首页的课程行一个路数
+    private func courseRow(_ course: WidgetSnapshot.Course, showsRoom: Bool) -> some View {
+        let tint = Self.color(for: course)
+        return HStack(spacing: 6) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 3)
+                .padding(.vertical, 3)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(course.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                if showsRoom, !course.room.isEmpty {
+                    Text(course.room)
+                        .font(.system(size: 9))
+                        .foregroundStyle(tint.opacity(0.75))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Text(WidgetSnapshot.clock(course.startMinutes))
+                .font(.system(size: 10, design: .rounded))
+                .foregroundStyle(tint.opacity(0.8))
+                .lineLimit(1)
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.20), tint.opacity(0.10)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        )
+    }
+
+    /// 用课名算一个稳定的下标，重启也不会换色
+    private static let palette: [Color] = [
+        .blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown
+    ]
+
+    private static func color(for course: WidgetSnapshot.Course) -> Color {
+        var hash = 5381
+        for scalar in course.name.unicodeScalars {
+            hash = (hash &* 33) &+ Int(scalar.value)
+        }
+        return palette[abs(hash) % palette.count]
     }
 
     private var header: some View {
