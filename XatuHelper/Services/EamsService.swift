@@ -344,51 +344,112 @@ struct EamsService {
             let html = try await examText(path: path, query: [], label: "培养计划")
             EamsService.lastPlanRaw = html
             let parsed = EamsService.parsePlan(html)
-            if !parsed.rows.isEmpty { return parsed }
+            if !parsed.sections.isEmpty { return parsed }
             last = parsed
         }
         return last
     }
 
-    /// 培养计划表格解析：一行一个模块，取「名称 + 两个学分数字」。
-    /// 树维不同版本列顺序会变，所以不认列名，只在整行里抓数字：要求学分通常不小于已修，用这个兜底排序。
+    /// 培养计划表格解析。
+    /// 真实结构：上面一张 infoTable 放「要求学分/实修学分」「GPA」，下面一张 formTable：
+    ///   - 模块行：<tr class="darkColumn">，第一个 td colspan=3 是标题，后面依次是要求学分、实修学分、空、缺额说明
+    ///   - 课程行：8 个 td —— 序号/课程序号/课程名称/要求学分/实修学分/成绩/是否通过/备注
+    /// 模块分两级：一级「一 通识教育」，二级「(一) 通识必修」；有的模块没有二级、课程直接挂在下面。
     static func parsePlan(_ html: String) -> PlanSnapshot {
-        let rows = html.regexGroups(#"<tr[^>]*>([\s\S]*?)</tr>"#)
-        var result: [PlanRow] = []
-        var used = Set<String>()
+        var snapshot = PlanSnapshot()
 
-        for match in rows {
-            let rowHTML = match.first ?? ""
-            let cells = rowHTML.regexGroups(#"<t[dh][^>]*>([\s\S]*?)</t[dh]>"#)
-                .compactMap { $0.first }
-                .map { $0.strippingTags.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            guard cells.count >= 3 else { continue }
-            if cells.contains(where: { $0.contains("要求") && $0.contains("学分") && $0.count < 12 }) { continue }
+        let plain = html.strippingTags.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
 
-            guard let name = cells.first(where: { $0.range(of: #"^[0-9.\s]+$"#, options: .regularExpression) == nil }),
-                  name.count >= 2, name.count <= 40 else { continue }
-
-            let numbers = cells.compactMap { cell -> Double? in
-                guard cell.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
-                return Double(cell)
-            }
-            guard numbers.count >= 2 else { continue }
-
-            // 一般列是「要求学分 | 已修学分」或反过来；取较大者为要求、较小者为已修
-            let required = numbers.max() ?? 0
-            let earned = numbers.min() ?? 0
-            guard required > 0, earned <= required else { continue }
-
-            let key = "\(name)|\(required)|\(earned)"
-            guard !used.contains(key) else { continue }
-            used.insert(key)
-            result.append(PlanRow(id: key, module: name, required: required, earned: earned))
+        if let name = plain.firstMatch(#"姓名:\s*(\S+)"#) { snapshot.studentName = name }
+        if let major = plain.firstMatch(#"专业/专业方向:\s*([^ ]+)"#) { snapshot.major = major }
+        if let gpa = plain.firstMatch(#"GPA:\s*([0-9.]+)"#) { snapshot.gpa = gpa }
+        if let pair = plain.regexGroups(#"要求学分/实修学分:\s*([0-9.]+)\s*/\s*([0-9.]+)"#).first, pair.count == 2 {
+            snapshot.totalRequired = Double(pair[0]) ?? 0
+            snapshot.totalEarned = Double(pair[1]) ?? 0
         }
 
-        let totalRequired = result.reduce(0) { $0 + $1.required }
-        let totalEarned = result.reduce(0) { $0 + $1.earned }
-        return PlanSnapshot(rows: result, totalRequired: totalRequired, totalEarned: totalEarned)
+        var top: [PlanSection] = []
+        var currentTop: Int?
+        var currentChild: Int?
+        var sequence = 0
+
+        for rowMatch in html.regexGroups(#"(<tr[^>]*>)([\s\S]*?)</tr>"#) {
+            guard rowMatch.count >= 2 else { continue }
+            let rowTag = rowMatch[0]
+            let rowHTML = rowMatch[1]
+            let cells = rowHTML.regexGroups(#"<td[^>]*>([\s\S]*?)</td>"#)
+                .compactMap { $0.first }
+                .map { $0.strippingTags.replacingOccurrences(of: "&nbsp;", with: " ").trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard !cells.isEmpty else { continue }
+
+            if rowTag.contains("darkColumn") {
+                var title = cells[0]
+                    .replacingOccurrences(of: "&nbsp;", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // 标题后面常跟一句「(所有子项均应满足要求)」，去掉免得挤
+                if let bracket = title.firstIndex(where: { $0 == "(" || $0 == "（" }) {
+                    let prefix = String(title[title.startIndex..<bracket]).trimmingCharacters(in: .whitespaces)
+                    // 只有前面还有正经标题才截；像「(一) 通识必修」这种括号在开头的不动
+                    if !prefix.isEmpty { title = prefix }
+                }
+                title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { continue }
+
+                let numbers = cells.dropFirst().compactMap { value -> Double? in
+                    let trimmed = value.trimmingCharacters(in: .whitespaces)
+                    guard trimmed.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
+                    return Double(trimmed)
+                }
+                let required = numbers.first ?? 0
+                let earned = numbers.count > 1 ? numbers[1] : 0
+                let shortfall = max(required - earned, 0)
+                sequence += 1
+                let section = PlanSection(
+                    id: "s\(sequence)",
+                    title: title,
+                    required: required,
+                    earned: earned,
+                    shortfall: shortfall
+                )
+
+                let isChild = title.range(of: #"^[（(][一二三四五六七八九十]+[)）]"#, options: .regularExpression) != nil
+                if isChild, let index = currentTop {
+                    top[index].children.append(section)
+                    currentChild = top[index].children.count - 1
+                } else {
+                    top.append(section)
+                    currentTop = top.count - 1
+                    currentChild = nil
+                }
+                continue
+            }
+
+            guard cells.count >= 7,
+                  cells[0].range(of: #"^[0-9]+$"#, options: .regularExpression) != nil else { continue }
+
+            let course = PlanCourse(
+                id: "c\(sequence)-\(cells[0])",
+                code: cells[1],
+                name: cells[2],
+                required: Double(cells[3]) ?? 0,
+                earned: Double(cells[4]) ?? 0,
+                score: cells[5],
+                passed: cells[6].contains("是")
+            )
+            guard let index = currentTop else { continue }
+            if let child = currentChild {
+                top[index].children[child].courses.append(course)
+            } else {
+                top[index].courses.append(course)
+            }
+        }
+
+        snapshot.sections = top
+        if snapshot.totalRequired == 0 {
+            snapshot.totalRequired = top.reduce(0) { $0 + $1.required }
+            snapshot.totalEarned = top.reduce(0) { $0 + $1.earned }
+        }
+        return snapshot
     }
 
     /// 外壳页里的考试批次下拉

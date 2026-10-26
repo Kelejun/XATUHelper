@@ -486,7 +486,7 @@ final class AppState: ObservableObject {
         planError = nil
         do {
             plan = try await withReloginValue { try await self.eams.fetchPlan() }
-            if plan.rows.isEmpty {
+            if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
             }
         } catch {

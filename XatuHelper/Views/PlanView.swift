@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// 培养计划：拿「已修学分 / 要求学分」算毕业进度。
+/// 培养计划：拿「要求学分 / 实修学分」算毕业进度。
 struct PlanView: View {
     @EnvironmentObject var app: AppState
     @State private var showWebPage = false
 
     var body: some View {
         Form {
-            if app.planLoading && app.plan.rows.isEmpty {
+            if app.planLoading && app.plan.sections.isEmpty {
                 Section {
                     HStack(spacing: 10) {
                         ProgressView()
@@ -26,41 +26,10 @@ struct PlanView: View {
                 }
             }
 
-            if !app.plan.rows.isEmpty {
-                Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(creditText)
-                            .font(.system(size: 30, weight: .semibold, design: .rounded))
-                        ProgressView(value: app.plan.totalProgress)
-                            .tint(.blue)
-                        Text("已修 \(short(app.plan.totalEarned)) / 要求 \(short(app.plan.totalRequired)) 学分")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 6)
-                } header: {
-                    Text("毕业学分")
-                }
-
-                Section {
-                    ForEach(app.plan.rows) { row in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(row.module)
-                                Spacer(minLength: 12)
-                                Text("\(short(row.earned)) / \(short(row.required))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(row.earned >= row.required ? .green : .secondary)
-                            }
-                            ProgressView(value: row.progress)
-                                .tint(row.earned >= row.required ? .green : .blue)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                } header: {
-                    Text("各模块")
-                } footer: {
-                    Text("数字是从教务的培养计划页面上读出来的，以学校页面为准。")
+            if !app.plan.sections.isEmpty {
+                overview
+                ForEach(app.plan.sections) { section in
+                    moduleSection(section)
                 }
             }
         }
@@ -77,19 +46,120 @@ struct PlanView: View {
             }
         }
         .sheet(isPresented: $showWebPage) {
-            WebSheet(title: "培养计划", urlString: "http://jwgl2018.xatu.edu.cn/eams/myPlanCompl.action")
+            WebSheet(title: "计划完成情况", urlString: "http://jwgl2018.xatu.edu.cn/eams/myPlanCompl.action")
         }
         .task {
-            if app.plan.rows.isEmpty { await app.refreshPlan() }
+            if app.plan.sections.isEmpty { await app.refreshPlan() }
         }
     }
 
-    private var creditText: String {
-        "\(short(app.plan.totalEarned))"
+    private var overview: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(number(app.plan.totalEarned))
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    Text("/ \(number(app.plan.totalRequired)) 学分")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                ProgressView(value: app.plan.progress)
+                    .tint(.blue)
+                HStack(spacing: 12) {
+                    if !app.plan.major.isEmpty {
+                        Text(app.plan.major).lineLimit(1)
+                    }
+                    if !app.plan.gpa.isEmpty {
+                        Text("GPA \(app.plan.gpa)")
+                    }
+                    if app.plan.shortfall > 0 {
+                        Text("还差 \(number(app.plan.shortfall)) 学分")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("毕业学分")
+        }
     }
 
-    private func short(_ value: Double) -> String {
+    private func moduleSection(_ section: PlanSection) -> some View {
+        Section {
+            sectionRow(section, showBar: true)
+
+            if !section.courses.isEmpty {
+                DisclosureGroup("课程 \(section.courses.count) 门") {
+                    ForEach(section.courses) { course in
+                        courseRow(course)
+                    }
+                }
+                .font(.subheadline)
+            }
+
+            ForEach(section.children) { child in
+                DisclosureGroup {
+                    ForEach(child.courses) { course in
+                        courseRow(course)
+                    }
+                    if child.courses.isEmpty {
+                        Text("这下面没有课").font(.footnote).foregroundStyle(.secondary)
+                    }
+                } label: {
+                    sectionRow(child, showBar: true)
+                }
+                .font(.subheadline)
+            }
+        } header: {
+            Text(section.title)
+        }
+    }
+
+    private func sectionRow(_ section: PlanSection, showBar: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(section.title)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                Text("\(number(section.earned)) / \(number(section.required))")
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(section.shortfall <= 0 ? Color.green : Color.secondary)
+            }
+            if showBar && section.required > 0 {
+                ProgressView(value: section.progress)
+                    .tint(section.shortfall <= 0 ? Color.green : Color.blue)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func courseRow(_ course: PlanCourse) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(course.name)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(course.code)
+                    if !course.score.isEmpty, course.score != "--" {
+                        Text(course.score)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Text("\(number(course.earned)) / \(number(course.required))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(course.passed ? Color.secondary : Color.orange)
+        }
+    }
+
+    private func number(_ value: Double) -> String {
         if value == value.rounded() { return String(Int(value)) }
-        return String(format: "%.1f", value)
+        return String(format: "%.2f", value)
+            .replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
     }
 }
