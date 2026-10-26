@@ -33,10 +33,37 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
         .overlay(alignment: .top) {
-            InAppNotificationHost(
-                title: "通知权限还没打开",
-                message: "点一下去设置里打开通知，上课和考试前才会提醒你。"
-            )
+            if let notice = app.inAppNotice {
+                InAppNotificationLayer(
+                    notice: notice,
+                    onTap: {
+                        switch notice.kind {
+                        case .exam: app.deepLink = .exam
+                        case .grade: app.deepLink = .grade
+                        }
+                        app.dismissNotice()
+                    },
+                    onClose: { app.dismissNotice() }
+                )
+                .animation(InAppNotificationLayer.bannerAnimation, value: app.inAppNotice)
+            }
+        }
+        .sheet(item: $app.deepLink) { link in
+            NavigationStack {
+                Group {
+                    switch link {
+                    case .exam:
+                        ExamView()
+                    case .grade:
+                        GradeView()
+                    }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("完成") { app.deepLink = nil }
+                    }
+                }
+            }
         }
     }
 }

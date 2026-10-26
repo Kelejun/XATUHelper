@@ -1,5 +1,37 @@
 import Foundation
+import SwiftUI
 import Combine
+
+// MARK: - 应用内通知
+
+/// 拿到新数据时顶部弹的那条横幅
+enum InAppNoticeKind: String, Identifiable {
+    case exam
+    case grade
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .exam: return "有新的考试安排"
+        case .grade: return "有新的成绩公布"
+        }
+    }
+}
+
+struct InAppNotice: Identifiable, Equatable {
+    var kind: InAppNoticeKind
+    var message: String
+    var id: String { kind.rawValue }
+}
+
+/// 点横幅后要打开的页面
+enum DeepLink: String, Identifiable {
+    case exam
+    case grade
+
+    var id: String { rawValue }
+}
 
 @MainActor
 final class AppState: ObservableObject {
@@ -51,6 +83,8 @@ final class AppState: ObservableObject {
     @Published var plan: PlanSnapshot = .empty
     @Published var planNeedsLogin = false
     @Published var planCatalog: PlanCatalog = PlanCatalogStore.load()
+    @Published var inAppNotice: InAppNotice?
+    @Published var deepLink: DeepLink?
     @Published var planFetchedAt: Date?
     @Published var planLoading = false
     @Published var planError: String?
@@ -160,7 +194,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - 派生状态
+// MARK: - 派生状态
 
     var currentWeek: Int { week(of: Date()) }
 
@@ -513,9 +547,11 @@ final class AppState: ObservableObject {
         do {
             let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
             let target = semesterID ?? fallback
+            let previous = exams
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
             examsFetchedAt = Date()
             examStore.save(exams, at: examsFetchedAt ?? Date())
+            notifyIfNewExams(previous: previous, current: exams, semesterID: target)
             await rescheduleNotifications()
         } catch {
             examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
@@ -532,6 +568,7 @@ final class AppState: ObservableObject {
         gradeSummary = nil
         if let scope { gradeScope = scope }
         do {
+            let previous = grades
             if gradeScope == .all {
                 grades = try await withReloginValue { try await self.eams.fetchAllGrades() }
             } else {
@@ -539,6 +576,7 @@ final class AppState: ObservableObject {
                 let target = semesterID ?? fallback
                 grades = try await withReloginValue { try await self.eams.fetchGrades(semesterID: target) }
             }
+            notifyIfNewGrades(previous: previous, current: grades)
             gradeSummary = EamsService.lastGradeSummary
             gradesFetchedAt = Date()
             gradeStore.save(grades, at: gradesFetchedAt ?? Date())
@@ -546,6 +584,46 @@ final class AppState: ObservableObject {
             gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
         gradesLoading = false
+    }
+
+    // MARK: - 新内容提示
+
+    /// 考试：这次多了几场以前没见过的（按 id + 时间 + 考场认）
+    private func notifyIfNewExams(previous: [ExamRecord], current: [ExamRecord], semesterID: String) {
+        guard !previous.isEmpty, semesterID == selectedSemesterID else { return }
+        let fresh = current.filter { exam in
+            !previous.contains { $0.id == exam.id && $0.time == exam.time && $0.room == exam.room }
+        }
+        guard !fresh.isEmpty else { return }
+        let names = fresh.prefix(2).map(\.course).joined(separator: "、")
+        let tail = fresh.count > 2 ? " 等 \(fresh.count) 场" : ""
+        showNotice(InAppNotice(kind: .exam, message: names + tail))
+    }
+
+    /// 成绩：以前没分或者分数变了
+    private func notifyIfNewGrades(previous: [GradeRecord], current: [GradeRecord]) {
+        guard !previous.isEmpty else { return }
+        let fresh = current.filter { grade in
+            guard !grade.score.isEmpty, grade.score != "--" else { return false }
+            guard let old = previous.first(where: { $0.id == grade.id }) else { return true }
+            return old.score.isEmpty || old.score == "--" || old.score != grade.score
+        }
+        guard !fresh.isEmpty else { return }
+        let names = fresh.prefix(2).map { "\($0.course) \($0.score)" }.joined(separator: "、")
+        let tail = fresh.count > 2 ? " 等 \(fresh.count) 门" : ""
+        showNotice(InAppNotice(kind: .grade, message: names + tail))
+    }
+
+    private func showNotice(_ notice: InAppNotice) {
+        withAnimation {
+            inAppNotice = notice
+        }
+    }
+
+    func dismissNotice() {
+        withAnimation {
+            inAppNotice = nil
+        }
     }
 
     // MARK: - 培养计划

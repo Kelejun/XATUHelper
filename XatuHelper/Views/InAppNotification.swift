@@ -81,57 +81,31 @@ struct InAppNotificationBanner: View {
     }
 }
 
-/// 把横幅挂在最上层的容器：进来先播一次，点一下跳系统设置。
-struct InAppNotificationHost: View {
-    private static let bannerAnimation = Animation.spring(response: 0.45, dampingFraction: 0.82)
+/// 挂在根视图上的容器：负责出现/消失的同一条动画，和 6 秒自动收回。
+struct InAppNotificationLayer: View {
+    static let bannerAnimation = Animation.spring(response: 0.45, dampingFraction: 0.82)
 
-    var title: String
-    var message: String
-    @State private var isShowing = false
-    @State private var appeared = false
+    var notice: InAppNotice
+    var onTap: () -> Void
+    var onClose: () -> Void
 
     var body: some View {
-        Color.clear
-            .overlay(alignment: .top) {
-                if isShowing {
-                    InAppNotificationBanner(
-                        title: title,
-                        message: message,
-                        onTap: openSettings,
-                        onClose: dismiss
-                    )
-                    .padding(.horizontal, 10)
-                    .transition(
-                        .move(edge: .top)
-                            .combined(with: .opacity)
-                            .combined(with: .scale(scale: 0.98, anchor: .top))
-                    )
-                }
-            }
-            .allowsHitTesting(isShowing)
-            .task {
-                guard !appeared else { return }
-                appeared = true
-                try? await Task.sleep(nanoseconds: 400 * 1_000_000)
-                withAnimation(Self.bannerAnimation) {
-                    isShowing = true
-                }
-                // 6 秒后自动收回去，给用户留够点击时间
-                try? await Task.sleep(nanoseconds: 6 * 1_000_000_000)
-                if isShowing { dismiss() }
-            }
-    }
-
-    private func dismiss() {
-        // 和出现用同一条曲线，退回去才和进来对称
-        withAnimation(Self.bannerAnimation) {
-            isShowing = false
+        InAppNotificationBanner(
+            title: notice.kind.title,
+            message: notice.message,
+            onTap: onTap,
+            onClose: onClose
+        )
+        .padding(.horizontal, 10)
+        .transition(
+            .move(edge: .top)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.98, anchor: .top))
+        )
+        .task(id: notice.id) {
+            try? await Task.sleep(nanoseconds: 6 * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            onClose()
         }
-    }
-
-    private func openSettings() {
-        dismiss()
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
     }
 }
