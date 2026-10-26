@@ -625,6 +625,12 @@ final class AppState: ObservableObject {
         electricityError = nil
     }
 
+    /// 充值页地址：走缴费平台的 casLogin，用现有 CAS 票据静默登录后停在落地页。
+    /// 直接开充值路由/注入 token 都会被页面的登录态校验拦成「系统维护」。
+    func chargePage() async -> (url: String, hash: String?)? {
+        (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
+    }
+
     func loadSchools() async throws -> [DormOption] {
         try await withPay { try await self.pay.schools(projectID: $0.id) }
     }
