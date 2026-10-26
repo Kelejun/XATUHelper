@@ -725,8 +725,10 @@ final class AppState: ObservableObject {
             await refreshElectricity()
         }
 
-        // 四份数据错峰过期，启动时最多补一份最该补的，避免一窝蜂联网
-        let overdue: [CacheKind] = CacheKind.allCases.filter { isStale($0) }
+        // 错峰过期，启动时最多补一份最该补的，避免一窝蜂联网。
+        // 学业完成情况不参与启动补拉，只在进页面且过期时才拉。
+        let launchKinds: [CacheKind] = [.timetable, .grades, .exams]
+        let overdue: [CacheKind] = launchKinds.filter { isStale($0) }
         guard let target = overdue.max(by: { overdueRatio($0) < overdueRatio($1) }) else { return }
 
         try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
