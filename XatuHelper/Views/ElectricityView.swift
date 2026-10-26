@@ -22,7 +22,7 @@ struct ElectricityView: View {
                         ElectricityHistoryView()
                     }
                 } header: {
-                    Text("近 7 天")
+                    Text("近 7 天用量")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
@@ -134,44 +134,38 @@ struct ElectricityView: View {
         .padding(.vertical, 4)
     }
 
-    /// 近几天的余额曲线；点太少就直说，别画一条没有意义的线
+    /// 近几天的每日用量柱状图：余额曲线太平，看不出每天花了多少
     @ViewBuilder
     private var trendChart: some View {
-        let trend = app.electricityTrend()
+        let points = usagePoints
 
-        if trend.count < 2 {
-            Text("再攒几天就能看到曲线了")
+        if points.isEmpty {
+            Text("再攒几天就能看到每天用多少了")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Chart(trend) { record in
-                    LineMark(
-                        x: .value("日期", record.date),
-                        y: .value("余额", record.balance)
+                Chart(points) { point in
+                    BarMark(
+                        x: .value("日期", point.date, unit: .day),
+                        y: .value("用量", point.usage)
                     )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(.blue)
-
-                    PointMark(
-                        x: .value("日期", record.date),
-                        y: .value("余额", record.balance)
-                    )
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.blue.gradient)
+                    .cornerRadius(4)
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
                         AxisGridLine()
                         AxisValueLabel {
                             if let amount = value.as(Double.self) {
-                                Text("¥\(Int(amount))")
+                                Text("¥" + String(format: amount < 10 ? "%.1f" : "%.0f", amount))
                             }
                         }
                     }
                 }
                 .frame(height: 150)
 
-                if let used = usageText(trend) {
+                if let used = usageText(app.electricityTrend()) {
                     Text(used)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -179,6 +173,26 @@ struct ElectricityView: View {
             }
             .padding(.vertical, 4)
         }
+    }
+
+    private struct UsagePoint: Identifiable {
+        let date: Date
+        let usage: Double
+        var id: Date { date }
+    }
+
+    /// 每天用量 = 前一天余额 - 当天余额；余额涨了（充值）就记 0
+    private var usagePoints: [UsagePoint] {
+        let trend = app.electricityTrend()
+        guard trend.count >= 2 else { return [] }
+        var points: [UsagePoint] = []
+        for index in 1..<trend.count {
+            let previous = trend[index - 1]
+            let current = trend[index]
+            guard previous.day != current.day else { continue }
+            points.append(UsagePoint(date: current.date, usage: max(0, previous.balance - current.balance)))
+        }
+        return points
     }
 
     private func usageText(_ trend: [ElectricityRecord]) -> String? {
