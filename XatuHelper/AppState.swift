@@ -518,9 +518,15 @@ final class AppState: ObservableObject {
     }
 
     func courseInfo(for course: PlanCourse) -> PlanCourseInfo? {
-        planCatalog.courses.first { info in
-            if !course.code.isEmpty, info.code == course.code { return true }
-            return info.name == course.name
+        let code = course.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = course.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !code.isEmpty, let hit = planCatalog.courses.first(where: {
+            $0.code.trimmingCharacters(in: .whitespacesAndNewlines) == code
+        }) {
+            return hit
+        }
+        return planCatalog.courses.first {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines) == name
         }
     }
 

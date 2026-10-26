@@ -62,6 +62,7 @@ struct PlanView: View {
         }
         .task {
             if app.plan.sections.isEmpty { await app.refreshPlan() }
+            await app.refreshPlanCatalogIfNeeded()
         }
     }
 
