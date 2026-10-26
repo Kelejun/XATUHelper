@@ -47,6 +47,7 @@ final class AppState: ObservableObject {
     @Published var gradeScope: GradeScope = .current
     @Published var gradesLoading = false
     @Published var plan: PlanSnapshot = .empty
+    @Published var planNeedsLogin = false
     @Published var planLoading = false
     @Published var planError: String?
     @Published var gradesError: String?
@@ -484,15 +485,32 @@ final class AppState: ObservableObject {
         guard !planLoading else { return }
         planLoading = true
         planError = nil
+        planNeedsLogin = false
         do {
-            plan = try await withReloginValue { try await self.eams.fetchPlan() }
+            // 不在这里自动重登：培养计划页一进来就拉，自动重登会把 CAS 登录次数打满
+            plan = try await eams.fetchPlan()
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
             }
+        } catch AppError.sessionExpired {
+            planNeedsLogin = true
+            planError = "教务的登录状态过期了，点下面重新登录一次就好"
         } catch {
             planError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
         planLoading = false
+    }
+
+    /// 用户手动点「重新登录」，只走一次，不受自动重登的冷却限制
+    func reloginNow() async {
+        do {
+            try await rawRelogin()
+            recordLoginTime()
+            planNeedsLogin = false
+            await refreshPlan()
+        } catch {
+            planError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     // MARK: - 电费

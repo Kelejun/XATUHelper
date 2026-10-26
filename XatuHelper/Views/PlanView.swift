@@ -21,6 +21,9 @@ struct PlanView: View {
                 Section {
                     Text(error).font(.footnote).foregroundStyle(.secondary)
                     Button("重新读一次") { Task { await app.refreshPlan() } }
+                    if app.planNeedsLogin {
+                        Button("重新登录") { Task { await app.reloginNow() } }
+                    }
                     Button("在网页里打开") { showWebPage = true }
                 } header: {
                     Text("没读出来")
