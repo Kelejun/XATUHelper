@@ -268,12 +268,28 @@ struct CourseWidgetView: View {
         )
     }
 
-    /// 用课名算一个稳定的下标，重启也不会换色
+    /// 和 app 里 CoursePalette 同一套颜色，下标由 App 端算好写进快照
     private static let palette: [Color] = [
-        .blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown
+        Color(red: 0.20, green: 0.47, blue: 0.90),
+        Color(red: 0.85, green: 0.42, blue: 0.20),
+        Color(red: 0.18, green: 0.60, blue: 0.45),
+        Color(red: 0.58, green: 0.35, blue: 0.75),
+        Color(red: 0.82, green: 0.55, blue: 0.12),
+        Color(red: 0.12, green: 0.53, blue: 0.68),
+        Color(red: 0.74, green: 0.30, blue: 0.45),
+        Color(red: 0.35, green: 0.50, blue: 0.25),
+        Color(red: 0.45, green: 0.38, blue: 0.80),
+        Color(red: 0.72, green: 0.52, blue: 0.30),
+        Color(red: 0.16, green: 0.58, blue: 0.58),
+        Color(red: 0.62, green: 0.42, blue: 0.62),
+        Color(red: 0.30, green: 0.45, blue: 0.62),
+        Color(red: 0.78, green: 0.38, blue: 0.32)
     ]
 
     private static func color(for course: WidgetSnapshot.Course) -> Color {
+        if let index = course.colorIndex {
+            return palette[index % palette.count]
+        }
         var hash = 5381
         for scalar in course.name.unicodeScalars {
             hash = (hash &* 33) &+ Int(scalar.value)

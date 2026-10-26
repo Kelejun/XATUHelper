@@ -8,6 +8,7 @@ struct WidgetSnapshot: Codable {
         var room: String
         var startMinutes: Int
         var endMinutes: Int
+        var colorIndex: Int? = nil
     }
 
     struct Break: Codable, Hashable {

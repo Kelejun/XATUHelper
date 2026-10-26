@@ -41,6 +41,11 @@ enum CoursePalette {
         return color(forCourseKey: block.courseKey)
     }
 
+    /// 小组件拿不到这个类，把下标写进快照让它自己上色
+    static func index(forCourseKey key: String) -> Int? {
+        registeredKeys.firstIndex(of: key).map { $0 % colors.count }
+    }
+
     static func color(forCourseKey key: String) -> Color {
         if let index = registeredKeys.firstIndex(of: key) {
             return colors[index % colors.count]

@@ -20,7 +20,8 @@ extension AppState {
                 name: block.name,
                 room: block.shortRoom,
                 startMinutes: PeriodSchedule.startMinutes(of: block),
-                endMinutes: PeriodSchedule.endMinutes(of: block)
+                endMinutes: PeriodSchedule.endMinutes(of: block),
+                colorIndex: CoursePalette.index(forCourseKey: block.courseKey)
             )
         }.sorted { $0.startMinutes < $1.startMinutes }
 
@@ -36,7 +37,8 @@ extension AppState {
                     name: block.name,
                     room: block.shortRoom,
                     startMinutes: PeriodSchedule.startMinutes(of: block),
-                    endMinutes: PeriodSchedule.endMinutes(of: block)
+                    endMinutes: PeriodSchedule.endMinutes(of: block),
+                    colorIndex: CoursePalette.index(forCourseKey: block.courseKey)
                 )
             }
             .sorted { $0.startMinutes < $1.startMinutes }
