@@ -121,10 +121,10 @@ struct SchoolCalendarView: View {
                     HStack {
                         Text(span.label).font(.headline)
                         Spacer()
-                        if let days = remainingDays(span.end) {
-                            Text(days >= 0 ? "还有 \(days) 天结课" : "已结课")
+                        if let status = semesterStatus(span) {
+                            Text(status.text)
                                 .font(.caption)
-                                .foregroundStyle(days >= 0 ? Color.secondary : Color.orange)
+                                .foregroundStyle(status.finished ? Color.orange : Color.secondary)
                         }
                     }
                     Text("开学 \(dayText(span.start)) · 结课 \(dayText(span.end))")
@@ -134,6 +134,25 @@ struct SchoolCalendarView: View {
                 .padding(.vertical, 2)
             }
         }
+    }
+
+    /// 学期状态：还没开学 / 已经开学 N 天 / 学期已结束 N 天
+    private func semesterStatus(_ span: CalendarService.SemesterSpan) -> (text: String, finished: Bool)? {
+        guard let start = AppState.parseDate(span.start), let end = AppState.parseDate(span.end) else {
+            return nil
+        }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        if today < start {
+            let days = calendar.dateComponents([.day], from: today, to: start).day ?? 0
+            return ("还有 \(days) 天开学", false)
+        }
+        if today <= end {
+            let days = calendar.dateComponents([.day], from: start, to: today).day ?? 0
+            return ("已经开学 \(days) 天", false)
+        }
+        let days = calendar.dateComponents([.day], from: end, to: today).day ?? 0
+        return ("学期已结束 \(days) 天", true)
     }
 
     @ViewBuilder

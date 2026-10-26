@@ -5,6 +5,8 @@ struct PlanView: View {
     @EnvironmentObject var app: AppState
     @State private var showWebPage = false
     @State private var searchText = ""
+    /// nil 表示不筛选
+    @State private var termFilter: String?
 
     var body: some View {
         Form {
@@ -33,7 +35,7 @@ struct PlanView: View {
             if !app.plan.sections.isEmpty {
                 if searchText.isEmpty {
                     overview
-                    ForEach(app.plan.sections) { section in
+                    ForEach(filteredSections) { section in
                         moduleSection(section)
                     }
                 } else {
@@ -45,6 +47,34 @@ struct PlanView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        termFilter = nil
+                    } label: {
+                        if termFilter == nil {
+                            Label("全部学期", systemImage: "checkmark")
+                        } else {
+                            Text("全部学期")
+                        }
+                    }
+                    Divider()
+                    ForEach(availableTerms, id: \.self) { term in
+                        Button {
+                            termFilter = term
+                        } label: {
+                            if termFilter == term {
+                                Label("学期 \(term)", systemImage: "checkmark")
+                            } else {
+                                Text("学期 \(term)")
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: termFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .disabled(availableTerms.isEmpty)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task {
@@ -205,6 +235,45 @@ struct PlanView: View {
         return result
     }
 
+    /// 所有出现在教学计划里的开课学期，按数字排序
+    private var availableTerms: [String] {
+        var all: Set<String> = []
+        func walk(_ section: PlanSection) {
+            for course in section.courses {
+                guard let info = app.courseInfo(for: course) else { continue }
+                for part in info.term.split(separator: ",") {
+                    let term = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !term.isEmpty { all.insert(term) }
+                }
+            }
+            section.children.forEach(walk)
+        }
+        app.plan.sections.forEach(walk)
+        return all.sorted { (Int($0) ?? 999) < (Int($1) ?? 999) }
+    }
+
+    private func matchesTerm(_ course: PlanCourse) -> Bool {
+        guard let filter = termFilter else { return true }
+        guard let info = app.courseInfo(for: course) else { return false }
+        return info.term
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains(filter)
+    }
+
+    /// 按学期筛掉不匹配的课程，顺带去掉空模块
+    private var filteredSections: [PlanSection] {
+        guard termFilter != nil else { return app.plan.sections }
+        func prune(_ section: PlanSection) -> PlanSection? {
+            var copy = section
+            copy.courses = section.courses.filter(matchesTerm)
+            copy.children = section.children.compactMap(prune)
+            guard !copy.courses.isEmpty || !copy.children.isEmpty else { return nil }
+            return copy
+        }
+        return app.plan.sections.compactMap(prune)
+    }
+
     private func detailFor(_ course: PlanCourse) -> String? {
         guard let info = app.courseInfo(for: course) else { return nil }
         return detailText(info)
@@ -212,7 +281,9 @@ struct PlanView: View {
 
     private func detailText(_ info: PlanCourseInfo) -> String {
         var parts: [String] = []
-        if !info.term.isEmpty { parts.append(info.term.contains("学期") || info.term.contains("第") ? info.term : "\(info.term) 学期") }
+        if !info.term.isEmpty {
+            parts.append(info.term.contains("学期") ? info.term : "学期 \(info.term)")
+        }
         if !info.hours.isEmpty { parts.append("\(info.hours) 学时") }
         if !info.nature.isEmpty { parts.append(info.nature) }
         return parts.joined(separator: " · ")
