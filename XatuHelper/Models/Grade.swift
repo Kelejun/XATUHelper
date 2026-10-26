@@ -3,7 +3,7 @@ import Foundation
 /// 成绩页的两种视角
 enum GradeScope: String, CaseIterable, Identifiable {
     case current = "当前学期"
-    case all = "所有学期成绩"
+    case all = "所有学期"
 
     var id: String { rawValue }
 }
