@@ -617,7 +617,7 @@ final class AppState: ObservableObject {
             project = try? await withPay { $0 }
         }
         guard let code = project?.factoryCode, !code.isEmpty else { return nil }
-        return ("https://jfpay.xatu.edu.cn/casLogin/", "#/chargeElectricity\(code)")
+        return ("https://jfpay.xatu.edu.cn/casLogin/", "https://jfpay.xatu.edu.cn/#/chargeElectricity\(code)")
     }
 
     private static func xatuCookie(named name: String) -> String? {

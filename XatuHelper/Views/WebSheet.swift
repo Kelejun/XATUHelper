@@ -5,8 +5,8 @@ import WebKit
 struct WebSheet: View {
     let title: String
     let urlString: String
-    /// 网页登录/换票完成后要跳的路由，比如 jfpay 的 "#/chargeElectricityE011"
-    var followUpHash: String? = nil
+    /// 换票落地后要整页跳到的地址（用真正的 navigation，不是改 hash）
+    var followUpURL: String? = nil
     /// 进页面前用 document.cookie 写进去的键值（绕开 path 不匹配）
     var cookies: [String: String] = [:]
 
@@ -31,7 +31,7 @@ struct WebSheet: View {
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash, cookies: cookies)
+                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL)
                         .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
@@ -71,8 +71,7 @@ private struct WebPage: UIViewRepresentable {
     let url: URL
     @Binding var isLoading: Bool
     @Binding var errorText: String?
-    let followUpHash: String?
-    let cookies: [String: String]
+    let followUpURL: String?
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -87,16 +86,6 @@ private struct WebPage: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
-        if !cookies.isEmpty {
-            let js = cookies.map { "document.cookie = '\($0.key)=\($0.value); path=/; max-age=86400';" }
-                .joined(separator: "\n")
-            controller.addUserScript(WKUserScript(
-                source: js,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            ))
-        }
-
         config.userContentController = controller
 
         let web = WKWebView(frame: .zero, configuration: config)
@@ -107,15 +96,26 @@ private struct WebPage: UIViewRepresentable {
         // 把 app 已经拿到的 xatu cookie 带进 WebKit 的存储，少登一次。
         // setCookie 是异步的，等全部落盘再发第一个请求，否则第一次会被踢去登录页。
         let store = web.configuration.websiteDataStore.httpCookieStore
-        let cookies = (HTTPCookieStorage.shared.cookies ?? [])
-            .filter { $0.domain.contains("xatu.edu.cn") }
-        let group = DispatchGroup()
-        for cookie in cookies {
-            group.enter()
-            store.setCookie(cookie) { group.leave() }
-        }
-        group.notify(queue: .main) {
-            web.load(URLRequest(url: url))
+        // 页面自己会写 token；先清掉旧的，免得 SPA 启动时读到过期值、后面怎么跳都报「系统维护」
+        store.getAllCookies { existing in
+            let stale = existing.filter { $0.domain.contains("jfpay.xatu.edu.cn") }
+            let purge = DispatchGroup()
+            for cookie in stale {
+                purge.enter()
+                store.delete(cookie) { purge.leave() }
+            }
+            purge.notify(queue: .main) {
+                let cookies = (HTTPCookieStorage.shared.cookies ?? [])
+                    .filter { $0.domain.contains("xatu.edu.cn") && !$0.domain.contains("jfpay.xatu.edu.cn") }
+                let group = DispatchGroup()
+                for cookie in cookies {
+                    group.enter()
+                    store.setCookie(cookie) { group.leave() }
+                }
+                group.notify(queue: .main) {
+                    web.load(URLRequest(url: url))
+                }
+            }
         }
         return web
     }
@@ -123,7 +123,7 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpHash: followUpHash)
+        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL)
     }
 
     /// 把 navigator.geolocation 接到 window.webkit.messageHandlers.location
@@ -179,15 +179,15 @@ private struct WebPage: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
         @Binding private var errorText: String?
-        private let followUpHash: String?
+        private let followUpURL: String?
         private var appliedFollowUp = false
         weak var webView: WKWebView?
         private let location = LocationBridge()
 
-        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpHash: String?) {
+        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpURL: String?) {
             _isLoading = isLoading
             _errorText = errorText
-            self.followUpHash = followUpHash
+            self.followUpURL = followUpURL
         }
 
         func userContentController(_ userContentController: WKUserContentController,
@@ -260,13 +260,17 @@ private struct WebPage: UIViewRepresentable {
         /// 换票落地后，把 SPA 带到指定路由。等一会儿是因为落地页要先在 mounted 里写 cookie。
         private func applyFollowUpIfNeeded(_ webView: WKWebView) {
             guard !appliedFollowUp,
-                  let hash = followUpHash,
+                  let target = followUpURL,
+                  let targetURL = URL(string: target),
                   let host = webView.url?.host,
-                  host.contains("jfpay.xatu.edu.cn") else { return }
+                  host.contains("jfpay.xatu.edu.cn"),
+                  webView.url?.absoluteString != target else { return }
             appliedFollowUp = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak webView] in
-                let js = "location.href = 'https://jfpay.xatu.edu.cn/\(hash)'"
-                webView?.evaluateJavaScript(js)
+            // 等落地页把 token 写完，再整页重新加载目标地址，SPA 才会用新登录态启动
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak webView] in
+                var request = URLRequest(url: targetURL)
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                webView?.load(request)
             }
         }
 
