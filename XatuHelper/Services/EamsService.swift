@@ -371,6 +371,7 @@ struct EamsService {
         var top: [PlanSection] = []
         var currentTop: Int?
         var currentChild: Int?
+        var currentGrandchild: Int?
         var sequence = 0
 
         for rowMatch in html.regexGroups(#"(<tr[^>]*>)([\s\S]*?)</tr>"#) {
@@ -412,14 +413,24 @@ struct EamsService {
                     shortfall: shortfall
                 )
 
-                let isChild = title.range(of: #"^[（(][一二三四五六七八九十]+[)）]"#, options: .regularExpression) != nil
-                if isChild, let index = currentTop {
+                // 三级标题各有各的写法：一级「一 通识教育」、二级「(一) 通识必修」、三级「1 英语分组」
+                let isLevel2 = title.range(of: #"^[（(][一二三四五六七八九十]+[)）]"#, options: .regularExpression) != nil
+                let isLevel3 = title.range(of: #"^[0-9]+[ 　]"#, options: .regularExpression) != nil
+
+                if let index = currentTop, index < top.count,
+                   let child = currentChild, child < top[index].children.count,
+                   isLevel3 {
+                    top[index].children[child].children.append(section)
+                    currentGrandchild = top[index].children[child].children.count - 1
+                } else if let index = currentTop, index < top.count, isLevel2 {
                     top[index].children.append(section)
                     currentChild = top[index].children.count - 1
+                    currentGrandchild = nil
                 } else {
                     top.append(section)
                     currentTop = top.count - 1
                     currentChild = nil
+                    currentGrandchild = nil
                 }
                 continue
             }
@@ -436,8 +447,12 @@ struct EamsService {
                 score: cells[5],
                 passed: cells[6].contains("是")
             )
-            guard let index = currentTop else { continue }
-            if let child = currentChild {
+            guard let index = currentTop, index < top.count else { continue }
+            if let child = currentChild, child < top[index].children.count,
+               let grandchild = currentGrandchild,
+               grandchild < top[index].children[child].children.count {
+                top[index].children[child].children[grandchild].courses.append(course)
+            } else if let child = currentChild, child < top[index].children.count {
                 top[index].children[child].courses.append(course)
             } else {
                 top[index].courses.append(course)

@@ -89,32 +89,36 @@ struct PlanView: View {
     private func moduleSection(_ section: PlanSection) -> some View {
         Section {
             sectionRow(section, showBar: true)
-
-            if !section.courses.isEmpty {
-                DisclosureGroup("课程 \(section.courses.count) 门") {
-                    ForEach(section.courses) { course in
-                        courseRow(course)
-                    }
-                }
-                .font(.subheadline)
-            }
-
-            ForEach(section.children) { child in
-                DisclosureGroup {
-                    ForEach(child.courses) { course in
-                        courseRow(course)
-                    }
-                    if child.courses.isEmpty {
-                        Text("这下面没有课").font(.footnote).foregroundStyle(.secondary)
-                    }
-                } label: {
-                    sectionRow(child, showBar: true)
-                }
-                .font(.subheadline)
-            }
+            sectionBody(section)
         } header: {
             Text(section.title)
         }
+    }
+
+    /// 模块套模块：一级「一 通识教育」下面有「(二) 通识限选」，再下面才是「1 英语分组」，最后才是课。
+    private func sectionBody(_ section: PlanSection) -> AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                if !section.courses.isEmpty {
+                    DisclosureGroup("课程 \(section.courses.count) 门") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(section.courses) { course in
+                                courseRow(course)
+                            }
+                        }
+                    }
+                    .font(.subheadline)
+                }
+                ForEach(section.children) { child in
+                    DisclosureGroup {
+                        sectionBody(child)
+                    } label: {
+                        sectionRow(child, showBar: true)
+                    }
+                    .font(.subheadline)
+                }
+            }
+        )
     }
 
     private func sectionRow(_ section: PlanSection, showBar: Bool) -> some View {
