@@ -43,7 +43,7 @@ struct InfoView: View {
             case .checkin: return "按时点一下，别断签"
             case .leave: return "请假、销假都在这里"
             case .calendar: return "什么时候放假"
-            case .jwgl: return "成绩、选课、学籍都在里面"
+            case .jwgl: return ""
             case .ehall: return ""
             case .settings: return ""
             }
