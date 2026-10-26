@@ -609,7 +609,7 @@ final class AppState: ObservableObject {
     /// 充值页：直接打开缴费平台首页，让页面自己走登录和路由。
     /// 试过直接开充值路由、注入 token、CAS 落地再跳，都会被页面的登录态校验拦成「系统维护」。
     func chargePage() async -> (url: String, hash: String?)? {
-        (url: "https://jfpay.xatu.edu.cn/", hash: nil)
+        (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
     }
 
     func loadSchools() async throws -> [DormOption] {
