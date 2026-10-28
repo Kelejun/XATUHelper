@@ -188,8 +188,8 @@ struct ElectricityView: View {
                 }
                 .frame(height: 150)
 
-                if let used = usageText(app.electricityTrend()) {
-                    Text(used)
+                if let average = averageUsageText(app.electricityTrend()) {
+                    Text(average)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -218,10 +218,16 @@ struct ElectricityView: View {
         return points
     }
 
-    private func usageText(_ trend: [ElectricityRecord]) -> String? {
+    private func averageUsageText(_ trend: [ElectricityRecord]) -> String? {
         guard let first = trend.first, let last = trend.last, trend.count >= 2 else { return nil }
-        let used = first.balance - last.balance
-        return String(format: "这几天用了 ¥%.2f", used)
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: first.date),
+            to: Calendar.current.startOfDay(for: last.date)
+        ).day ?? 0
+        guard days > 0 else { return nil }
+        let used = usagePoints.reduce(0) { $0 + $1.usage }
+        return String(format: "平均每天用 ¥%.2f", used / Double(days))
     }
 
     @ViewBuilder
