@@ -219,7 +219,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd \"$SRCROOT\"\nHASH=$(git rev-parse --short HEAD 2>/dev/null || echo dev)\nif ! git diff --quiet --ignore-submodules HEAD 2>/dev/null; then\n  HASH=\"$HASH-dirty\"\nfi\nDATE=$(date +%Y%m%d)\ncat > \"$SRCROOT/XatuHelper/Services/BuildInfo.swift\" <<SWIFTEOF\nimport Foundation\n\nenum BuildInfo {\n    static let commit = \"$HASH\"\n    static let builtAt = \"$DATE\"\n}\nSWIFTEOF\n";
+			shellScript = "cd \"$SRCROOT\"\nHASH=$(git rev-parse --short HEAD 2>/dev/null || echo dev)\nDATE=$(date +%Y%m%d)\ncat > \"$SRCROOT/XatuHelper/Services/BuildInfo.swift\" <<SWIFTEOF\nimport Foundation\n\nenum BuildInfo {\n    static let commit = \"$HASH\"\n    static let builtAt = \"$DATE\"\n}\nSWIFTEOF\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
