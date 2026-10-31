@@ -12,3 +12,6 @@ tmp/
 
 # macOS
 .DS_Store
+
+# Skip migration local build outputs
+build-skip-ios/

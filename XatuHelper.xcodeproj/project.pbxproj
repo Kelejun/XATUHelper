@@ -167,11 +167,10 @@
 				};
 			};
 			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "XatuHelper" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
-				Base,
+				"zh-Hans",
 			);
 			mainGroup = 000000000000000000000002;
 			minimizedProjectReferenceProxies = 1;

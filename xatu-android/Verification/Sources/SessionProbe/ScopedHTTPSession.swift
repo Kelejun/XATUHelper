@@ -1,0 +1,1 @@
+../../../Sources/XatuAndroid/Services/ScopedHTTPSession.swift
