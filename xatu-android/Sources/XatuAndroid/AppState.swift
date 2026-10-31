@@ -41,11 +41,15 @@ enum DeepLink: String, Identifiable {
 final class AppState {
     var occurrences: [CourseOccurrence] = [] {
         didSet {
+            timetableIndex = TimetableIndex(occurrences)
+            timetableRevision += 1
             let keys = occurrences.map(\.courseKey)
             guard !keys.isEmpty else { return }
             CoursePalette.register(keys)
         }
     }
+    private var timetableIndex = TimetableIndex([])
+    private(set) var timetableRevision = 0
     var unitCount = 12
     var studentID = ""
     var fetchedAt: Date?
@@ -232,7 +236,11 @@ final class AppState {
     }
 
     func occurrences(in week: Int) -> [CourseOccurrence] {
-        occurrences.filter { $0.weeks.contains(week) }
+        timetableIndex.occurrences[week] ?? []
+    }
+
+    func courseBlocks(in week: Int) -> [CourseBlock] {
+        timetableIndex.blocks[week] ?? []
     }
 
     // MARK: - 周次对齐

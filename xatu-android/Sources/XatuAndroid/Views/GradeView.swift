@@ -82,7 +82,7 @@ struct GradeView: View {
             if let error = app.gradesError {
                 Section {
                     Text(error)
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -116,6 +116,7 @@ struct GradeView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("成绩")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索课程名称")
@@ -135,7 +136,7 @@ struct GradeView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal")
+                    ToolbarIcon("line.3.horizontal")
                 }
                 .disabled(app.semesters.isEmpty || app.gradeScope == .all)
             }
@@ -144,7 +145,7 @@ struct GradeView: View {
                 Button {
                     Task { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    ToolbarIcon("arrow.clockwise")
                 }
                 .disabled(app.gradesLoading)
             }
@@ -232,7 +233,7 @@ struct GradeView: View {
                 .font(.title3.weight(.semibold))
                 
             Text(title)
-                .font(.caption2)
+                .font(MD3Type.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -247,7 +248,7 @@ struct GradeView: View {
                     .font(.body.weight(.medium))
                 if !grade.subtitle.isEmpty {
                     Text(grade.subtitle)
-                        .font(.caption)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -256,9 +257,9 @@ struct GradeView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(grade.headline)
-                    .font(.callout.weight(.semibold))
+                    .font(MD3Type.titleMedium)
                 Text("成绩 / 绩点")
-                    .font(.caption2)
+                    .font(MD3Type.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -294,14 +295,14 @@ struct GradeView: View {
         if showDiagnostics {
             Section {
                 Text("接口返回 \(raw.count) 个字符")
-                    .font(.caption)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
 
                 if !raw.isEmpty {
                     Button {
                         UIPasteboard.general.string = raw
                     } label: {
-                        Label("复制原始返回", systemImage: "doc.on.doc")
+                        Label { Text("复制原始返回") } icon: { AppIcon("doc.on.doc") }
                     }
                 }
             } header: {

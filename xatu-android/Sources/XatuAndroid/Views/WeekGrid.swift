@@ -54,6 +54,7 @@ enum PeriodSchedule {
 
 /// 一周课表网格，样式照着系统日历的周视图来。不留时间轴，整宽平分给各天。
 struct WeekGrid: View {
+    @Environment(\.colorScheme) var colorScheme
     let blocks: [CourseBlock]
     let unitCount: Int
     /// 这一周的周一，非当前学期传 nil，表头就只显示星期
@@ -62,8 +63,8 @@ struct WeekGrid: View {
     var showWeekend: Bool = true
     var onSelect: (CourseBlock) -> Void
 
-    private let headerHeight: CGFloat = 40
-    private let minRowHeight: CGFloat = 28
+    private let headerHeight: CGFloat = 56
+    private let minRowHeight: CGFloat = 56
     private let maxRowHeight: CGFloat = 84
     private let dayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
@@ -85,15 +86,13 @@ struct WeekGrid: View {
                 headerRow(dayWidth: dayWidth)
 
                 // 不用 ScrollView：竖把手势让给外层翻周，行高自己缩到能放下
-                ZStack(alignment: .topLeading) {
-                    gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
-                    blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
+                ScrollView(.vertical) {
+                    ZStack(alignment: .topLeading) {
+                        gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
+                        blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
+                    }
+                    .frame(width: proxy.size.width, height: CGFloat(periods) * rowHeight, alignment: .topLeading)
                 }
-                .frame(
-                    width: proxy.size.width,
-                    height: CGFloat(periods) * rowHeight,
-                    alignment: .topLeading
-                )
             }
         }
     }
@@ -102,7 +101,7 @@ struct WeekGrid: View {
 
     private func headerRow(dayWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
-            ForEach(0..<dayCount, id: \.self) { index in
+            ForEach(Array(0..<dayCount), id: \.self) { index in
                 let day = date(at: index)
                 let isToday = day.map { Calendar.current.isDateInToday($0) } ?? false
 
@@ -121,7 +120,7 @@ struct WeekGrid: View {
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.gray.opacity(0.6))
+                .fill(MD3Colors.scheme(colorScheme)["outlineVariant"])
                 .frame(height: 0.5)
         }
     }
@@ -134,20 +133,19 @@ struct WeekGrid: View {
     // MARK: - 网格
 
     private func gridLines(dayWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(0...periods, id: \.self) { row in
-                Rectangle()
-                    .fill(Color.gray.opacity(0.5))
-                    .frame(width: dayWidth * CGFloat(dayCount), height: 0.5)
-                    .offset(y: CGFloat(row) * rowHeight)
+        Path { path in
+            for row in 0...periods {
+                let y = CGFloat(row) * rowHeight
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: dayWidth * CGFloat(dayCount), y: y))
             }
-            ForEach(1..<dayCount, id: \.self) { column in
-                Rectangle()
-                    .fill(Color.gray.opacity(0.5))
-                    .frame(width: 0.5, height: CGFloat(periods) * rowHeight)
-                    .offset(x: CGFloat(column) * dayWidth)
+            for column in 1..<dayCount {
+                let x = CGFloat(column) * dayWidth
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: CGFloat(periods) * rowHeight))
             }
         }
+        .stroke(MD3Colors.scheme(colorScheme)["outlineVariant"], lineWidth: 0.5)
     }
 
     // MARK: - 课程块
@@ -156,15 +154,15 @@ struct WeekGrid: View {
         ForEach(blocks.filter { $0.day <= dayCount }) { block in
             blockView(block, dayWidth: dayWidth, rowHeight: rowHeight)
                 .offset(
-                    x: CGFloat(block.day - 1) * dayWidth + 1.5,
-                    y: CGFloat(block.startPeriod - 1) * rowHeight + 1
+                    x: CGFloat(block.day - 1) * dayWidth + 2,
+                    y: CGFloat(block.startPeriod - 1) * rowHeight + 4
                 )
         }
     }
 
     private func blockView(_ block: CourseBlock, dayWidth: CGFloat, rowHeight: CGFloat) -> some View {
         let tint = color(for: block)
-        let height = rowHeight * CGFloat(block.span) - 2
+        let height = rowHeight * CGFloat(block.span) - 8
 
         return Button {
             onSelect(block)
@@ -176,7 +174,7 @@ struct WeekGrid: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(block.name)
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: 11, weight: .medium))
                         .lineLimit(block.span >= 2 ? 4 : 2)
                         .minimumScaleFactor(0.8)
 
@@ -184,7 +182,7 @@ struct WeekGrid: View {
 
                     if block.span >= 2, !block.room.isEmpty {
                         Text(block.shortRoom)
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -195,9 +193,9 @@ struct WeekGrid: View {
             }
             .padding(.leading, 3)
             .padding(.trailing, 4)
-            .foregroundStyle(tint)
-            .frame(width: dayWidth - 3, height: height, alignment: .topLeading)
-            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+            .foregroundStyle(MD3Colors.scheme(colorScheme)["onSurface"])
+            .frame(width: dayWidth - 4, height: height, alignment: .topLeading)
+            .background(tint.opacity(colorScheme == .dark ? 0.24 : 0.12), in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
     }

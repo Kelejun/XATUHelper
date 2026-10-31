@@ -6,7 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import skip.web.WebEngine
+import androidx.test.platform.app.InstrumentationRegistry
 
 /** Exercise the exact SkipWeb boundary from the production crash stack. */
 @RunWith(AndroidJUnit4::class)
@@ -21,7 +21,8 @@ class WebNavigationRegressionTest {
     }
 
     private fun copiedHeaders(headers: MutableMap<String, String>?): Any {
-        val companion = WebEngine.Companion
+        val loader = InstrumentationRegistry.getInstrumentation().targetContext.classLoader
+        val companion = Class.forName("skip.web.WebEngine", true, loader).getField("Companion").get(null)!!
         // The Swift fileprivate helper has a Kotlin module suffix. Resolve it by name
         // so a module-name change cannot silently bypass this regression test.
         val method = companion.javaClass.methods.single {

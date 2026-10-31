@@ -39,6 +39,7 @@ struct ElectricityHistoryView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("历史余额")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -54,7 +55,7 @@ struct ElectricityHistoryView: View {
                 Text(usage >= 0
                      ? String(format: "用 ¥%.2f", usage)
                      : String(format: "充 ¥%.2f", -usage))
-                    .font(.caption)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
             }
 

@@ -21,7 +21,7 @@ struct PlanView: View {
 
             if let error = app.planError, !app.planLoading {
                 Section {
-                    Text(error).font(.footnote).foregroundStyle(.secondary)
+                    Text(error).font(MD3Type.bodyMedium).foregroundStyle(.secondary)
                     Button("重新读一次") { Task { await app.refreshPlan() } }
                     if app.planNeedsLogin {
                         Button("重新登录") { Task { await app.reloginNow() } }
@@ -43,6 +43,7 @@ struct PlanView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("学业完成情况")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索课程名称")
@@ -53,7 +54,7 @@ struct PlanView: View {
                         termFilter = nil
                     } label: {
                         if termFilter == nil {
-                            Label("全部学期", systemImage: "checkmark")
+                            Label { Text("全部学期") } icon: { AppIcon("checkmark") }
                         } else {
                             Text("全部学期")
                         }
@@ -64,14 +65,14 @@ struct PlanView: View {
                             termFilter = term
                         } label: {
                             if termFilter == term {
-                                Label("学期 \(term)", systemImage: "checkmark")
+                                Label { Text("学期 \(term)") } icon: { AppIcon("checkmark") }
                             } else {
                                 Text("学期 \(term)")
                             }
                         }
                     }
                 } label: {
-                    Image(systemName: termFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                    AppIcon(termFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                 }
                 .disabled(availableTerms.isEmpty)
             }
@@ -85,7 +86,7 @@ struct PlanView: View {
                     if app.planLoading {
                         ProgressView()
                     } else {
-                        Image(systemName: "arrow.clockwise")
+                        ToolbarIcon("arrow.clockwise")
                     }
                 }
                 .disabled(app.planLoading)
@@ -105,13 +106,13 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(number(app.plan.totalEarned))
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                        .font(.system(size: 36, weight: .regular))
                     Text("/ \(number(app.plan.totalRequired)) 学分")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 ProgressView(value: app.plan.progress)
-                    .tint(.blue)
+                    .tint(.accentColor)
                 HStack(spacing: 12) {
                     if !app.plan.major.isEmpty {
                         Text(app.plan.major).lineLimit(1)
@@ -124,7 +125,7 @@ struct PlanView: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                .font(.footnote)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
@@ -137,13 +138,13 @@ struct PlanView: View {
         let found = searchMatches
         return Section {
             if found.isEmpty {
-                Text("没搜到这门课").font(.footnote).foregroundStyle(.secondary)
+                Text("没搜到这门课").font(MD3Type.bodyMedium).foregroundStyle(.secondary)
             } else {
                 ForEach(found, id: \.id) { item in
                     VStack(alignment: .leading, spacing: 3) {
                         courseRow(item.course)
                         Text(item.path)
-                            .font(.caption2)
+                            .font(MD3Type.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -173,7 +174,7 @@ struct PlanView: View {
                     .lineLimit(2)
                 Spacer(minLength: 12)
                 Text("\(number(section.earned)) / \(number(section.required))")
-                    .font(.footnote)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(section.shortfall <= 0 ? Color.green : Color.secondary)
             }
             if section.required > 0 {
@@ -195,17 +196,17 @@ struct PlanView: View {
                         Text(course.score)
                     }
                 }
-                .font(.caption2)
+                .font(MD3Type.caption)
                 .foregroundStyle(.secondary)
                 if let info = app.courseInfo(for: course) {
                     Text(detailText(info))
-                        .font(.caption2)
+                        .font(MD3Type.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 8)
             Text("\(number(course.earned)) / \(number(course.required))")
-                .font(.caption)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(course.passed ? Color.secondary : Color.orange)
         }
     }
@@ -322,7 +323,7 @@ struct PlanSectionContent: View {
                 .lineLimit(2)
             Spacer(minLength: 12)
             Text("\(number(section.earned)) / \(number(section.required))")
-                .font(.footnote)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(section.shortfall <= 0 ? Color.green : Color.secondary)
         }
     }
@@ -338,17 +339,17 @@ struct PlanSectionContent: View {
                         Text(course.score)
                     }
                 }
-                .font(.caption2)
+                .font(MD3Type.caption)
                 .foregroundStyle(.secondary)
                 if let detail = detail(course) {
                     Text(detail)
-                        .font(.caption2)
+                        .font(MD3Type.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 8)
             Text("\(number(course.earned)) / \(number(course.required))")
-                .font(.caption)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(course.passed ? Color.secondary : Color.orange)
         }
     }

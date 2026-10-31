@@ -64,7 +64,7 @@ struct ExamView: View {
             if let error = app.examsError {
                 Section {
                     Text(error)
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -113,6 +113,7 @@ struct ExamView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("考试安排")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await app.refreshExams() }
@@ -131,7 +132,7 @@ struct ExamView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal")
+                    ToolbarIcon("line.3.horizontal")
                 }
                 .disabled(app.semesters.isEmpty)
             }
@@ -140,7 +141,7 @@ struct ExamView: View {
                 Button {
                     Task { await app.refreshExams() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    ToolbarIcon("arrow.clockwise")
                 }
                 .disabled(app.examsLoading)
             }
@@ -164,7 +165,7 @@ struct ExamView: View {
         if showDiagnostics {
             Section {
                 Text("外壳 \(shell.count) 字符 · 考试表 \(raw.count) 字符")
-                    .font(.caption)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
 
                 if !raw.isEmpty {
@@ -177,11 +178,11 @@ struct ExamView: View {
                         \(raw)
                         """
                     } label: {
-                        Label("复制原始返回", systemImage: "doc.on.doc")
+                        Label { Text("复制原始返回") } icon: { AppIcon("doc.on.doc") }
                     }
 
                     Text(summary(of: raw))
-                        .font(.caption2)
+                        .font(MD3Type.caption)
                         .foregroundStyle(.secondary)
                 }
             } header: {
@@ -209,7 +210,7 @@ struct ExamView: View {
 
                 if !subtitle(for: exam).isEmpty {
                     Text(subtitle(for: exam))
-                        .font(.caption)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
 
@@ -224,12 +225,12 @@ struct ExamView: View {
                         Text("座位 \(exam.seat)")
                     }
                 }
-                .font(.caption)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(.secondary)
 
                 if !exam.note.isEmpty {
                     Text(exam.note)
-                        .font(.caption2)
+                        .font(MD3Type.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -238,12 +239,12 @@ struct ExamView: View {
 
             if !remainingText(for: exam).isEmpty {
                 Text(remainingText(for: exam))
-                    .font(.caption)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 8)
     }
 
     /// 课程序号在前、考试名称在后
@@ -256,7 +257,7 @@ struct ExamView: View {
     /// 图标和文字的间距，系统的 Label 默认留得太宽
     private func meta(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 3) {
-            Image(systemName: icon)
+            AppIcon(icon, size: 18)
                 .font(.system(size: 10, weight: .regular))
             Text(text)
         }

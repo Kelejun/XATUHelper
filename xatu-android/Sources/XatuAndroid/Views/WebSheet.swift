@@ -21,7 +21,7 @@ struct WebSheet: View {
             Group {
                 if let message = errorText {
                     ContentUnavailableView {
-                        Label("打不开这个页面", systemImage: "wifi.exclamationmark")
+                        Label { Text("打不开这个页面") } icon: { AppIcon("wifi.exclamationmark") }
                     } description: {
                         Text(message)
                     } actions: {
@@ -45,7 +45,7 @@ struct WebSheet: View {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark")
+                        ToolbarIcon("xmark")
                     }
                     .accessibilityLabel("关闭")
                 }

@@ -15,15 +15,15 @@ struct MainTabView: View {
         @Bindable var app = app
         TabView(selection: $selection) {
             HomeView()
-                .tabItem { Label("首页", systemImage: "house") }
+                .tabItem { Label { Text("首页") } icon: { AppIcon("house") } }
                 .tag(Tab.home)
 
             TimetableView()
-                .tabItem { Label("课程表", systemImage: "calendar") }
+                .tabItem { Label { Text("课程表") } icon: { AppIcon("calendar") } }
                 .tag(Tab.timetable)
 
             InfoView()
-                .tabItem { Label("校园", systemImage: "building.columns") }
+                .tabItem { Label { Text("校园") } icon: { AppIcon("building.columns") } }
                 .tag(Tab.info)
         }
         .task {

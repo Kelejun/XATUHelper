@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.core.app.ActivityCompat
 
 internal val logger: SkipLogger = SkipLogger(subsystem = "xatu.android", category = "XatuAndroid")
@@ -157,6 +159,7 @@ internal fun SyncSystemBarsWithTheme() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PresentationRootView(context: ComposeContext) {
     val colorScheme = if (isSystemInDarkTheme()) ColorScheme.dark else ColorScheme.light
@@ -164,7 +167,15 @@ internal fun PresentationRootView(context: ComposeContext) {
         SyncSystemBarsWithTheme()
         val contentContext = ctx.content()
         Box(modifier = ctx.modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            AppRootView().Compose(context = contentContext)
+            AppRootView().material3TopAppBar { options ->
+                options.copy(
+                    preferCenterAlignedStyle = false,
+                    preferLargeStyle = false,
+                    navigationIconButtonStyle = Material3TopAppBarNavigationIconButtonStyle.iconButton,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface))
+            }.Compose(context = contentContext)
         }
     }
 }

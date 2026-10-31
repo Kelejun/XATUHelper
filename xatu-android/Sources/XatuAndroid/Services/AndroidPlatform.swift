@@ -23,7 +23,7 @@ enum AndroidPlatform {
 extension CalendarService {
     static func ocr(_ data: Data, region: Foundation.CGRect) -> String? {
         // The ML Kit recognizer runs on the detached OCR task used by SchoolCalendarView.
-        let payload: [String: Any] = ["image": data.base64EncodedString(), "x": region.origin.x, "y": region.origin.y, "width": region.width, "height": region.height]
+        let payload: [String: Any] = ["image": data.base64EncodedString(), "x": Double(region.origin.x), "y": Double(region.origin.y), "width": Double(region.width), "height": Double(region.height)]
         guard let json = try? JSONSerialization.data(withJSONObject: payload), let text = String(data: json, encoding: .utf8) else { return nil }
         return AndroidPlatform.call("ocr", text)
     }

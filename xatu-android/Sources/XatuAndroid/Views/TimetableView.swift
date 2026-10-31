@@ -6,6 +6,7 @@ import UIKit
 struct TimetableView: View {
 
     @Environment(AppState.self) var app
+    @Environment(\.colorScheme) var colorScheme
     @State var showSettings = false
     @State var showNotificationSetup = false
     @State var detail: CourseBlock?
@@ -28,7 +29,7 @@ struct TimetableView: View {
     private static let weekRange = 1...30
 
     private func blocks(for target: Int) -> [CourseBlock] {
-        app.occurrences(in: target).courseBlocks()
+        app.courseBlocks(in: target)
     }
 
     /// 表头上显示日期用。只有当前学期知道第一周的周一，往届学期不显示日期。
@@ -114,8 +115,11 @@ struct TimetableView: View {
     private func pager(width: CGFloat, height: CGFloat) -> some View {
         #if os(Android)
         TabView(selection: Binding<Int>(get: { week }, set: { visibleWeek = $0 })) {
-            ForEach(Self.weekRange, id: \.self) { target in
-                weekPage(target, width: width)
+            ForEach(Array(Self.weekRange), id: \.self) { target in
+                Group {
+                    if abs(target - week) <= 1 { weekPage(target, width: width) }
+                    else { Color.clear }
+                }
                     .frame(width: width, height: height)
                     .tag(target)
             }
@@ -124,7 +128,7 @@ struct TimetableView: View {
         #else
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 0) {
-                ForEach(Self.weekRange, id: \.self) { target in
+                ForEach(Array(Self.weekRange), id: \.self) { target in
                     weekPage(target, width: width)
                         .frame(width: width, height: height)
                         .id(target)
@@ -141,7 +145,7 @@ struct TimetableView: View {
     /// 点箭头、选周次时滚过去；不传动画就走系统的定位
     private func jump(to target: Int, animated: Bool = true) {
         let clamped = min(max(target, Self.weekRange.lowerBound), Self.weekRange.upperBound)
-        if animated {
+        if animated && abs(clamped - week) == 1 {
             withAnimation(.easeInOut(duration: 0.25)) { visibleWeek = clamped }
         } else {
             visibleWeek = clamped
@@ -159,6 +163,12 @@ struct TimetableView: View {
                 showWeekend: !hideWeekend,
                 onSelect: { detail = $0 }
             )
+            #if os(Android)
+            .androidEquatable(recomposeOverride: WeekGridInputs(
+                revision: app.timetableRevision, week: target, monday: mondayDate(for: target),
+                weekend: !hideWeekend, dark: colorScheme == .dark,
+                today: Calendar.current.startOfDay(for: Date())))
+            #endif
             .frame(width: width)
             .overlay {
                 if app.isLoading && pageBlocks.isEmpty {
@@ -190,7 +200,7 @@ struct TimetableView: View {
 
             if let message = app.errorMessage {
                 Text(message)
-                    .font(.footnote)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -204,6 +214,7 @@ struct TimetableView: View {
         .onAppear {
             if visibleWeek == nil { visibleWeek = week }
         }
+        .md3List()
         .navigationTitle(app.semesterName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -231,11 +242,11 @@ struct TimetableView: View {
                         Button {
                             showSettings = true
                         } label: {
-                            Label("设置", systemImage: "gearshape")
+                            Label { Text("设置") } icon: { ToolbarIcon("gearshape") }
                         }
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal")
+                    ToolbarIcon("line.3.horizontal")
                 }
             }
 
@@ -249,7 +260,7 @@ struct TimetableView: View {
                     if app.isLoading {
                         ProgressView()
                     } else {
-                        Image(systemName: "arrow.clockwise")
+                        ToolbarIcon("arrow.clockwise")
                     }
                 }
                 .disabled(app.isLoading)
@@ -276,19 +287,28 @@ struct TimetableView: View {
         }
     }
 
+    private struct WeekGridInputs: Equatable {
+        let revision: Int
+        let week: Int
+        let monday: Date?
+        let weekend: Bool
+        let dark: Bool
+        let today: Date
+    }
+
     private var weekBar: some View {
         HStack(spacing: 4) {
             Button {
                 jump(to: week - 1)
             } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 40, height: 32)
+                AppIcon("chevron.left")
+                    .frame(width: 48, height: 48)
             }
             .buttonStyle(.borderless)
             .disabled(week <= Self.weekRange.lowerBound)
 
             Menu {
-                ForEach(Self.weekRange, id: \.self) { value in
+                ForEach(Array(Self.weekRange), id: \.self) { value in
                     Toggle("第 \(value) 周", isOn: Binding(
                         get: { value == week },
                         set: { on in
@@ -300,17 +320,18 @@ struct TimetableView: View {
                 HStack(spacing: 3) {
                     Text("第 \(week) 周")
                         .font(.subheadline.weight(.semibold))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
+                    AppIcon("chevron.down", size: 18)
                 }
-                .frame(minWidth: 84)
+                .padding(.horizontal, 16)
+                .frame(minWidth: 96, minHeight: 40)
+                .background(MD3Colors.scheme(colorScheme)["surfaceContainerHigh"], in: Capsule())
             }
 
             Button {
                 jump(to: week + 1)
             } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 40, height: 32)
+                AppIcon("chevron.right")
+                    .frame(width: 48, height: 48)
             }
             .buttonStyle(.borderless)
             .disabled(week >= Self.weekRange.upperBound)
@@ -319,7 +340,7 @@ struct TimetableView: View {
 
             if app.isCurrentSemester, week != app.currentWeek {
                 Button("回到本周") { jump(to: app.currentWeek) }
-                    .font(.footnote)
+                    .font(MD3Type.bodyMedium)
             } else if !app.isCurrentSemester {
                 Button("回到现在") {
                     Task {
@@ -327,7 +348,7 @@ struct TimetableView: View {
                         jump(to: app.currentWeek, animated: false)
                     }
                 }
-                .font(.footnote)
+                .font(MD3Type.bodyMedium)
             }
         }
         .padding(.horizontal, 12)
@@ -343,22 +364,23 @@ struct CourseDetailSheet: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("时间", value: "周\(block.weekdayLabel) \(block.periodText)")
-                    LabeledContent("周次", value: block.weeksText)
-                    LabeledContent("教室", value: block.room.isEmpty ? "—" : block.room)
-                    LabeledContent("教师", value: block.teacher.isEmpty ? "—" : block.teacher)
+                    LabeledContent("时间", value: "周\(block.weekdayLabel) \(block.periodText)").frame(minHeight: 40)
+                    LabeledContent("周次", value: block.weeksText).frame(minHeight: 40)
+                    LabeledContent("教室", value: block.room.isEmpty ? "—" : block.room).frame(minHeight: 40)
+                    LabeledContent("教师", value: block.teacher.isEmpty ? "—" : block.teacher).frame(minHeight: 40)
                 } header: {
                     HStack(spacing: 6) {
                         Text(block.name)
-                        if block.isRemote { Text("线上").font(.caption2) }
-                        if block.isPlaceholder { Text("占位").font(.caption2) }
+                        if block.isRemote { Text("线上").font(MD3Type.caption) }
+                        if block.isPlaceholder { Text("占位").font(MD3Type.caption) }
                     }
                 }
 
                 Section("课程") {
-                    LabeledContent("课程号", value: block.courseKey.isEmpty ? "—" : block.courseKey)
+                    LabeledContent("课程号", value: block.courseKey.isEmpty ? "—" : block.courseKey).frame(minHeight: 40)
                 }
             }
+            .md3List()
             .navigationTitle(block.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -405,7 +427,7 @@ struct SettingsContent: View {
     var body: some View {
         Form {
             Section("账号") {
-                LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
+                LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID).frame(minHeight: 40)
                 Button("退出登录", role: .destructive) {
                     app.logout()
                     dismiss()
@@ -425,7 +447,7 @@ struct SettingsContent: View {
             Section {
                 NavigationLink("查看更多课程表设置...") {
                     TimetableSettingsContent()
-                }
+                }.frame(minHeight: 40)
             }
 
             ExamNotificationSection()
@@ -444,9 +466,9 @@ struct SettingsContent: View {
             }
 
             Section {
-                LabeledContent("版本", value: Self.versionText)
+                LabeledContent("版本", value: Self.versionText).frame(minHeight: 40)
                 Link(destination: URL(string: "https://github.com/Kelejun/XATUHelper")!) {
-                    LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper")
+                    LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper").frame(minHeight: 40)
                 }
             } header: {
                 Text("App")
@@ -456,6 +478,7 @@ struct SettingsContent: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -493,7 +516,7 @@ struct TimetableSettingsContent: View {
         Form {
             Section {
                 Picker("现在实际是第几周", selection: $draftWeek) {
-                    ForEach(Self.weekRange, id: \.self) { value in
+                    ForEach(Array(Self.weekRange), id: \.self) { value in
                         Text("第 \(value) 周").tag(value)
                     }
                 }
@@ -510,7 +533,7 @@ struct TimetableSettingsContent: View {
             Section {
                 NavigationLink("查看课程表通知设置...") {
                     SettingsContent()
-                }
+                }.frame(minHeight: 40)
             } header: {
                 Text("通知")
             }
@@ -525,6 +548,7 @@ struct TimetableSettingsContent: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("课程表设置")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

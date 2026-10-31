@@ -6,4 +6,5 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export PATH="$HOME/.swiftly/bin:$ANDROID_HOME/platform-tools:/opt/homebrew/bin:$PATH"
 cd "$project_dir/Android"
 # Gradle runs Skip's Swift and Kotlin generation in the correct order.
-exec gradle :app:assembleDebug "$@"
+build_variant="${XATU_BUILD_VARIANT:-Debug}"
+exec gradle ":app:assemble${build_variant}" "$@"

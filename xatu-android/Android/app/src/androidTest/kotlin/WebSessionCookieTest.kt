@@ -27,7 +27,7 @@ class WebSessionCookieTest {
             // The old implementation queried only / and therefore could not see this cookie.
             assertFalse(CookieManager.getInstance().getCookie("http://jwgl2018.xatu.edu.cn/").orEmpty().contains("$name="))
             assumeTrue(WebViewFeature.isFeatureSupported(WebViewFeature.GET_COOKIE_INFO))
-            val records = JSONArray(PlatformServices.call("webCookieRecords", url))
+            val records = JSONArray(TestApp.call("webCookieRecords", url))
             val record = (0 until records.length()).map { records.getString(it) }.single { it.startsWith("$name=") }
             assertTrue("Cookie path must survive the bridge", record.contains("path=/eams", ignoreCase = true))
             assertTrue("HttpOnly must survive the bridge", record.contains("httponly", ignoreCase = true))

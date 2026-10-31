@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(AppState.self) var app
+    @Environment(\.colorScheme) var colorScheme
     @State var username = ""
     @State var password = ""
     @State var showAbout = false
@@ -19,67 +20,75 @@ struct LoginView: View {
     var body: some View {
         @Bindable var app = app
         NavigationStack {
-            Form {
-                Section {
-                    TextField("学号", text: $username)
-                        .textContentType(.username)
-                        .keyboardType(.numberPad)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focused, equals: .username)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        AppIcon("building.columns", size: 40)
+                            .frame(width: 80, height: 80)
+                            .background(MD3Colors.scheme(colorScheme)["primaryContainer"], in: RoundedRectangle(cornerRadius: 28))
+                        Text("校园生活，轻松掌握").font(MD3Type.headline)
+                        Text("登录后查看课程、成绩和校园服务")
+                            .font(MD3Type.body).foregroundStyle(.secondary)
+                    }.padding(.vertical, 16)
 
-                    SecureField("统一身份认证密码", text: $password)
-                        .textContentType(.password)
-                        .focused($focused, equals: .password)
-                } footer: {
-                    Text("密码只保存在本机的钥匙串里，不会上传到任何地方。")
-                }
-
-                Section {
+                    VStack(alignment: .leading, spacing: 16) {
+                        TextField("学号", text: $username)
+                            .textContentType(.username)
+                            .keyboardType(.numberPad)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focused, equals: .username)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minHeight: 56)
+                        SecureField("统一身份认证密码", text: $password)
+                            .textContentType(.password)
+                            .focused($focused, equals: .password)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minHeight: 56)
+                        Text("凭据保存在本机安全存储中，仅用于学校认证。")
+                            .font(MD3Type.caption).foregroundStyle(.secondary)
+                    }
+                    if let message = app.errorMessage {
+                        Text(message).font(MD3Type.bodyMedium)
+                            .foregroundStyle(MD3Colors.scheme(colorScheme)["error"])
+                            .accessibilityLabel("登录提示：\(message)")
+                    }
                     Button {
                         focused = nil
                         Task { await app.login(student: username, password: password) }
                     } label: {
-                        HStack {
-                            Spacer()
-                            if app.isLoading {
-                                ProgressView()
-                                    .padding(.trailing, 6)
-                            }
-                            Text(app.isLoading ? "登录中…" : "登录")
-                            Spacer()
-                        }
+                        HStack(spacing: 8) {
+                            if app.isLoading { ProgressView() }
+                            Text(app.isLoading ? "登录中…" : "登录").font(MD3Type.label)
+                        }.frame(maxWidth: .infinity, minHeight: 40)
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
-                }
 
-                if let message = app.errorMessage {
-                    Section {
-                        Text(message)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                Section {
                     Button("需要验证码？用网页登录") {
                         focused = nil
                         app.showsWebLogin = true
                     }
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .buttonStyle(.bordered)
+                    .font(MD3Type.label)
                     .disabled(app.isLoading)
-                } footer: {
-                    Text("网页里可以输验证码，也可以用手机动态码。")
+                    Text("网页登录支持验证码与手机动态码。")
+                        .font(MD3Type.bodyMedium).foregroundStyle(.secondary)
                 }
-
+                .padding(24)
+                .frame(maxWidth: 560, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
+            .md3Screen()
             .navigationTitle("XATU Helper")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showAbout = true
                     } label: {
-                        Image(systemName: "gearshape")
+                        ToolbarIcon("gearshape")
                     }
                 }
             }
@@ -110,20 +119,21 @@ struct AboutSheet: View {
         NavigationStack {
             List {
                 Section("服务地址") {
-                    LabeledContent("教务系统", value: "jwgl2018.xatu.edu.cn")
-                    LabeledContent("统一认证", value: "authserver.xatu.edu.cn")
+                    LabeledContent("教务系统", value: "jwgl2018.xatu.edu.cn").frame(minHeight: 40)
+                    LabeledContent("统一认证", value: "authserver.xatu.edu.cn").frame(minHeight: 40)
                 }
 
                 Section {
                     Text("密码只存在本机钥匙串里，不会上传到任何地方。")
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
 
                 Section("关于") {
-                    LabeledContent("版本", value: version)
+                    LabeledContent("版本", value: version).frame(minHeight: 40)
                 }
             }
+            .md3List()
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

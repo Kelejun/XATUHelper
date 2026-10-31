@@ -55,15 +55,16 @@ struct CASWebLoginSheet: View {
             .overlay(alignment: .bottom) {
                 if let syncError {
                     VStack(spacing: 8) {
-                        Text(syncError).font(.footnote)
+                        Text(syncError).font(MD3Type.bodyMedium)
                         Button("重新同步登录状态") {
                             Task { @MainActor in
                                 if let engine = navigator.webEngine { await finishLogin(using: engine) }
                             }
                         }.disabled(completing)
-                    }.padding().background(.regularMaterial)
+                    }.md3Card().padding(16)
                 }
             }
+            .md3Screen()
             .navigationTitle("在网页里登录")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
@@ -123,6 +124,7 @@ struct WebSheet: View {
                 }
                 ready = true
             }
+            .md3Screen()
             .navigationTitle(title)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
         }

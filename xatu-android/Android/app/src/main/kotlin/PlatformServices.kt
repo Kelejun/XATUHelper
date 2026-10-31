@@ -31,6 +31,7 @@ object PlatformServices {
     private val prefs get() = context.getSharedPreferences("xatu.reminders", Context.MODE_PRIVATE)
     @JvmStatic fun call(operation: String, payload: String): String {
         return when (operation) {
+            "materialColors" -> materialColors(payload == "dark")
             "webCookieRecords" -> {
                 val uri = android.net.Uri.parse(payload)
                 val host = uri.host.orEmpty()
@@ -89,6 +90,27 @@ object PlatformServices {
         }
     }
     fun delivered(id: String) { prefs.edit().remove("reminder.$id").apply() }
+    private fun materialColors(dark: Boolean): String {
+        val colors = if (Build.VERSION.SDK_INT >= 31) {
+            if (dark) androidx.compose.material3.dynamicDarkColorScheme(context)
+            else androidx.compose.material3.dynamicLightColorScheme(context)
+        } else {
+            if (dark) androidx.compose.material3.darkColorScheme()
+            else androidx.compose.material3.lightColorScheme()
+        }
+        val roles = mapOf(
+            "primary" to colors.primary, "onPrimary" to colors.onPrimary,
+            "primaryContainer" to colors.primaryContainer, "onPrimaryContainer" to colors.onPrimaryContainer,
+            "surface" to colors.surface, "surfaceContainer" to colors.surfaceContainer,
+            "surfaceContainerHigh" to colors.surfaceContainerHigh, "onSurface" to colors.onSurface,
+            "onSurfaceVariant" to colors.onSurfaceVariant, "outlineVariant" to colors.outlineVariant,
+            "error" to colors.error)
+        val result = JSONObject()
+        roles.forEach { (name, color) -> result.put(name, String.format("%02X%02X%02X",
+            (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())) }
+        return result.toString()
+    }
+
     private fun recognize(data: JSONObject): String {
         val bytes = Base64.decode(data.getString("image"), Base64.DEFAULT)
         val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return ""

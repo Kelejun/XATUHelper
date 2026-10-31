@@ -129,9 +129,9 @@ struct NotificationSetupSheet: View {
             Form {
                 Section {
                     Text("要不要在每节课前提醒你？")
-                        .font(.headline)
+                        .font(MD3Type.titleMedium)
                     Text("通知由系统到点弹出，App 不用开着。内容用的是本地缓存的课表，课表改了记得刷新一次。")
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
 
@@ -149,6 +149,7 @@ struct NotificationSetupSheet: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .md3List()
             .navigationTitle("提醒")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -177,9 +178,9 @@ struct ExamNotificationSetupSheet: View {
             Form {
                 Section {
                     Text("考试要不要提前提醒？")
-                        .font(.headline)
+                        .font(MD3Type.titleMedium)
                     Text("前一天、当天早间和开考前各弹一次，内容用本地缓存的考试安排。")
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
 
@@ -196,6 +197,7 @@ struct ExamNotificationSetupSheet: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .md3List()
             .navigationTitle("考试提醒")
             .navigationBarTitleDisplayMode(.inline)
         }

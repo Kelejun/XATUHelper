@@ -6,6 +6,7 @@ import SwiftUI
 /// 电费页：没选过宿舍就引导去选，选过就直接显示余额。
 struct ElectricityView: View {
     @Environment(AppState.self) var app
+    @Environment(\.colorScheme) var colorScheme
     @State var editing = false
     @State var showingCharge = false
     @State var chargeURL: String?
@@ -16,14 +17,14 @@ struct ElectricityView: View {
         Form {
             if let dorm = app.dorm {
                 Section {
-                    balanceCard
+                    balanceCard.md3Card(prominent: true)
                 }
 
                 Section {
                     trendChart
                     NavigationLink("历史余额") {
                         ElectricityHistoryView()
-                    }
+                    }.frame(minHeight: 40)
                 } header: {
                     Text("近 7 天用量")
                 } footer: {
@@ -31,9 +32,9 @@ struct ElectricityView: View {
                 }
 
                 Section("宿舍") {
-                    LabeledContent("房间", value: dorm.displayName)
+                    LabeledContent("房间", value: dorm.displayName).frame(minHeight: 40)
                     if !dorm.areaName.isEmpty, dorm.areaName != dorm.buildName {
-                        LabeledContent("校区", value: dorm.areaName)
+                        LabeledContent("校区", value: dorm.areaName).frame(minHeight: 40)
                     }
                     Button("换一个宿舍") { editing = true }
                 }
@@ -41,7 +42,7 @@ struct ElectricityView: View {
                 if let error = app.electricityError {
                     Section {
                         Text(error)
-                            .font(.footnote)
+                            .font(MD3Type.bodyMedium)
                             .foregroundStyle(.red)
                     }
                 }
@@ -53,6 +54,7 @@ struct ElectricityView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("电费")
         .sheet(isPresented: $editing) {
             NavigationStack {
@@ -84,20 +86,13 @@ struct ElectricityView: View {
                 preparingCharge = false
             }
         } label: {
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.12))
-                    .frame(width: 34, height: 34)
-                if preparingCharge {
-                    ProgressView()
-                } else {
-                    Image(systemName: "yensign")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.green)
-                }
-            }
+            HStack(spacing: 8) {
+                if preparingCharge { ProgressView() }
+                else { AppIcon("yensign", size: 18) }
+                Text("充值").font(MD3Type.label)
+            }.frame(minHeight: 40)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.borderedProminent)
         .disabled(preparingCharge)
         .accessibilityLabel("充值")
     }
@@ -111,18 +106,8 @@ struct ElectricityView: View {
                 Button {
                     Task { await app.refreshElectricity() }
                 } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.12))
-                            .frame(width: 34, height: 34)
-                        if app.electricityLoading {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.blue)
-                        }
-                    }
+                    if app.electricityLoading { ProgressView().frame(width: 48, height: 48) }
+                    else { ToolbarIcon("arrow.clockwise") }
                 }
                 .buttonStyle(.borderless)
                 .disabled(app.electricityLoading)
@@ -131,7 +116,7 @@ struct ElectricityView: View {
 
             if let checked = app.electricityCheckedAt {
                 Text("上次查询 \(checked.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.footnote)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
             }
         }
@@ -145,7 +130,7 @@ struct ElectricityView: View {
 
         if points.isEmpty {
             Text("再攒几天就能看到每天用多少了")
-                .font(.footnote)
+                .font(MD3Type.bodyMedium)
                 .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 6) {
@@ -203,7 +188,7 @@ struct ElectricityView: View {
 
                 if let average = averageUsageText(app.electricityTrend()) {
                     Text(average)
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -248,7 +233,7 @@ struct ElectricityView: View {
         if let balance = app.electricityBalance {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("¥")
-                    .font(.title3)
+                    .font(MD3Type.title)
                     .foregroundStyle(.secondary)
                 Text(balance)
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
@@ -256,11 +241,11 @@ struct ElectricityView: View {
             }
         } else if app.electricityLoading {
             Text("查询中…")
-                .font(.title3)
+                .font(MD3Type.title)
                 .foregroundStyle(.secondary)
         } else {
             Text("还没查到余额")
-                .font(.title3)
+                .font(MD3Type.title)
                 .foregroundStyle(.secondary)
         }
     }
@@ -283,7 +268,7 @@ struct DormPickerView: View {
         List {
             if let error {
                 Section {
-                    Text(error).font(.footnote).foregroundStyle(.red)
+                    Text(error).font(MD3Type.bodyMedium).foregroundStyle(.red)
                     Button("重试") { Task { await loadSchools() } }
                     if showDiagnostics {
                         Button("复制电费诊断数据") {
@@ -323,6 +308,7 @@ struct DormPickerView: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle("选择宿舍")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -397,7 +383,7 @@ struct RoomPickerPage: View {
         List {
             if let error {
                 Section {
-                    Text(error).font(.footnote).foregroundStyle(.red)
+                    Text(error).font(MD3Type.bodyMedium).foregroundStyle(.red)
                     Button("重试") { Task { await load() } }
                 }
             }
@@ -413,6 +399,7 @@ struct RoomPickerPage: View {
                 }
             }
         }
+        .md3List()
         .navigationTitle(build.name)
         .searchable(text: $search, prompt: "搜房间号")
         .task { await load() }

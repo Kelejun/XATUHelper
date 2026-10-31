@@ -13,8 +13,8 @@ struct ContentUnavailableView: View {
     }
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: systemImage).font(.largeTitle).foregroundStyle(.secondary)
-            Text(title).font(.headline)
+            AppIcon(systemImage, size: 36).font(.largeTitle).foregroundStyle(.secondary)
+            Text(title).font(MD3Type.titleMedium)
             if let description { description.font(.subheadline).foregroundStyle(.secondary) }
         }
         .multilineTextAlignment(.center)

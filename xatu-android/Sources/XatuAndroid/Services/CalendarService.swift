@@ -71,7 +71,7 @@ enum CalendarService {
 
     static func latestLink(in html: String) -> URL? {
         let pattern = #"<a[^>]*href\s*=\s*"([^"]+)"[^>]*>(.*?)</a>"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else {
             return nil
         }
         let range = NSRange(html.startIndex..<html.endIndex, in: html)
@@ -83,13 +83,15 @@ enum CalendarService {
             let text = String(html[textRange]).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
             guard text.contains("校历") else { continue }
             guard let url = URL(string: href, relativeTo: base)?.absoluteURL else { continue }
+            guard url.path != base?.path, !href.hasPrefix("#"),
+                  url.path.contains("/info/") || url.path.contains("/news/") else { continue }
             return url
         }
         return nil
     }
 
     static func pageHTMLTitle(_ html: String) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: #"<title>\s*([^<]+?)\s*</title>"#) else { return nil }
+        guard let regex = try? NSRegularExpression(pattern: #"<title>\s*([^<]+?)\s*</title>"#, options: [.caseInsensitive]) else { return nil }
         let range = NSRange(html.startIndex..<html.endIndex, in: html)
         guard let match = regex.firstMatch(in: html, options: [], range: range),
               let r = Range(match.range(at: 1), in: html) else { return nil }
@@ -99,8 +101,8 @@ enum CalendarService {
     /// 内容页正文里那张校历大图
     static func calendarImageURL(in html: String, base: URL) -> URL? {
         let patterns = [
-            #"<img[^>]+src\s*=\s*"([^"]*__local[^"]+)"[^>]*>"#,
             #"<img[^>]+orisrc\s*=\s*"([^"]+)"[^>]*>"#,
+            #"<img[^>]+src\s*=\s*"([^"]*__local[^"]+)"[^>]*>"#,
             #"<img[^>]+src\s*=\s*"([^"]+\.(?:jpg|png|jpeg))"[^>]*>"#
         ]
         for pattern in patterns {
@@ -120,6 +122,7 @@ enum CalendarService {
 
     static func downloadImage(_ url: URL) async -> Result<Data, LoadError> {
         var request = URLRequest(url: url)
+        request.setValue(indexURL, forHTTPHeaderField: "Referer")
         request.timeoutInterval = 30
         request.cachePolicy = .reloadIgnoringLocalCacheData
         do {
@@ -182,8 +185,9 @@ enum CalendarService {
 
     static func parseSemesters(from text: String) -> [SemesterSpan] {
         let flattened = text
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: #"\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "－", with: "-")
         let pattern = #"(\d{4})年(\d{1,2})月(\d{1,2})日[-—~至到]{1,2}(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(flattened.startIndex..<flattened.endIndex, in: flattened)
@@ -199,7 +203,7 @@ enum CalendarService {
             if match.range(at: 4).location != NSNotFound, let r4 = Range(match.range(at: 4), in: flattened) {
                 endYear = Int(flattened[r4]) ?? startYear
             } else {
-                endYear = startYear
+                endYear = startYear + ((Int(flattened[r5]) ?? 1) < (Int(flattened[r2]) ?? 1) ? 1 : 0)
             }
             let startMonth = Int(flattened[r2]) ?? 1
             let startDay = Int(flattened[r3]) ?? 1

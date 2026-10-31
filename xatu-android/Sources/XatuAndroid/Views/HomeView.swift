@@ -9,8 +9,6 @@ struct HomeView: View {
     @State var now = Date()
     @State var calendarInfo: CalendarService.Info?
     @State var destination: HomeDestination?
-    @State var showsGreeting = false
-    @State var showsContent = false
 
     enum HomeDestination: Hashable {
         case electricity
@@ -50,9 +48,8 @@ struct HomeView: View {
 
     private var todayBlocks: [CourseBlock] {
         guard app.isCurrentSemester else { return [] }
-        return app.occurrences(in: app.week(of: baseDate))
+        return app.courseBlocks(in: app.week(of: baseDate))
             .filter { $0.day == todayWeekday }
-            .courseBlocks()
             .sorted { $0.startPeriod < $1.startPeriod }
     }
 
@@ -83,9 +80,8 @@ struct HomeView: View {
         guard app.isCurrentSemester, let nextDay else { return [] }
         let weekday = isoWeekday(of: nextDay)
         let week = app.week(of: nextDay)
-        return app.occurrences(in: week)
+        return app.courseBlocks(in: week)
             .filter { $0.day == weekday }
-            .courseBlocks()
             .sorted { $0.startPeriod < $1.startPeriod }
     }
 
@@ -168,7 +164,7 @@ struct HomeView: View {
         Button { destination = .calendar } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(event.title)还有")
-                    .font(.headline)
+                    .font(MD3Type.titleMedium)
                     .lineLimit(1)
                 Text(event.days == 0 ? "今天" : "\(event.days) 天")
                     .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -176,7 +172,7 @@ struct HomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(event.dateText)
-                    .font(.caption2)
+                    .font(MD3Type.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -189,52 +185,26 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Color.clear
-                        .frame(height: 150)
-
-                    if showsGreeting {
-                        Text(greeting)
-                            .font(.largeTitle.weight(.bold))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .transition(.offset(y: 40).combined(with: .opacity))
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(greeting).font(MD3Type.headline)
+                        Text(statusLine).font(MD3Type.bodyMedium).foregroundStyle(.secondary)
                     }
-
-                    if showsContent {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text(statusLine)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if let exam = nextExam {
-                                examCard(exam)
-                                    .cardStyle()
-                            }
-
-                            scheduleCard
-                                .cardStyle()
-
-                            HStack(alignment: .top, spacing: 12) {
-                                electricityCard
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .cardStyle()
-                                if let holiday = nextHoliday {
-                                    holidayCard(holiday)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .cardStyle()
-                                }
-                            }
+                    .padding(.vertical, 8)
+                    if let exam = nextExam { examCard(exam).md3Card() }
+                    scheduleCard.md3Card(prominent: true)
+                    HStack(alignment: .top, spacing: 16) {
+                        electricityCard.frame(maxWidth: .infinity, alignment: .leading).md3Card()
+                        if let holiday = nextHoliday {
+                            holidayCard(holiday).frame(maxWidth: .infinity, alignment: .leading).md3Card()
                         }
-                        .transition(.offset(y: 40).combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 24)
+                .padding(16)
             }
-            .background(alignment: .top) { homeBackground }
-            .navigationTitle("")
+            .md3Screen()
+            .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $destination) { dest in
                 switch dest {
@@ -244,39 +214,12 @@ ScrollView {
             }
         }
         .task {
+            calendarInfo = CalendarCache.load()
             while !Task.isCancelled {
                 do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { break }
                 now = Date()
             }
         }
-        .onAppear { calendarInfo = CalendarCache.load() }
-        .task {
-            guard !app.hasPlayedIntro else {
-                showsGreeting = true
-                showsContent = true
-                return
-            }
-            app.hasPlayedIntro = true
-            withAnimation(.smooth(duration: 0.8)) { showsGreeting = true }
-            try? await Task.sleep(for: .milliseconds(300))
-            withAnimation(.smooth(duration: 0.8)) { showsContent = true }
-        }
-    }
-
-    /// 顶部那片浅蓝渐变，往下化到页面底色，跟健康 App 的摘要页一个意思
-    private var homeBackground: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color(red: 0.16, green: 0.44, blue: 0.94).opacity(0.34), location: 0),
-                .init(color: Color(red: 0.40, green: 0.66, blue: 0.98).opacity(0.16), location: 0.55),
-                .init(color: Color.gray.opacity(0.08).opacity(0), location: 1)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 300)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
     }
 
     // MARK: - 顶部那行状态
@@ -335,7 +278,7 @@ ScrollView {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("下一场考试")
-                    .font(.headline)
+                    .font(MD3Type.titleMedium)
                 Spacer(minLength: 8)
                 if let days = daysUntil(exam) {
                     Text(days <= 0 ? "今天" : "还有 \(days) 天")
@@ -360,7 +303,7 @@ ScrollView {
                     }
                 }
             }
-            .font(.caption)
+            .font(MD3Type.bodyMedium)
             .foregroundStyle(.secondary)
         }
     }
@@ -382,7 +325,7 @@ ScrollView {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(cardTitle)
-                    .font(.headline)
+                    .font(MD3Type.titleMedium)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
@@ -406,7 +349,7 @@ ScrollView {
 
             if isLateNight {
                 Text("早点睡吧，已经很晚了")
-                    .font(.footnote)
+                    .font(MD3Type.bodyMedium)
                     .foregroundStyle(.secondary)
             }
         }
@@ -418,7 +361,7 @@ ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text("电费还剩")
-                        .font(.headline)
+                        .font(MD3Type.titleMedium)
                     if app.electricityLoading {
                         ProgressView()
                     }
@@ -427,7 +370,7 @@ ScrollView {
                 if let balance = app.electricityBalance {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text("¥")
-                            .font(.caption)
+                            .font(MD3Type.bodyMedium)
                             .foregroundStyle(.secondary)
                         Text(balance)
                             .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -436,17 +379,17 @@ ScrollView {
                             .minimumScaleFactor(0.6)
                     }
                     Text(electricityCaption)
-                        .font(.caption2)
+                        .font(MD3Type.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 } else if app.dorm == nil {
                     Text("还没选宿舍")
-                        .font(.caption)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 } else {
                     Text(app.electricityError == nil ? "还没查到" : "查询失败")
-                        .font(.caption)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
                         .lineLimit(1)
                 }
@@ -469,7 +412,7 @@ ScrollView {
         HStack(alignment: .top, spacing: 10) {
             Text(timeText(block))
                 .font(.subheadline)
-                
+
                 .foregroundStyle(.secondary)
                 .frame(width: 96, alignment: .leading)
 
@@ -482,7 +425,7 @@ ScrollView {
                     .font(.subheadline)
                 if !block.shortRoom.isEmpty {
                     Text(block.shortRoom)
-                        .font(.caption)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -508,7 +451,7 @@ ScrollView {
                 Text(timeText(block))
                 if !block.shortRoom.isEmpty { Text(block.shortRoom) }
             }
-            .font(.caption)
+            .font(MD3Type.bodyMedium)
             .foregroundStyle(.secondary)
         }
         .padding(12)
@@ -531,17 +474,3 @@ ScrollView {
         .environment(AppState())
 }
 #endif
-
-
-/// 统一的卡片外观，跟课程表那边一套
-private extension View {
-    func cardStyle() -> some View {
-        self
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color.gray.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 30, style: .continuous)
-            )
-    }
-}

@@ -23,3 +23,8 @@ pluginManagement {
 plugins {
     id("skip-plugin") apply true
 }
+
+// Opt in only when building the independent, Release-compatible test APK.
+if (providers.gradleProperty("xatuDeviceTests").orNull == "true") {
+    include(":device-tests")
+}

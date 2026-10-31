@@ -37,7 +37,7 @@ struct SchoolCalendarView: View {
                 if let errorText {
                     Section {
                         Text(errorText)
-                            .font(.footnote)
+                            .font(MD3Type.bodyMedium)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -57,13 +57,13 @@ struct SchoolCalendarView: View {
                             showsOriginal = true
                         }
                     } label: {
-                        Label("查看校历原图", systemImage: "photo")
+                        Label { Text("查看校历原图") } icon: { AppIcon("photo") }
                     }
                     if diagnosticsEnabled {
                         Button {
                             UIPasteboard.general.string = info.rawText
                         } label: {
-                            Label("复制识别到的文字", systemImage: "doc.on.doc")
+                            Label { Text("复制识别到的文字") } icon: { AppIcon("doc.on.doc") }
                         }
                     }
                 } footer: {
@@ -74,15 +74,16 @@ struct SchoolCalendarView: View {
                     Text(errorText ?? "没拿到校历，过会儿再试。")
                         .foregroundStyle(.secondary)
                     Text("校历放在教务处的网站上，只有连校内网才打得开。")
-                        .font(.footnote)
+                        .font(MD3Type.bodyMedium)
                         .foregroundStyle(.secondary)
                     Button("重新加载") { Task { await load(force: true) } }
                     if let info {
-                        Text(info.rawText).font(.caption2)
+                        Text(info.rawText).font(MD3Type.caption)
                     }
                 }
             }
         }
+        .md3List()
         .navigationTitle("校历")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(force: false) }
@@ -96,11 +97,12 @@ struct SchoolCalendarView: View {
                             .scaledToFit()
                     }
                 }
+                .md3List()
                 .navigationTitle("校历原图")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { showsCachedImage = false } label: { Image(systemName: "xmark") }
+                        Button { showsCachedImage = false } label: { ToolbarIcon("xmark") }
                             .accessibilityLabel("关闭")
                     }
                 }
@@ -121,11 +123,11 @@ struct SchoolCalendarView: View {
             ForEach(info.semesters, id: \.self) { span in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(span.label).font(.headline)
+                        Text(span.label).font(MD3Type.titleMedium)
                         Spacer()
                         if let status = semesterStatus(span) {
                             Text(status.text)
-                                .font(.caption)
+                                .font(MD3Type.bodyMedium)
                                 .foregroundStyle(status.finished ? Color.orange : Color.secondary)
                         }
                     }
@@ -163,12 +165,12 @@ struct SchoolCalendarView: View {
             ForEach(breakRows(info), id: \.title) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(row.title).font(.headline)
+                        Text(row.title).font(MD3Type.titleMedium)
                         Spacer()
                         if let days = remainingDays(row.start), days > 0 {
-                            Text("还有 \(days) 天").font(.caption).foregroundStyle(.secondary)
+                            Text("还有 \(days) 天").font(MD3Type.bodyMedium).foregroundStyle(.secondary)
                         } else if let days = remainingDays(row.start), days <= 0, remainingDays(row.end).map({ $0 >= 0 }) == true {
-                            Text("放假中").font(.caption).foregroundStyle(.orange)
+                            Text("放假中").font(MD3Type.bodyMedium).foregroundStyle(.orange)
                         }
                     }
                     Text("\(dayText(row.start)) – \(dayText(row.end))")

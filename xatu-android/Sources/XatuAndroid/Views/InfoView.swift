@@ -4,6 +4,7 @@ import SwiftUI
 /// 现在卡片点了只弹提示，后面每接一个功能就把对应 case 从占位里拿掉。
 struct InfoView: View {
     @Environment(AppState.self) var app
+    @Environment(\.colorScheme) var colorScheme
 
     enum Entry: String, Identifiable, CaseIterable {
         case exam
@@ -96,10 +97,7 @@ struct InfoView: View {
         let urlString: String
     }
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
+    private let columns = [GridItem(.adaptive(minimum: 160), spacing: 16)]
 
     var body: some View {
         NavigationStack {
@@ -109,18 +107,19 @@ struct InfoView: View {
                     group("生活", entries: [.bill, .netfee, .checkin, .leave])
                     group("杂项", entries: [.ehall, .jwgl])
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
                 .padding(.bottom, 24)
             }
-            .background(Color.gray.opacity(0.08))
+            .md3Screen()
             .navigationTitle("校园")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showsSettings = true
                     } label: {
-                        Image(systemName: "gearshape")
+                        ToolbarIcon("gearshape")
                     }
                     .accessibilityLabel("设置")
                 }
@@ -148,10 +147,10 @@ struct InfoView: View {
     private func group(_ title: String, entries: [Entry]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(MD3Type.titleMedium)
                 .padding(.leading, 2)
 
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(entries) { entry in
                     if entry == .bill {
                         NavigationLink {
@@ -239,38 +238,22 @@ struct InfoView: View {
     }
 
     private func card(_ entry: Entry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: entry.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(entry.tint)
-                    .frame(width: 32, height: 32)
-                    .background(entry.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                Text(entry.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                let subtitle = subtitle(for: entry)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 0)
+        let colors = MD3Colors.scheme(colorScheme)
+        return VStack(alignment: .leading, spacing: 12) {
+            AppIcon(entry.icon, size: 24)
+                .foregroundStyle(colors["onPrimaryContainer"])
+                .frame(width: 40, height: 40)
+                .background(colors["primaryContainer"], in: RoundedRectangle(cornerRadius: 12))
+            Text(entry.title).font(MD3Type.titleMedium).foregroundStyle(colors["onSurface"])
+                .lineLimit(2)
+            let subtitle = subtitle(for: entry)
+            if !subtitle.isEmpty {
+                Text(subtitle).font(MD3Type.bodyMedium).foregroundStyle(colors["onSurfaceVariant"])
+                    .lineLimit(2).multilineTextAlignment(.leading)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-            .background(Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .md3Card()
     }
 }
-
-#if !os(Android)
-#Preview {
-    InfoView()
-        .environment(AppState())
-}
-#endif
-

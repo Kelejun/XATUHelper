@@ -12,8 +12,8 @@ struct ContentView: View {
                 LoginView()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
-        .overlay(alignment: .top) {
+        .md3Screen()
+        .overlay(alignment: .bottom) {
             if let notice = app.inAppNotice {
                 InAppNotificationLayer(
                     notice: notice,

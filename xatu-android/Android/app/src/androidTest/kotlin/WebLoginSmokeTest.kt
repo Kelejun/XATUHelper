@@ -17,7 +17,7 @@ class WebLoginSmokeTest {
     @Test fun openingWebLoginSurvivesRedirect() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(TestApp.launchIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val device = UiDevice.getInstance(instrumentation)
         val login = device.wait(Until.findObject(By.text("需要验证码？用网页登录")), 15_000)
         if (login == null && (device.hasObject(By.text("首页")) || device.hasObject(By.desc("首页")))) {
