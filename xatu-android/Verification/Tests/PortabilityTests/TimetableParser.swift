@@ -1,1 +1,0 @@
-../../../Sources/XatuAndroid/Services/TimetableParser.swift

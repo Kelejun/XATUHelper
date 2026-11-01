@@ -2,7 +2,7 @@
 
 西安工业大学的校园信息整合 App。登录学校统一身份认证后，把课程表等常用的内容收进一个 App 里，随手打开就能看。
 
-> Android 现有版本功能基本能用，但性能存在严重问题：实机运行不到 10 FPS，不建议日常使用。后续计划使用 Kotlin + Jetpack Compose 重构，详见下方「Android」一节。
+> 本仓库维护 iOS App 与 Widget。原生 Android 版请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)。
 
 ## 能做什么
 
@@ -27,12 +27,8 @@
 
 本项目由 DeepSeek 辅助开发。
 
-## Android（现有 Skip Fuse 版本与重构计划）
+## Android
 
-**截至 2026-10-31，Android 现有版本功能基本能用，但实机运行不到 10 FPS，性能问题严重，不建议日常使用。**
+Android 版已独立为 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)，使用 Kotlin + Jetpack Compose 与 Material Design 3 原生实现。功能介绍、构建说明和验证记录请查看该仓库。
 
-- 现有版本为 1.1.0，基于 Skip Fuse 迁移，已包含课程表、考试、成绩、学业进度、电费、校历等功能，并完成 Material Design 3 界面调整及部分渲染优化。功能基本能用不代表所有设备和场景均已验收。
-- 已有的模拟器测试显示部分长帧有所改善，但不能代表真机体验；实机反馈仍不到 10 FPS，性能问题尚未解决。测试方法和局限见 [性能记录](xatu-android/PERFORMANCE.md)。
-- **下一步计划使用 Kotlin + Jetpack Compose 重构 Android 版本**，以改善实机性能与交互体验。重构尚未完成，当前仓库中的 Android 实现仍为 Skip Fuse 版本。
-
-现有迁移工程与构建说明见 [xatu-android](xatu-android/README.md)，版本验证记录见 [VALIDATION.md](xatu-android/VALIDATION.md)。本地 APK 和构建缓存不随源码入库。原 iOS 工程保持独立。
+原 Skip 迁移工程已从本仓库移除；本仓库仅维护 iOS App 与 Widget。

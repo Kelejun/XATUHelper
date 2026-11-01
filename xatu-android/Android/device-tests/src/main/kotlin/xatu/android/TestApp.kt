@@ -1,1 +1,0 @@
-../../../../../../app/src/androidTest/kotlin/TestApp.kt

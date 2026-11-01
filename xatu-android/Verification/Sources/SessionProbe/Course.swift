@@ -1,1 +1,0 @@
-../../../Sources/XatuAndroid/Models/Course.swift
