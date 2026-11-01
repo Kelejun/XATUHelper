@@ -1,34 +1,73 @@
 # XATU Helper
 
-西安工业大学的校园信息整合 App。登录学校统一身份认证后，把课程表等常用的内容收进一个 App 里，随手打开就能看。
+西安工业大学校园助手的原生 iOS 工程。使用 Swift、SwiftUI 和 WidgetKit，将课程表、考试、成绩、电费等常用校园信息整合到 App 与桌面小组件中。
 
-> 本仓库维护 iOS App 与 Widget。原生 Android 版请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)。
+> 本仓库维护 iOS App 与 Widget。原生 Android 版请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)，使用 Kotlin、Jetpack Compose 和 Material Design 3 独立实现；原 Skip 迁移工程已移除。
 
-## 能做什么
+## 当前功能
 
-- **课程表**：按周查看，可以切换学期，也能在学生课表和班级课表之间切换。
-- **考试安排**：随时查看考试安排。
-- **成绩**：随时查看当前学期与所有学期成绩。
-- **电费**：一键查询宿舍余额、充值入口、近 7 天用量统计曲线和历史余额。
-- **提醒**：上课前和考试前的本地通知，时间可自己调。
+- 统一身份认证密码登录；需要验证码或手机动态码时，可使用内置学校网页登录，并将校园 Cookie 同步到原生网络会话。
+- 首页展示当天课程、课程状态、电费余额、下一场考试与假期信息；校园页集中常用服务入口。
+- 课程表：按学年、学期查看学生／班级课表，横向翻周、跳周、返回本周、课程详情、连续节次合并与重叠分栏；支持隐藏周末和手动周次校正。班级课表取决于教务是否提供对应入口。
+- 考试安排：按学期查看考试时间、考场、座位等信息。
+- 成绩：当前学期／所有学期、课程搜索、分项成绩及学分和绩点汇总。
+- 学业完成情况：毕业学分进度、模块与课程明细、课程搜索、开课学期筛选，并提供教务网页入口。
+- 电费：选择校区、楼栋和房间绑定宿舍，查询余额、保存每日余额记录、查看近 7 天扣费／余额趋势及历史记录，提供充值网页入口和自动刷新开关。
+- 校园网页：网费、电费充值、打卡、请假、一网通办与教务系统；打卡页面可按需使用定位。
+- 校历：下载教务处官方校历原图，使用本机 Vision OCR 识别假期日期，缓存原图与解析结果以供离线查看。
+- 提醒：上课前及考试前一晚、当天早晨、考前的本地通知，可调整时间；需要系统通知授权。刷新发现新考试或新成绩时提供应用内提示。
+- 桌面小组件：课程（可配置当天课程上完后显示明天）、电费和假期。课程支持小号／中号，电费与假期为小号；电费刷新按钮会打开 App 后执行查询，不是小组件独立后台查询。
 
-## 使用
+## 构建
 
-1. 安装到 iPhone（iOS 17+）。
-2. 打开它，没了。
+最低支持 iOS 17，目标设备为 iPhone。需要 macOS、完整安装的新版 Xcode，以及 iOS 17 或更新版本的 SDK。工程使用 Xcode 16 引入的文件系统同步分组格式，Swift 语言模式为 `5.0`。
 
-账号和密码和所有 App 读到的信息都只保存在本机钥匙串里，不经过任何第三方服务器。App 不会上传任何东西到任何地方。
+1. 用 Xcode 打开 [XatuHelper.xcodeproj](XatuHelper.xcodeproj)，选择共享 scheme `XatuHelper`；主应用会一并构建并嵌入 `XatuHelperWidget` 扩展。
+2. 模拟器可直接选择已安装的 iPhone 模拟器。真机运行前，在两个 target 的 Signing & Capabilities 中选择自己的开发团队，并配置可用的 Bundle Identifier；仓库中的标识为 `com.cell.xatuapp` 和 `com.cell.xatuapp.widget`，不应直接沿用原作者的签名团队。
+3. 为 App 与 Widget 启用同一个 App Group。当前为 `group.com.cell.xatuapp`；若改名，需要同时修改两个 target 的 entitlements 与 [WidgetSnapshot.swift](XatuHelper/Services/WidgetSnapshot.swift) 中的 `WidgetStore.appGroup`，并确保签名描述文件包含该权限。共享容器不可用时，小组件无法读取 App 快照。
+4. 选择设备后运行；也可在本目录执行模拟器构建：
+
+```sh
+xcodebuild -project XatuHelper.xcodeproj \
+  -scheme XatuHelper \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+上述命令仅用于模拟器无签名构建，真机安装和分发仍需有效签名。工程的 `Build Info` 构建阶段会更新 [BuildInfo.swift](XatuHelper/Services/BuildInfo.swift)，写入 Git 短提交号（无 Git 信息时为 `dev`）与构建日期。
+
+## 登录与离线使用
+
+填写学号和统一身份认证密码后点击「登录」。验证码或动态码可通过「需要验证码？用网页登录」处理，成功进入教务或缴费页面后，App 会接续读取业务数据。网页中输入的密码不会由 App 直接读取；若此前已提交原生密码登录，网页登录成功后仍可能保存该次待处理的凭据。
+
+启动时先恢复 Cookie 和本地缓存；已有课表快照时可进入主界面，查看已保存的数据。课表、学业完成情况、成绩、考试的缓存刷新阈值分别为 168、192、216、240 小时，页面或启动逻辑按需尝试联网刷新。缓存不是实时数据，首次登录、切换学期／课表类型、查询新数据和校园网页服务仍需联网；切换课表会先清空当前课程，不能保证失败时继续显示原课表。当前存储是各类数据的单份快照，并非按账号、学期分别保留的多份离线档案。
+
+周次会参考所选学期起始日期，登录时也会尝试用教务首页的官方教学周校准；无可用日期时仍有内置回退日期。若显示不准，可在「课程表设置」中选择「现在实际是第几周」并校正，不应将默认周次当作学校最新校历。
+
+密码存入系统钥匙串，校园 Cookie 另有钥匙串备份，也由系统网络／网页存储管理。学号、宿舍、余额历史和设置等使用 `UserDefaults`，课表、考试、成绩、学业数据与校历原图使用本地文件，小组件快照写入 App Group 共享容器；这些数据并非全部存放在钥匙串中。
+
+登录和查询会访问学校统一认证、教务、缴费等服务器，内置网页还会加载相应站点资源；教务接口当前使用 HTTP，工程为部分校园域名配置了 ATS 例外，不应将其理解为所有数据均通过 HTTPS 传输。请在可信设备和网络上使用。
+
+退出登录会删除当前账号保存的密码、原生会话 Cookie 及其钥匙串备份、课表／考试／成绩／学业缓存，并清理已排定的本地提醒；不等于彻底擦除所有本地数据。宿舍绑定、余额及历史、校历缓存、部分设置、WebKit 网站数据与小组件共享文件不在该退出清理流程中，共用设备时请注意残留信息。
+
+## 结构
+
+```text
+XatuHelper/
+  XatuHelperApp.swift   应用入口与登录状态切换
+  AppState.swift        登录、业务状态、刷新与缓存协调
+  Models/              课程、考试、成绩、学业与电费模型
+  Services/            CAS、教务、缴费、解析、存储、通知与 Widget 桥接
+  Views/               SwiftUI 页面、课表布局与校园 WebView
+XatuHelperWidget/      课程、电费、假期 WidgetKit 扩展
+XatuHelper.xcodeproj/  App／Widget target 与共享 scheme
+Config/               Widget 配置
+Info.plist            App 配置、校园网络例外与定位用途说明
+```
 
 ## 许可
 
-[MIT License](LICENSE)
-
-
+[MIT License](LICENSE)。
 
 本项目由 DeepSeek 辅助开发。
-
-## Android
-
-Android 版已独立为 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)，使用 Kotlin + Jetpack Compose 与 Material Design 3 原生实现。功能介绍、构建说明和验证记录请查看该仓库。
-
-原 Skip 迁移工程已从本仓库移除；本仓库仅维护 iOS App 与 Widget。
