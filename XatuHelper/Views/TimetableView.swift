@@ -193,6 +193,8 @@ struct TimetableView: View {
                 pager(width: proxy.size.width, height: proxy.size.height)
             }
         }
+        // iPad 没有底部标签栏，让课表视口延伸到手势区底边，避免残留白条。
+        .ignoresSafeArea(.container, edges: UIDevice.current.userInterfaceIdiom == .pad ? .bottom : [])
         .onAppear {
             if visibleWeek == nil { visibleWeek = week }
         }

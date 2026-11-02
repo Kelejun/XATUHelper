@@ -266,28 +266,8 @@ struct HomeView: View {
                         scheduleOverview
                             .overviewPanel(fillHeight: wide)
 
-                        VStack(alignment: .leading, spacing: 20) {
-                            electricityCard.overviewPanel(fillHeight: wide)
-                            if let exam = nextExam {
-                                Button { openHomePage(.exam) } label: {
-                                    examCard(exam)
-                                }
-                                .buttonStyle(.plain)
-                                .overviewPanel(fillHeight: wide)
-                            } else {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Label("考试安排", systemImage: "calendar.badge.clock")
-                                        .font(.headline)
-                                    Text("暂无待考科目").font(.subheadline).foregroundStyle(.secondary)
-                                    Button("查看全部考试") { openHomePage(.exam) }
-                                        .font(.subheadline)
-                                }
-                                .overviewPanel(fillHeight: wide)
-                            }
-                            if let holiday = nextHoliday {
-                                holidayCard(holiday).overviewPanel(fillHeight: wide)
-                            }
-                        }
+                        supportingCards(fillHeight: wide)
+
                     }
                     .transition(.offset(y: 40).combined(with: .opacity))
 
@@ -302,6 +282,46 @@ struct HomeView: View {
             .padding(.top, height < 500 ? 24 : 100)
             .frame(maxWidth: 1180, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func supportingCards(fillHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            if !usesWorkspace && !dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .top, spacing: 12) {
+                    electricityCard.overviewPanel(fillHeight: true)
+                    if let holiday = nextHoliday {
+                        holidayCard(holiday).overviewPanel(fillHeight: true)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                examOverview(fillHeight: false)
+            } else {
+                electricityCard.overviewPanel(fillHeight: fillHeight)
+                examOverview(fillHeight: fillHeight)
+                if let holiday = nextHoliday {
+                    holidayCard(holiday).overviewPanel(fillHeight: fillHeight)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func examOverview(fillHeight: Bool) -> some View {
+        if let exam = nextExam {
+            Button { openHomePage(.exam) } label: {
+                examCard(exam)
+            }
+            .buttonStyle(.plain)
+            .overviewPanel(fillHeight: fillHeight)
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("考试安排").font(.headline)
+                Text("暂无待考科目").font(.subheadline).foregroundStyle(.secondary)
+                Button("查看全部考试") { openHomePage(.exam) }
+                    .font(.subheadline)
+            }
+            .overviewPanel(fillHeight: fillHeight)
         }
     }
 
