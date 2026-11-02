@@ -296,6 +296,7 @@ struct MainTabView: View {
     private var tabs: some View {
         TabView(selection: $selection) {
             HomeView()
+                .environment(\.campusNavigation, { sidebarSelection = $0 })
                 .tabItem { Label("首页", systemImage: "house") }
                 .tag(Tab.home)
             TimetableView(visibleWeek: $timetableWeek)

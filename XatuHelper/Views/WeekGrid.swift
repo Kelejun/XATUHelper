@@ -10,6 +10,15 @@ enum PeriodSchedule {
     static func startTime(_ period: Int) -> String { value(start, period - 1) }
     static func endTime(_ period: Int) -> String { value(end, period - 1) }
 
+    /// 时间轴同时标出教3与其他教学楼的两套作息，不改变具体课程的时间计算。
+    static func axisStartTime(_ period: Int) -> String {
+        switch period {
+        case 3: return "10:10/10:20"
+        case 4: return "10:55/11:10"
+        default: return startTime(period)
+        }
+    }
+
     /// 从零点算起的分钟数，用来判断"现在上的是哪一节"
     static func startMinutes(_ period: Int) -> Int { minutes(startTime(period)) }
     static func endMinutes(_ period: Int) -> Int { minutes(endTime(period)) }
@@ -52,7 +61,7 @@ enum PeriodSchedule {
     }
 }
 
-/// 周课表：宽窗口提供节次时间轴，窄窗口保留紧凑网格。
+/// 周课表：所有窗口保留节次时间轴，并按窗口宽度调整列宽。
 struct WeekGrid: View {
     let blocks: [CourseBlock]
     let unitCount: Int
@@ -63,7 +72,7 @@ struct WeekGrid: View {
     var onSelect: (CourseBlock) -> Void
 
     @Environment(\.campusNavigation) private var navigate
-    @ScaledMetric(relativeTo: .caption) private var minimumRowHeight: CGFloat = 44
+    @ScaledMetric(relativeTo: .caption) private var minimumRowHeight: CGFloat = 52
 
     private var headerHeight: CGFloat { navigate == nil ? 40 : 56 }
     private let maxRowHeight: CGFloat = 84
@@ -79,12 +88,13 @@ struct WeekGrid: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let axisWidth: CGFloat = proxy.size.width >= 600 ? 60 : 0
+            let axisWidth: CGFloat = proxy.size.width >= 600 ? 76 : 56
             let gridWidth = max(0, proxy.size.width - axisWidth)
             let dayWidth = gridWidth / CGFloat(dayCount)
             let available = max(proxy.size.height - headerHeight, 0)
             let minimum = max(minimumRowHeight, navigate == nil ? 44 : 56)
-            let rowHeight = max(minimum, min(maxRowHeight, available / CGFloat(periods)))
+            let fitted = available / CGFloat(periods)
+            let rowHeight = max(minimum, navigate == nil ? min(maxRowHeight, fitted) : fitted)
 
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
@@ -117,9 +127,12 @@ struct WeekGrid: View {
             ForEach(1...periods, id: \.self) { period in
                 VStack(spacing: 4) {
                     Text("\(period)").font(.caption.weight(.medium))
-                    Text(PeriodSchedule.startTime(period))
-                        .font(.system(size: 10)).monospacedDigit()
+                    Text(width >= 70 ? PeriodSchedule.axisStartTime(period) : PeriodSchedule.axisStartTime(period).replacingOccurrences(of: "/", with: "/\n"))
+                        .font(.system(size: width >= 70 ? 10 : 9)).monospacedDigit()
+                        .lineLimit(width >= 70 ? 1 : 2)
+                        .minimumScaleFactor(0.8)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(PeriodSchedule.axisStartTime(period))
                 }
                 .padding(.top, 8)
                 .frame(width: width, height: rowHeight, alignment: .top)
@@ -210,24 +223,26 @@ struct WeekGrid: View {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(tint)
                     .frame(width: 2.5)
+                    .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(block.name)
                         .font(dayWidth >= 90 ? .subheadline.weight(.semibold) : .caption2.weight(.semibold))
-                        .lineLimit(dayWidth >= 90 ? 2 : (block.span >= 2 ? 4 : 2))
+                        .lineLimit(dayWidth >= 90 ? 2 : (block.span >= 2 ? 3 : 1))
                         .minimumScaleFactor(0.8)
 
                     Spacer(minLength: 0)
 
-                    if dayWidth >= 90, height >= 110, !block.teacher.isEmpty {
+                    if !block.teacher.isEmpty {
                         Text(block.teacher)
-                            .font(.caption2)
+                            .font(.system(size: dayWidth >= 90 ? 11 : 9))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(.secondary)
                     }
                     if block.span >= 2, !block.room.isEmpty {
                         Text(block.shortRoom)
-                            .font(.caption2)
+                            .font(.system(size: dayWidth >= 90 ? 11 : 9))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
