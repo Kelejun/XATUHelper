@@ -205,7 +205,7 @@ struct InfoView: View {
 
             LazyVGrid(columns: columns, spacing: !usesWorkspace ? 12 : 0) {
                 ForEach(entries) { entry in
-                    if let page = entry.page, let navigate {
+                    if usesWorkspace, let page = entry.page, let navigate {
                         Button { navigate(page) } label: { card(entry) }
                             .buttonStyle(.plain)
                     } else if entry == .bill {
