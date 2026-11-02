@@ -4,6 +4,8 @@ import UIKit
 struct HomeView: View {
 
     @EnvironmentObject var app: AppState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.campusNavigation) private var navigate
     @State private var now = Date()
     @State private var calendarInfo: CalendarService.Info?
     @State private var destination: HomeDestination?
@@ -163,7 +165,9 @@ struct HomeView: View {
     }
 
     private func holidayCard(_ event: HolidayEvent) -> some View {
-        Button { destination = .calendar } label: {
+        Button {
+            if let navigate { navigate(.calendar) } else { destination = .calendar }
+        } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(event.title)还有")
                     .font(.headline)
@@ -187,51 +191,22 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Color.clear
-                        .frame(height: 150)
-
-                    if showsGreeting {
-                        Text(greeting)
-                            .font(.largeTitle.weight(.bold))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .transition(.offset(y: 40).combined(with: .opacity))
-                    }
-
-                    if showsContent {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text(statusLine)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if let exam = nextExam {
-                                examCard(exam)
-                                    .cardStyle()
-                            }
-
-                            scheduleCard
-                                .cardStyle()
-
-                            HStack(alignment: .top, spacing: 12) {
-                                electricityCard
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .cardStyle()
-                                if let holiday = nextHoliday {
-                                    holidayCard(holiday)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .cardStyle()
-                                }
-                            }
-                        }
-                        .transition(.offset(y: 40).combined(with: .opacity))
-                    }
+            GeometryReader { proxy in
+                if navigate != nil {
+                    tabletOverview(width: proxy.size.width)
+                } else {
+                    phoneOverview(width: proxy.size.width, height: proxy.size.height)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 24)
             }
-            .background(alignment: .top) { homeBackground }
+            .background {
+                ZStack(alignment: .top) {
+                    Color(.systemGroupedBackground)
+                    homeBackground
+                }
+                .ignoresSafeArea()
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .campusSidebarToolbar()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $destination) { dest in
@@ -256,6 +231,248 @@ ScrollView {
         }
     }
 
+    private func phoneOverview(width: CGFloat, height: CGFloat) -> some View {
+        let wide = width >= 760 && !dynamicTypeSize.isAccessibilitySize
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Color.clear.frame(height: height < 500 ? 24 : 100)
+                if showsGreeting {
+                    Text(greeting)
+                        .font(.largeTitle.weight(.bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.offset(y: 40).combined(with: .opacity))
+                }
+                if showsContent {
+                    Text(statusLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    dashboard(wide: wide)
+                        .transition(.offset(y: 40).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+            .frame(maxWidth: 1080)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - iPad 总览
+
+    private func tabletOverview(width: CGFloat) -> some View {
+        let wide = width >= 740 && !dynamicTypeSize.isAccessibilitySize
+        let metricsAcross = width >= 420 && !dynamicTypeSize.isAccessibilitySize
+        let compactMetrics = metricsAcross && width < 560
+        let layout = wide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
+
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(now.formatted(.dateTime.month(.wide).day().weekday(.wide)))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(greeting.trimmingCharacters(in: CharacterSet(charactersIn: "，。")))
+                        .font(.largeTitle.bold())
+                    Text(statusLine)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: metricsAcross ? 3 : 1), spacing: 12) {
+                    overviewMetric("教学周", value: app.isCurrentSemester ? "第 \(app.currentWeek) 周" : "往届学期", icon: "calendar", tint: .blue, compact: compactMetrics)
+                    overviewMetric("今日待上", value: "\(remainingCount) 节课", icon: "books.vertical", tint: .teal, compact: compactMetrics)
+                    overviewMetric("下次考试", value: nextExam.flatMap { daysUntil($0) }.map { $0 <= 0 ? "今天" : "\($0) 天后" } ?? "暂无安排", icon: "pencil.and.list.clipboard", tint: .orange, compact: compactMetrics)
+                }
+
+                layout {
+                    VStack(alignment: .leading, spacing: 24) {
+                        tabletSchedule
+                            .overviewPanel()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 20) {
+                        electricityCard.overviewPanel()
+                        if let exam = nextExam {
+                            Button { navigate?(.exam) } label: {
+                                examCard(exam)
+                            }
+                            .buttonStyle(.plain)
+                            .overviewPanel()
+                        } else {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("考试安排", systemImage: "calendar.badge.clock")
+                                    .font(.headline)
+                                Text("暂无待考科目").font(.subheadline).foregroundStyle(.secondary)
+                                Button("查看全部考试") { navigate?(.exam) }
+                                    .font(.subheadline)
+                            }
+                            .overviewPanel()
+                        }
+                        if let holiday = nextHoliday {
+                            holidayCard(holiday).overviewPanel()
+                        }
+                    }
+                    .frame(maxWidth: wide ? 260 : .infinity, alignment: .leading)
+                }
+
+                if let fetchedAt = app.fetchedAt {
+                    Label("课表更新于 \(fetchedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "arrow.clockwise")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(width >= 600 ? 28 : 20)
+            .frame(maxWidth: 1180, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func overviewMetric(_ title: String, value: String, icon: String, tint: Color, compact: Bool) -> some View {
+        HStack(spacing: 12) {
+            if !compact {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(tint)
+                    .frame(width: 40, height: 40)
+                    .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.headline).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var tabletSchedule: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(showingTomorrow ? "明日课程" : "今日课程")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text(showingTomorrow ? tomorrowWeekdayLabel : todayWeekdayLabel)
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            Divider()
+
+            let displayed = showingTomorrow ? tomorrowBlocks : todayBlocks
+            if displayed.isEmpty {
+                VStack(spacing: 14) {
+                    Image(systemName: "sun.horizon")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.teal)
+                        .frame(width: 72, height: 72)
+                        .background(Color.teal.opacity(0.08), in: Circle())
+                    Text("明天没有课程安排").font(.headline)
+                    Text("本周的其他课程可在课程表中查看")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else {
+                ForEach(displayed) { block in
+                    tabletCourseRow(block)
+                    if block.id != displayed.last?.id { Divider() }
+                }
+            }
+
+            Button { navigate?(.timetable) } label: {
+                HStack {
+                    Text("查看完整课表")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .font(.subheadline.weight(.medium))
+                .padding(.top, 4)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    private func tabletCourseRow(_ block: CourseBlock) -> some View {
+        let active = !showingTomorrow && currentBlock?.id == block.id
+        let finished = !showingTomorrow && PeriodSchedule.endMinutes(of: block) <= nowMinutes
+        return HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(PeriodSchedule.isJiaoSanEarly(block) ? "10:10" : PeriodSchedule.startTime(block.startPeriod))
+                    .font(.headline)
+                Text(PeriodSchedule.isJiaoSanEarly(block) ? "11:40" : PeriodSchedule.endTime(block.endPeriod))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+            .frame(width: 54, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 2)
+                .fill(CoursePalette.color(for: block))
+                .frame(width: 3, height: 44)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(block.name).font(.headline)
+                if !block.room.isEmpty {
+                    Label(block.shortRoom, systemImage: "mappin.and.ellipse")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if !block.teacher.isEmpty {
+                    Text(block.teacher).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            if active {
+                Text("正在上").font(.caption.weight(.medium))
+                    .foregroundStyle(.teal)
+            } else if finished {
+                Text("已结束").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .opacity(finished ? 0.75 : 1)
+    }
+
+    private func dashboard(wide: Bool) -> some View {
+        let layout = wide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+
+        return layout {
+            VStack(alignment: .leading, spacing: 14) {
+                if let exam = nextExam {
+                    examCard(exam).cardStyle()
+                }
+                scheduleCard.cardStyle()
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            utilityCards(stacked: wide || dynamicTypeSize.isAccessibilitySize)
+                .frame(maxWidth: wide ? 320 : .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func utilityCards(stacked: Bool) -> some View {
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+
+        return layout {
+            electricityCard
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardStyle()
+            if let holiday = nextHoliday {
+                holidayCard(holiday)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .cardStyle()
+            }
+        }
+    }
+
     /// 顶部那片浅蓝渐变，往下化到页面底色，跟健康 App 的摘要页一个意思
     private var homeBackground: some View {
         LinearGradient(
@@ -269,7 +486,7 @@ ScrollView {
         )
         .frame(height: 300)
         .frame(maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea()
     }
 
     // MARK: - 顶部那行状态
@@ -405,12 +622,14 @@ ScrollView {
         }
     }
 
-    /// 电费卡片：余额低于 10 元变黄
+    /// 电费卡片：余额低于 10 度变黄
     private var electricityCard: some View {
-        Button { destination = .electricity } label: {
+        Button {
+            if let navigate { navigate(.electricity) } else { destination = .electricity }
+        } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text("电费还剩")
+                    Text("剩余电量")
                         .font(.headline)
                     if app.electricityLoading {
                         ProgressView().controlSize(.mini)
@@ -419,14 +638,14 @@ ScrollView {
 
                 if let balance = app.electricityBalance {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text("¥")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         Text(balance)
                             .font(.system(size: 28, weight: .semibold, design: .rounded))
                             .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
+                        Text("度")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Text(electricityCaption)
                         .font(.caption2)
@@ -525,6 +744,13 @@ ScrollView {
 
 /// 统一的卡片外观，跟课程表那边一套
 private extension View {
+    func overviewPanel() -> some View {
+        self
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+    }
+
     func cardStyle() -> some View {
         self
             .padding(14)

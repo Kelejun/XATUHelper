@@ -12,7 +12,7 @@
 - 考试安排：按学期查看考试时间、考场、座位等信息。
 - 成绩：当前学期／所有学期、课程搜索、分项成绩及学分和绩点汇总。
 - 学业完成情况：毕业学分进度、模块与课程明细、课程搜索、开课学期筛选，并提供教务网页入口。
-- 电费：选择校区、楼栋和房间绑定宿舍，查询余额、保存每日余额记录、查看近 7 天扣费／余额趋势及历史记录，提供充值网页入口和自动刷新开关。
+- 电费：余额及用量以「度」显示。选择校区、楼栋和房间绑定宿舍，查询余额、保存每日余额记录、查看近 7 天扣费／余额趋势及历史记录，提供充值网页入口和自动刷新开关。
 - 校园网页：网费、电费充值、打卡、请假、一网通办与教务系统；打卡页面可按需使用定位。
 - 校历：下载教务处官方校历原图，使用本机 Vision OCR 识别假期日期，缓存原图与解析结果以供离线查看。
 - 提醒：上课前及考试前一晚、当天早晨、考前的本地通知，可调整时间；需要系统通知授权。刷新发现新考试或新成绩时提供应用内提示。
@@ -20,10 +20,10 @@
 
 ## 构建
 
-最低支持 iOS 17，目标设备为 iPhone。需要 macOS、完整安装的新版 Xcode，以及 iOS 17 或更新版本的 SDK。工程使用 Xcode 16 引入的文件系统同步分组格式，Swift 语言模式为 `5.0`。
+最低支持 iOS 17，目标设备为 iPhone 和 iPad。iPad 使用可折叠侧边栏导航，可直接进入课程表、考试、成绩、学业、电费与校历；首页使用蓝色渐变与课程时间线，配合课程和考试摘要；侧边栏按 iPhone 校园页的「教务／生活／杂项」分类，设置以圆形玻璃按钮位于底部，点击弹出设置，侧边栏开关位于内容顶部工具栏。课表在宽窗口显示节次时间轴及教师信息，支持横屏、分屏／窗口缩放和纵向滚动。窄屏 iPhone 保留系统标签导航与紧凑卡片；Duo 随系统宽度类别切换布局，切换形态时保留当前一级页面及课表周次。需要 macOS、完整安装的新版 Xcode，以及 iOS 17 或更新版本的 SDK。工程使用 Xcode 16 引入的文件系统同步分组格式，Swift 语言模式为 `5.0`。
 
 1. 用 Xcode 打开 [XatuHelper.xcodeproj](XatuHelper.xcodeproj)，选择共享 scheme `XatuHelper`；主应用会一并构建并嵌入 `XatuHelperWidget` 扩展。
-2. 模拟器可直接选择已安装的 iPhone 模拟器。真机运行前，在两个 target 的 Signing & Capabilities 中选择自己的开发团队，并配置可用的 Bundle Identifier；仓库中的标识为 `com.cell.xatuapp` 和 `com.cell.xatuapp.widget`，不应直接沿用原作者的签名团队。
+2. 模拟器可直接选择已安装的 iPhone 或 iPad 模拟器。真机运行前，在两个 target 的 Signing & Capabilities 中选择自己的开发团队，并配置可用的 Bundle Identifier；仓库中的标识为 `com.cell.xatuapp` 和 `com.cell.xatuapp.widget`，不应直接沿用原作者的签名团队。
 3. 为 App 与 Widget 启用同一个 App Group。当前为 `group.com.cell.xatuapp`；若改名，需要同时修改两个 target 的 entitlements 与 [WidgetSnapshot.swift](XatuHelper/Services/WidgetSnapshot.swift) 中的 `WidgetStore.appGroup`，并确保签名描述文件包含该权限。共享容器不可用时，小组件无法读取 App 快照。
 4. 选择设备后运行；也可在本目录执行模拟器构建：
 

@@ -96,6 +96,7 @@ struct InAppNotificationLayer: View {
             onTap: onTap,
             onClose: onClose
         )
+        .frame(maxWidth: 600)
         .padding(.horizontal, 10)
         .transition(
             .move(edge: .top)

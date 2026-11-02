@@ -201,9 +201,9 @@ struct PayService {
         return options(data, idKey: "roomid", nameKey: "roomname")
     }
 
-    /// 剩余电费（元）
+    /// 剩余电量（度）
     /// 平台前端有两种口径：多数项目直接显示 oddl，但部分项目显示 suml - oddl。
-    /// 实测本校：oddl=9183.18 是累计已用电金额，suml=9237.05 是累计充值，差 53.87 才是余额。
+    /// 实测本校：oddl=9183.18 是累计已用电量，suml=9237.05 是累计补充电量，差 53.87 才是余额。
     func balance(projectID: String, dorm: DormSelection) async throws -> String {
         let data = try await post("pay/web/payEleCostController/querySydl", [
             "projectId": projectID,

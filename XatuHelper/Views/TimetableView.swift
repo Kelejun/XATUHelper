@@ -8,8 +8,8 @@ struct TimetableView: View {
     @State private var showNotificationSetup = false
     @State private var detail: CourseBlock?
     @AppStorage("hideWeekend") private var hideWeekend = false
-    /// 横向翻页停在第几周，绑定 ScrollView 的 scrollPosition
-    @State private var visibleWeek: Int?
+    /// 周次由主导航持有，折叠／展开重建布局时继续停留在所选周。
+    @Binding var visibleWeek: Int?
 
     /// 0 表示"跟着今天走"。非当前学期没有"本周"，落到这学期第一门有课的周。
     private var week: Int {
@@ -121,8 +121,12 @@ struct TimetableView: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
-        .scrollPosition(id: $visibleWeek)
+        .scrollPosition(id: $visibleWeek, anchor: .leading)
         .scrollIndicators(.hidden)
+        // Duo 的系统侧栏会改变安全区；将分页视口限制在测量宽度内。
+        .frame(width: width, height: height)
+        .clipped()
+        .id(width)
     }
 
     /// 点箭头、选周次时滚过去；不传动画就走系统的定位
@@ -167,6 +171,7 @@ struct TimetableView: View {
     var body: some View {
         NavigationStack {
             content
+                .campusSidebarToolbar()
         }
     }
 
@@ -244,7 +249,7 @@ struct TimetableView: View {
         }
         .sheet(item: $detail) { block in
             CourseDetailSheet(block: block)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showSettings) {
             TimetableSettingsSheet()
@@ -269,10 +274,11 @@ struct TimetableView: View {
                 jump(to: week - 1)
             } label: {
                 Image(systemName: "chevron.left")
-                    .frame(width: 40, height: 32)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.borderless)
             .disabled(week <= Self.weekRange.lowerBound)
+            .accessibilityLabel("上一周")
 
             Menu {
                 ForEach(Self.weekRange, id: \.self) { value in
@@ -297,10 +303,11 @@ struct TimetableView: View {
                 jump(to: week + 1)
             } label: {
                 Image(systemName: "chevron.right")
-                    .frame(width: 40, height: 32)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.borderless)
             .disabled(week >= Self.weekRange.upperBound)
+            .accessibilityLabel("下一周")
 
             Spacer()
 
@@ -381,7 +388,7 @@ struct SettingsContent: View {
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     @AppStorage("autoRefreshElectricity") private var autoRefreshElectricity = true
 
-    /// 1.0.0（ec54b89）
+    /// 显示版本与构建时的 Git 提交。
     static var versionText: String {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"

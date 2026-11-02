@@ -1,9 +1,15 @@
 import SwiftUI
 
-/// 校园服务的入口页，样式照着健康 App 的「浏览」：分组标题 + 两列卡片。
-/// 现在卡片点了只弹提示，后面每接一个功能就把对应 case 从占位里拿掉。
+/// 校园服务入口：手机使用卡片，iPad 使用分组服务列表。
 struct InfoView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.campusNavigation) private var navigate
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var usesWorkspace: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad || horizontalSizeClass == .regular
+    }
 
     enum Entry: String, Identifiable, CaseIterable {
         case exam
@@ -33,6 +39,18 @@ struct InfoView: View {
             case .jwgl: return "教务系统"
             case .ehall: return "一网通办"
             case .settings: return "设置"
+            }
+        }
+
+        var page: CampusPage? {
+            switch self {
+            case .exam: return .exam
+            case .grade: return .grade
+            case .plan: return .plan
+            case .bill: return .electricity
+            case .calendar: return .calendar
+            case .settings: return .settings
+            default: return nil
             }
         }
 
@@ -96,25 +114,37 @@ struct InfoView: View {
         let urlString: String
     }
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
+    private func columns(for width: CGFloat) -> [GridItem] {
+        let available = max(0, min(width, 1080) - 40)
+        let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 280 : 150
+        let count = min(4, max(1, Int((available + 12) / (minimum + 12))))
+        return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    group("教务", entries: [.exam, .grade, .plan, .calendar])
-                    group("生活", entries: [.bill, .netfee, .checkin, .leave])
-                    group("杂项", entries: [.ehall, .jwgl])
+            GeometryReader { proxy in
+                ScrollView {
+                    if usesWorkspace {
+                        tabletServices(width: proxy.size.width)
+                    } else {
+                        VStack(alignment: .leading, spacing: 26) {
+                            group("教务", entries: [.exam, .grade, .plan, .calendar], columns: columns(for: proxy.size.width))
+                            group("生活", entries: [.bill, .netfee, .checkin, .leave], columns: columns(for: proxy.size.width))
+                            group("杂项", entries: [.ehall, .jwgl], columns: columns(for: proxy.size.width))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 4)
+                        .padding(.bottom, 24)
+                        .frame(maxWidth: 1080)
+                        .frame(maxWidth: .infinity)
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 24)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("校园")
+            .campusSidebarToolbar()
+            .navigationTitle(!usesWorkspace ? "校园" : "校园服务")
+            .navigationBarTitleDisplayMode(!usesWorkspace ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -147,15 +177,38 @@ struct InfoView: View {
         }
     }
 
-    private func group(_ title: String, entries: [Entry]) -> some View {
+    private func tabletServices(width: CGFloat) -> some View {
+        let twoColumns = width >= 680 && !dynamicTypeSize.isAccessibilitySize
+        return VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("校园服务").font(.largeTitle.bold())
+                Text("教务查询、生活服务与常用网站")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24, alignment: .top), count: twoColumns ? 2 : 1), alignment: .leading, spacing: 28) {
+                group("教务查询", entries: [.exam, .grade, .plan, .calendar], columns: [GridItem(.flexible())])
+                group("生活服务", entries: [.bill, .netfee, .checkin, .leave], columns: [GridItem(.flexible())])
+                group("常用网站", entries: [.ehall, .jwgl], columns: [GridItem(.flexible())])
+            }
+        }
+        .padding(width >= 600 ? 28 : 20)
+        .frame(maxWidth: 1180, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private func group(_ title: String, entries: [Entry], columns: [GridItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.title3.weight(.semibold))
                 .padding(.leading, 2)
 
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: !usesWorkspace ? 12 : 0) {
                 ForEach(entries) { entry in
-                    if entry == .bill {
+                    if let page = entry.page, let navigate {
+                        Button { navigate(page) } label: { card(entry) }
+                            .buttonStyle(.plain)
+                    } else if entry == .bill {
                         NavigationLink {
                             ElectricityView()
                         } label: {
@@ -232,16 +285,21 @@ struct InfoView: View {
                     }
                 }
             }
+            .background(!usesWorkspace ? Color.clear : Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         }
     }
 
     private func subtitle(for entry: Entry) -> String {
         guard entry == .bill, let balance = app.electricityBalance else { return entry.subtitle }
-        return "剩 ¥\(balance)"
+        return "剩 \(balance) 度"
     }
 
+    @ViewBuilder
     private func card(_ entry: Entry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        if usesWorkspace {
+            serviceRow(entry)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: entry.icon)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(entry.tint)
@@ -266,6 +324,38 @@ struct InfoView: View {
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func serviceRow(_ entry: Entry) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: entry.icon)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(entry.tint)
+                .frame(width: 38, height: 38)
+                .background(entry.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                let subtitle = subtitle(for: entry)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .multilineTextAlignment(.leading)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(.separator).opacity(0.4))
+                .frame(height: 0.5)
+                .padding(.leading, 68)
+        }
     }
 }
 

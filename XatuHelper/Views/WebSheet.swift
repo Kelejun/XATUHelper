@@ -9,6 +9,9 @@ struct WebSheet: View {
     var followUpURL: String? = nil
     /// 进页面前用 document.cookie 写进去的键值（绕开 path 不匹配）
     var cookies: [String: String] = [:]
+    var showsCloseButton = true
+    var showsSidebarToggle = false
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
@@ -37,16 +40,19 @@ struct WebSheet: View {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
                 }
             }
+            .campusSidebarToolbar(enabled: showsSidebarToggle)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
+                if showsCloseButton {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            if let onClose { onClose() } else { dismiss() }
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("关闭")
                     }
-                    .accessibilityLabel("关闭")
                 }
                 if isLoading {
                     ToolbarItem(placement: .topBarTrailing) {

@@ -809,7 +809,7 @@ final class AppState: ObservableObject {
         return previous.balance - record.balance
     }
 
-    /// 余额低于十块就当快没电了，用橙色提醒一下
+    /// 余额低于十度就当快没电了，用橙色提醒一下
     var isLowBalance: Bool {
         guard let text = electricityBalance else { return false }
         let cleaned = text.replacingOccurrences(of: "¥", with: "").trimmingCharacters(in: .whitespaces)

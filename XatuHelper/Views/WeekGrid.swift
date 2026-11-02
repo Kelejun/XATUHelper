@@ -52,7 +52,7 @@ enum PeriodSchedule {
     }
 }
 
-/// 一周课表网格，样式照着系统日历的周视图来。不留时间轴，整宽平分给各天。
+/// 周课表：宽窗口提供节次时间轴，窄窗口保留紧凑网格。
 struct WeekGrid: View {
     let blocks: [CourseBlock]
     let unitCount: Int
@@ -62,40 +62,70 @@ struct WeekGrid: View {
     var showWeekend: Bool = true
     var onSelect: (CourseBlock) -> Void
 
-    private let headerHeight: CGFloat = 40
-    private let minRowHeight: CGFloat = 28
+    @Environment(\.campusNavigation) private var navigate
+    @ScaledMetric(relativeTo: .caption) private var minimumRowHeight: CGFloat = 44
+
+    private var headerHeight: CGFloat { navigate == nil ? 40 : 56 }
     private let maxRowHeight: CGFloat = 84
     private let dayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
-    /// 只画到这一周真实排到的最晚一节，别留一排空格子
+    /// iPad 展示完整作息轴；手机只画到这一周最后一节课。
     private var periods: Int {
         let latest = blocks.map(\.endPeriod).max() ?? 0
-        return max(latest, 4)
+        return max(latest, navigate == nil ? 4 : max(unitCount, 4))
     }
 
     private var dayCount: Int { showWeekend ? 7 : 5 }
 
     var body: some View {
         GeometryReader { proxy in
-            let dayWidth = proxy.size.width / CGFloat(dayCount)
+            let axisWidth: CGFloat = proxy.size.width >= 600 ? 60 : 0
+            let gridWidth = max(0, proxy.size.width - axisWidth)
+            let dayWidth = gridWidth / CGFloat(dayCount)
             let available = max(proxy.size.height - headerHeight, 0)
-            let rowHeight = min(maxRowHeight, max(minRowHeight, available / CGFloat(periods)))
+            let minimum = max(minimumRowHeight, navigate == nil ? 44 : 56)
+            let rowHeight = max(minimum, min(maxRowHeight, available / CGFloat(periods)))
 
             VStack(spacing: 0) {
-                headerRow(dayWidth: dayWidth)
-
-                // 不用 ScrollView：竖把手势让给外层翻周，行高自己缩到能放下
-                ZStack(alignment: .topLeading) {
-                    gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
-                    blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
+                HStack(spacing: 0) {
+                    if axisWidth > 0 {
+                        Text("节次").font(.caption2).foregroundStyle(.secondary)
+                            .frame(width: axisWidth, height: headerHeight)
+                    }
+                    headerRow(dayWidth: dayWidth)
                 }
-                .frame(
-                    width: proxy.size.width,
-                    height: CGFloat(periods) * rowHeight,
-                    alignment: .topLeading
-                )
+                .background(Color(.systemBackground))
+
+                ScrollView(.vertical) {
+                    HStack(alignment: .top, spacing: 0) {
+                        if axisWidth > 0 { timeAxis(width: axisWidth, rowHeight: rowHeight) }
+                        ZStack(alignment: .topLeading) {
+                            gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
+                            blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
+                        }
+                        .frame(width: gridWidth, height: CGFloat(periods) * rowHeight, alignment: .topLeading)
+                    }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .background(Color(.systemBackground))
+        }
+    }
+
+    private func timeAxis(width: CGFloat, rowHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ForEach(1...periods, id: \.self) { period in
+                VStack(spacing: 4) {
+                    Text("\(period)").font(.caption.weight(.medium))
+                    Text(PeriodSchedule.startTime(period))
+                        .font(.system(size: 10)).monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+                .frame(width: width, height: rowHeight, alignment: .top)
             }
         }
+        .background(Color(.secondarySystemBackground).opacity(0.55))
     }
 
     // MARK: - 表头
@@ -108,11 +138,11 @@ struct WeekGrid: View {
 
                 VStack(spacing: 1) {
                     Text(dayLabels[index])
-                        .font(.system(size: 11, weight: isToday ? .semibold : .regular))
+                        .font(.system(size: navigate == nil ? 11 : 13, weight: isToday ? .semibold : .regular))
                         .foregroundStyle(isToday ? Color.accentColor : Color.secondary)
                     if let day {
                         Text("\(Calendar.current.component(.day, from: day))")
-                            .font(.system(size: 15, weight: isToday ? .bold : .regular))
+                            .font(.system(size: navigate == nil ? 15 : 20, weight: isToday ? .bold : .regular))
                             .foregroundStyle(isToday ? Color.accentColor : Color.primary)
                     }
                 }
@@ -135,6 +165,13 @@ struct WeekGrid: View {
 
     private func gridLines(dayWidth: CGFloat, rowHeight: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
+            ForEach(0..<dayCount, id: \.self) { index in
+                let today = date(at: index).map { Calendar.current.isDateInToday($0) } ?? false
+                Rectangle()
+                    .fill(today ? Color.accentColor.opacity(0.04) : (index >= 5 ? Color(.secondarySystemBackground).opacity(0.4) : Color.clear))
+                    .frame(width: dayWidth, height: CGFloat(periods) * rowHeight)
+                    .offset(x: CGFloat(index) * dayWidth)
+            }
             ForEach(0...periods, id: \.self) { row in
                 Rectangle()
                     .fill(Color(.separator).opacity(0.5))
@@ -176,20 +213,26 @@ struct WeekGrid: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(block.name)
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .lineLimit(block.span >= 2 ? 4 : 2)
+                        .font(dayWidth >= 90 ? .subheadline.weight(.semibold) : .caption2.weight(.semibold))
+                        .lineLimit(dayWidth >= 90 ? 2 : (block.span >= 2 ? 4 : 2))
                         .minimumScaleFactor(0.8)
 
                     Spacer(minLength: 0)
 
+                    if dayWidth >= 90, height >= 110, !block.teacher.isEmpty {
+                        Text(block.teacher)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
                     if block.span >= 2, !block.room.isEmpty {
                         Text(block.shortRoom)
-                            .font(.system(size: 9))
+                            .font(.caption2)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, dayWidth >= 90 ? 7 : 3)
 
                 Spacer(minLength: 0)
             }
@@ -197,7 +240,7 @@ struct WeekGrid: View {
             .padding(.trailing, 4)
             .foregroundStyle(tint)
             .frame(width: dayWidth - 3, height: height, alignment: .topLeading)
-            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: navigate == nil ? 6 : 10))
         }
         .buttonStyle(.plain)
     }

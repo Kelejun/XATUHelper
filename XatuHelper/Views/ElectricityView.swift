@@ -181,7 +181,7 @@ struct ElectricityView: View {
                         AxisGridLine()
                         AxisValueLabel {
                             if let amount = value.as(Double.self) {
-                                Text("¥" + String(format: amount < 10 ? "%.1f" : "%.0f", amount))
+                                Text(String(format: amount < 10 ? "%.1f 度" : "%.0f 度", amount))
                             }
                         }
                     }
@@ -227,19 +227,19 @@ struct ElectricityView: View {
         ).day ?? 0
         guard days > 0 else { return nil }
         let used = usagePoints.reduce(0) { $0 + $1.usage }
-        return String(format: "平均每天用 ¥%.2f", used / Double(days))
+        return String(format: "平均每天用 %.2f 度", used / Double(days))
     }
 
     @ViewBuilder
     private var balanceValue: some View {
         if let balance = app.electricityBalance {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("¥")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
                 Text(balance)
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .foregroundStyle(app.isLowBalance ? .orange : .primary)
+                Text("度")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
             }
         } else if app.electricityLoading {
             Text("查询中…")

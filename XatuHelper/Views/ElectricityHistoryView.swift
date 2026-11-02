@@ -52,13 +52,13 @@ struct ElectricityHistoryView: View {
 
             if let usage = app.electricityUsage(on: record) {
                 Text(usage >= 0
-                     ? String(format: "用 ¥%.2f", usage)
-                     : String(format: "充 ¥%.2f", -usage))
+                     ? String(format: "用 %.2f 度", usage)
+                     : String(format: "增 %.2f 度", -usage))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Text("¥\(record.amountText)")
+            Text("\(record.amountText) 度")
                 .monospacedDigit()
                 .foregroundStyle(record.balance < 10 ? .orange : .primary)
         }

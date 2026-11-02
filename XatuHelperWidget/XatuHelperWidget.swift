@@ -326,7 +326,7 @@ struct ElectricityWidgetView: View {
         } else {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text("电费还剩")
+                    Text("剩余电量")
                         .font(.headline)
                     Spacer(minLength: 0)
                     Button(intent: RefreshElectricityIntent()) {
@@ -342,7 +342,7 @@ struct ElectricityWidgetView: View {
                 Spacer(minLength: 0)
 
                 if let balance = entry.snapshot.balance {
-                    Text("¥\(String(format: "%.2f", balance))")
+                    Text("\(String(format: "%.2f", balance)) 度")
                         .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
                         .lineLimit(1)

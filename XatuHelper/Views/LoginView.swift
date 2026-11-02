@@ -71,6 +71,9 @@ struct LoginView: View {
                 }
 
             }
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("XATU Helper")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
