@@ -264,7 +264,7 @@ struct TimetableView: View {
             if app.isStale(.timetable) {
                 await app.refresh()
             }
-            if !NotificationSettings.hasPrompted {
+            if !app.isDemoMode && !NotificationSettings.hasPrompted {
                 showNotificationSetup = true
             }
         }
@@ -388,7 +388,6 @@ struct SettingsContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
-    @AppStorage("autoRefreshElectricity") private var autoRefreshElectricity = true
 
     /// 显示版本与构建时的 Git 提交。
     static var versionText: String {
@@ -408,15 +407,10 @@ struct SettingsContent: View {
                 }
             }
 
-            Section {
-                Toggle("每日自动刷新电费余额", isOn: $autoRefreshElectricity)
-            } header: {
-                Text("电费")
-            } footer: {
-                Text("打开后每天第一次进 app 会自动查一次余额，关掉就只能手动刷新。")
+            if !app.isDemoMode {
+                ElectricityRefreshSettingsSection()
+                ClassNotificationSection()
             }
-
-            ClassNotificationSection()
 
             Section {
                 NavigationLink("查看更多课程表设置...") {
@@ -424,7 +418,7 @@ struct SettingsContent: View {
                 }
             }
 
-            ExamNotificationSection()
+            if !app.isDemoMode { ExamNotificationSection() }
 
             Section {
                 Toggle("显示诊断数据", isOn: $showDiagnostics)

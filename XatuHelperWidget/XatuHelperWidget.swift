@@ -52,7 +52,7 @@ enum PreviewData {
             courses: courses,
             balance: 52.77,
             balanceUpdatedAt: Date(),
-            roomName: "9号公寓",
+            roomName: "320宿舍",
             upcomingBreak: WidgetSnapshot.Break(title: "放寒假",
                                                 date: Date().addingTimeInterval(83 * 86400),
                                                 days: 83),
@@ -112,10 +112,10 @@ struct CourseWidget: Widget {
             provider: CourseProvider()
         ) { entry in
             CourseWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
+                .containerBackground(for: .widget) { WidgetBackdrop(tint: .blue) }
         }
         .configurationDisplayName("课程")
-        .description("今天还没上完的课；今天的课上完后接着显示明天的。")
+        .description("查看下一节课与今日安排，可设置课后显示明天的课程。")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -124,7 +124,7 @@ struct ElectricityWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ElectricityWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             ElectricityWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
+                .containerBackground(for: .widget) { WidgetBackdrop(tint: .orange) }
         }
         .configurationDisplayName("电费")
         .description("宿舍还剩多少电费。")
@@ -136,7 +136,7 @@ struct BreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BreakWidget", provider: SnapshotProvider(preview: PreviewData.snapshot)) { entry in
             BreakWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop() }
+                .containerBackground(for: .widget) { WidgetBackdrop(tint: .teal) }
         }
         .configurationDisplayName("放假倒计时")
         .description("离放假还有多少天。")
@@ -183,91 +183,144 @@ struct CourseWidgetView: View {
     }
 
     private var smallLayout: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 0) {
             header
-            Spacer(minLength: 0)
-            if visibleCourses.isEmpty {
-                Text(emptyText)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .multilineTextAlignment(.center)
-            } else {
-                ForEach(visibleCourses.prefix(3)) { course in
-                    courseRow(course, showsRoom: false, wrapsName: true)
+            Spacer(minLength: 6)
+            if let course = visibleCourses.first {
+                featuredCourse(course, compact: true)
+                Spacer(minLength: 6)
+                HStack(spacing: 4) {
+                    Circle().fill(Self.color(for: course)).frame(width: 5, height: 5)
+                    Text(courseStatus(course, compact: true))
+                    Spacer(minLength: 0)
+                    if visibleCourses.count > 1 {
+                        Text("另有 \(visibleCourses.count - 1) 节")
+                    }
                 }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            } else {
+                emptyCourses
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var mediumLayout: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             header
-            Spacer(minLength: 0)
-            if visibleCourses.isEmpty {
-                Text(emptyText)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .multilineTextAlignment(.center)
-            } else {
-                ForEach(visibleCourses.prefix(4)) { course in
-                    courseRow(course, showsRoom: true, wrapsName: false)
+            if let course = visibleCourses.first {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        featuredCourse(course, compact: false)
+                        Text(courseStatus(course))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Self.color(for: course))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                    Rectangle()
+                        .fill(.primary.opacity(0.08))
+                        .frame(width: 1)
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        if visibleCourses.count > 1 {
+                            ForEach(visibleCourses.dropFirst().prefix(2)) { next in
+                                upcomingCourse(next)
+                            }
+                            if visibleCourses.count > 3 {
+                                Text("还有 \(visibleCourses.count - 3) 节课")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundStyle(.secondary)
+                            Text("之后没有课程")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+            } else {
+                emptyCourses
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// 一节课 = 一根色条 + 淡渐变底，和 app 里首页的课程行一个路数
-    private func courseRow(_ course: WidgetSnapshot.Course, showsRoom: Bool, wrapsName: Bool) -> some View {
-        let tint = Self.color(for: course)
-        return HStack(spacing: 6) {
-            Capsule()
-                .fill(tint)
-                .frame(width: 3)
-                .padding(.vertical, 3)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(course.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .lineLimit(wrapsName ? 2 : 1)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .minimumScaleFactor(0.8)
-
-                if showsRoom, !course.room.isEmpty {
-                    Text(course.room)
-                        .font(.system(size: 9))
-                        .foregroundStyle(tint.opacity(0.75))
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
+    private func featuredCourse(_ course: WidgetSnapshot.Course, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(WidgetSnapshot.clock(course.startMinutes))
-                .font(.system(size: 10, design: .rounded))
-                .foregroundStyle(tint.opacity(0.8))
-                .lineLimit(1)
+                .font(.system(size: compact ? 26 : 28, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Self.color(for: course))
+            Text(course.name)
+                .font(.system(size: compact ? 14 : 15, weight: .semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+            if !course.room.isEmpty {
+                Label(course.room, systemImage: "mappin")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [tint.opacity(0.20), tint.opacity(0.10)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        )
+    }
+
+    private func upcomingCourse(_ course: WidgetSnapshot.Course) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Self.color(for: course))
+                .frame(width: 3, height: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(WidgetSnapshot.clock(course.startMinutes))
+                        .foregroundStyle(Self.color(for: course))
+                    if !course.room.isEmpty {
+                        Text(course.room).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.system(size: 10, weight: .medium))
+                .lineLimit(1)
+                Text(course.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func courseStatus(_ course: WidgetSnapshot.Course, compact: Bool = false) -> String {
+        let calendar = Calendar.current
+        let minutes = calendar.component(.hour, from: entry.date) * 60
+            + calendar.component(.minute, from: entry.date)
+        if compact {
+            return !showingTomorrow && minutes >= course.startMinutes
+                ? "正在上课" : "\(WidgetSnapshot.clock(course.endMinutes)) 下课"
+        }
+        return !showingTomorrow && minutes >= course.startMinutes
+            ? "正在上课 · \(WidgetSnapshot.clock(course.endMinutes)) 下课"
+            : "下一节 · \(WidgetSnapshot.clock(course.endMinutes)) 下课"
+    }
+
+    private var emptyCourses: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: "sun.max")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(.blue)
+            Text(emptyText)
+                .font(.system(size: 18, weight: .semibold))
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
+            Text("留点时间给自己")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     /// 和 app 里 CoursePalette 同一套颜色，下标由 App 端算好写进快照
@@ -300,10 +353,20 @@ struct CourseWidgetView: View {
     }
 
     private var header: some View {
-        Text(headerText)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+        HStack(spacing: 5) {
+            Image(systemName: "calendar")
+                .foregroundStyle(.blue)
+            Text(headerText)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            if family == .systemMedium {
+                Text(showingTomorrow ? "明日课程" : "今日课程")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
     }
 
     private var headerText: String {
@@ -320,60 +383,82 @@ struct CourseWidgetView: View {
 struct ElectricityWidgetView: View {
     let entry: TodayEntry
 
+    private var isLow: Bool { (entry.snapshot.balance ?? .infinity) < 10 }
+    private var tint: Color { isLow ? .orange : .primary }
+
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text("剩余电量")
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.fill").foregroundStyle(.orange)
+                    Text("宿舍电量").foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Button(intent: RefreshElectricityIntent()) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.blue)
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.blue.opacity(0.12)))
+                            .frame(width: 28, height: 28)
+                            .background(.primary.opacity(0.06), in: Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("刷新电量")
                 }
+                .font(.system(size: 11, weight: .medium))
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 6)
 
                 if let balance = entry.snapshot.balance {
-                    Text("\(String(format: "%.2f", balance)) 度")
-                        .font(.system(size: 30, weight: .semibold, design: .rounded))
-                        .foregroundStyle(balance < 10 ? Color.orange : Color.primary)
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(String(format: "%.2f", balance))
+                            .font(.system(size: 38, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.55)
+                            .layoutPriority(1)
+                        Text("度")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    Text(isLow ? "电量偏低，记得充值" : "剩余可用电量")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(isLow ? Color.orange : Color.secondary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.6)
                 } else {
-                    Text("还没查过")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    Text("待查询")
+                        .font(.system(size: 27, weight: .semibold))
+                    Text("打开 App 查询宿舍电量")
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
 
-                Text(footerText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    if let room = entry.snapshot.roomName, !room.isEmpty {
+                        Label(room, systemImage: "building.2")
+                            .font(.system(size: 10, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    Text(updateText)
+                        .font(.system(size: 9))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
-    private var footerText: String {
-        var parts: [String] = []
-        if let room = entry.snapshot.roomName, !room.isEmpty {
-            parts.append(room)
-        }
-        if let updated = entry.snapshot.balanceUpdatedAt {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            parts.append(formatter.string(from: updated))
-        }
-        return parts.isEmpty ? "打开 App 查一次" : parts.joined(separator: " · ")
+    private var updateText: String {
+        guard let updated = entry.snapshot.balanceUpdatedAt else { return "尚无查询记录" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = Calendar.current.isDate(updated, inSameDayAs: entry.date)
+            ? "HH:mm 更新" : "M/d HH:mm 更新"
+        return formatter.string(from: updated)
     }
 }
 
@@ -383,67 +468,94 @@ struct BreakWidgetView: View {
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
-        } else if let item = entry.snapshot.upcomingBreak {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(item.title)还有")
-                    .font(.headline)
-                    .lineLimit(1)
-
-                Spacer(minLength: 0)
-
-                Text(item.days == 0 ? "今天" : "\(item.days) 天")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.teal)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-
-                Spacer(minLength: 0)
-
-                Text(dateText(item.date))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("放假倒计时")
-                    .font(.headline)
-                Spacer(minLength: 0)
-                Text("先把校历打开一次")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sun.horizon.fill").foregroundStyle(.teal)
+                    Text("假期倒计时").foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11, weight: .medium))
 
-    private func dateText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M月d日"
-        return formatter.string(from: date)
+                Spacer(minLength: 8)
+
+                if let item = entry.snapshot.upcomingBreak {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(item.days <= 0 ? "今天" : "\(item.days)")
+                            .font(.system(size: item.days <= 0 ? 36 : 48, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.teal)
+                            .minimumScaleFactor(0.6)
+                        if item.days > 0 {
+                            Text("天")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .lineLimit(1)
+                    Text(item.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 8)
+                    Text(item.date, format: .dateTime.month().day().weekday(.abbreviated))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 27, weight: .light))
+                        .foregroundStyle(.teal)
+                    Text("期待下一次放假")
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(.top, 8)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 8)
+                    Text("打开 App 查看校历后显示")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
     }
 }
 
 struct EmptyHint: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("XATU Helper")
-                .font(.headline)
-            Text("打开 App 登录一次，这里就有数据了。")
-                .font(.caption2)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 5) {
+                Image(systemName: "square.grid.2x2.fill").foregroundStyle(.blue)
+                Text("XATU Helper").foregroundStyle(.secondary)
+            }
+            .font(.system(size: 11, weight: .medium))
+            Spacer(minLength: 10)
+            Text("校园日常\n一眼掌握")
+                .font(.system(size: 21, weight: .semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 10)
+            Label("打开 App 登录", systemImage: "arrow.up.right")
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// 使用系统语义底色，浅色与深色模式共享轻量的主题渐变。
+struct WidgetBackdrop: View {
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+            LinearGradient(
+                colors: [tint.opacity(0.13), tint.opacity(0.02), .clear],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            )
         }
     }
 }
-
-
-/// 小组件底色：iOS 26 起用系统玻璃效果，老系统退回毛玻璃材质。
-struct WidgetBackdrop: View {
-    var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-    }
-}
-
-

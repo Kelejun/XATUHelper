@@ -3,6 +3,7 @@ import SwiftUI
 
 /// 电费页：没选过宿舍就引导去选，选过就直接显示余额。
 struct ElectricityView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var app: AppState
     @State private var editing = false
     @State private var showingCharge = false
@@ -62,7 +63,8 @@ struct ElectricityView: View {
                 WebSheet(title: "充值", urlString: chargeURL, followUpURL: chargeTarget)
             }
         }
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             await app.refreshElectricityIfNeeded()
         }
     }

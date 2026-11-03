@@ -8,6 +8,7 @@ import Combine
 enum InAppNoticeKind: String, Identifiable {
     case exam
     case grade
+    case loginFailure
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum InAppNoticeKind: String, Identifiable {
         switch self {
         case .exam: return "有新的考试安排"
         case .grade: return "有新的成绩公布"
+        case .loginFailure: return "登录失败"
         }
     }
 }
@@ -22,7 +24,7 @@ enum InAppNoticeKind: String, Identifiable {
 struct InAppNotice: Identifiable, Equatable {
     var kind: InAppNoticeKind
     var message: String
-    var id: String { kind.rawValue }
+    var id = UUID()
 }
 
 /// 点横幅后要打开的页面
@@ -35,6 +37,8 @@ enum DeepLink: String, Identifiable {
 
 @MainActor
 final class AppState: ObservableObject {
+    let isDemoMode: Bool
+    @Published var showsDemoAccount = false
     @Published var occurrences: [CourseOccurrence] = [] {
         didSet {
             let keys = occurrences.map(\.courseKey)
@@ -67,6 +71,7 @@ final class AppState: ObservableObject {
     @Published var electricityCheckedAt: Date?
     @Published var electricityLoading = false
     @Published var electricityError: String?
+    @Published var backgroundElectricityScheduleError: String?
     /// 按天的余额存档，画曲线和历史页都用它
     @Published var electricityHistory: [ElectricityRecord] = []
 
@@ -82,7 +87,7 @@ final class AppState: ObservableObject {
     @Published var gradesLoading = false
     @Published var plan: PlanSnapshot = .empty
     @Published var planNeedsLogin = false
-    @Published var planCatalog: PlanCatalog = PlanCatalogStore.load()
+    @Published var planCatalog = PlanCatalog(updatedAt: .distantPast, courses: [])
     @Published var inAppNotice: InAppNotice?
     @Published var deepLink: DeepLink?
     @Published var planFetchedAt: Date?
@@ -95,6 +100,7 @@ final class AppState: ObservableObject {
     @Published var weekOneMonday: Date = AppState.fallStart
     /// 需要验证码/动态码时弹出网页登录
     @Published var showsWebLogin = false
+    @Published var webLoginSessionID = UUID()
 
     /// 2026-09-07 是第 1 周周一
     static let fallStart: Date = {
@@ -111,6 +117,7 @@ final class AppState: ObservableObject {
     private var projectID = ""
     /// 登录页填的账号密码，网页兜底登录成功后存进 Keychain
     private var pendingCredentials: (student: String, password: String)?
+    private var pendingPasswordVerified = false
 
     private let store = TimetableStore()
     private let cas = CASService()
@@ -124,9 +131,15 @@ final class AppState: ObservableObject {
     private let gradeStore = GradeStore()
     private let planStore = PlanStore()
 
-    init() {
+    init(isDemo: Bool = false) {
+        isDemoMode = isDemo
+        if isDemo {
+            configureDemoAccount()
+            return
+        }
         // 先把上次存的登录 cookie 塞回来，再读缓存
         CookieVault.restore()
+        planCatalog = PlanCatalogStore.load()
         studentID = Preferences.studentID ?? ""
         dorm = Preferences.dorm
         electricityBalance = Preferences.electricityBalance
@@ -164,6 +177,7 @@ final class AppState: ObservableObject {
 
     /// 某类数据是否已经过期（没数据也算过期）
     func isStale(_ kind: CacheKind) -> Bool {
+        guard !isDemoMode else { return false }
         switch kind {
         case .timetable:
             guard let fetched = fetchedAt else { return true }
@@ -265,6 +279,7 @@ final class AppState: ObservableObject {
 
     /// 登录后先问一次教务首页，别按自己猜的校历算
     func calibrateFromServer() async {
+        guard !isDemoMode else { return }
         guard let week = await eams.fetchOfficialWeek() else { return }
         applyOfficialWeek(week)
         persist()
@@ -273,11 +288,14 @@ final class AppState: ObservableObject {
     // MARK: - 登录 / 刷新
 
     func login(student: String, password: String) async {
+        guard !isLoading, !isDemoMode else { return }
+        pendingPasswordVerified = false
         isLoading = true
         errorMessage = nil
         pendingCredentials = (student, password)
         do {
             try await cas.login(username: student, password: password)
+            pendingPasswordVerified = true
             recordLoginTime()
             Keychain.savePassword(password, account: student)
             Preferences.studentID = student
@@ -287,43 +305,71 @@ final class AppState: ObservableObject {
             await calibrateFromServer()
             try await loadTable()
             CookieVault.pinAndSave()
+            showsWebLogin = false
+            dismissNotice()
             isLoggedIn = true
             pendingCredentials = nil
         } catch {
-            handle(error)
+            presentLoginFailure()
         }
         isLoading = false
     }
 
     /// 网页登录成功后，cookie 已经落进共享存储，这里把该拉的都拉一遍
     func completeWebLogin() async {
-        showsWebLogin = false
+        guard !isLoading, !isDemoMode else { return }
         isLoading = true
+        let session = webLoginSessionID
+        defer { isLoading = false }
         errorMessage = nil
         do {
             try await bootstrap()
+            try Task.checkCancellation()
+            guard session == webLoginSessionID else { return }
             if selectedSemesterID.isEmpty {
                 selectedSemesterID = currentSemesterID
             }
             await calibrateFromServer()
             try await loadTable()
 
+            try Task.checkCancellation()
+            guard session == webLoginSessionID else { return }
             CookieVault.pinAndSave()
             if let credentials = pendingCredentials {
-                Keychain.savePassword(credentials.password, account: credentials.student)
+                if pendingPasswordVerified {
+                    Keychain.savePassword(credentials.password, account: credentials.student)
+                }
                 Preferences.studentID = credentials.student
                 studentID = credentials.student
                 pendingCredentials = nil
             }
+            showsWebLogin = false
+            dismissNotice()
             isLoggedIn = true
             await rescheduleNotifications()
         } catch {
-            handle(error)
+            guard !Task.isCancelled, session == webLoginSessionID else { return }
+            presentLoginFailure()
         }
-        isLoading = false
+    }
+
+    func cancelWebLogin() {
+        webLoginSessionID = UUID()
+        showsWebLogin = false
+        pendingCredentials = nil
+        pendingPasswordVerified = false
+        if inAppNotice?.kind == .loginFailure { dismissNotice() }
+    }
+
+    private func presentLoginFailure() {
+        errorMessage = nil
+        webLoginSessionID = UUID()
+        showsWebLogin = true
+        showNotice(InAppNotice(kind: .loginFailure, message: "可能是因为密码错误、触发验证码等原因"))
     }
 
     func refresh() async {
+        guard !isDemoMode else { return }
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -362,6 +408,16 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
+        if isDemoMode {
+            isLoggedIn = false
+            return
+        }
+        pendingCredentials = nil
+        pendingPasswordVerified = false
+        showsWebLogin = false
+        dismissNotice()
+        ElectricityRefreshSettings.resetAttempts()
+        BackgroundElectricityRefresh.clearExitReminder()
         if let account = Preferences.studentID {
             Keychain.deletePassword(account: account)
         }
@@ -392,6 +448,7 @@ final class AppState: ObservableObject {
         fetchedAt = nil
         weekOneMonday = AppState.fallStart
         isLoggedIn = false
+        scheduleBackgroundElectricityRefresh()
     }
 
     /// 用当前周次反推第 1 周周一，方便老大手动校正
@@ -541,6 +598,7 @@ final class AppState: ObservableObject {
     // MARK: - 考试
 
     func refreshExams(semesterID: String? = nil) async {
+        guard !isDemoMode else { return }
         guard !examsLoading else { return }
         examsLoading = true
         examsError = nil
@@ -562,6 +620,7 @@ final class AppState: ObservableObject {
     // MARK: - 成绩
 
     func refreshGrades(semesterID: String? = nil, scope: GradeScope? = nil) async {
+        guard !isDemoMode else { return }
         guard !gradesLoading else { return }
         gradesLoading = true
         gradesError = nil
@@ -629,6 +688,7 @@ final class AppState: ObservableObject {
     // MARK: - 培养计划
 
     func refreshPlan() async {
+        guard !isDemoMode else { return }
         guard !planLoading else { return }
         planLoading = true
         planError = nil
@@ -653,6 +713,7 @@ final class AppState: ObservableObject {
 
     /// 教学计划里的课程信息（开课学期 / 学时 / 是否必修）取到一次就存本地
     func refreshPlanCatalogIfNeeded(force: Bool = false) async {
+        guard !isDemoMode else { return }
         guard force || planCatalog.courses.isEmpty else { return }
         do {
             let courses = try await eams.fetchPlanCatalog()
@@ -680,6 +741,7 @@ final class AppState: ObservableObject {
 
     /// 用户手动点「重新登录」，只走一次，不受自动重登的冷却限制
     func reloginNow() async {
+        guard !isDemoMode else { return }
         do {
             try await rawRelogin()
             recordLoginTime()
@@ -697,6 +759,7 @@ final class AppState: ObservableObject {
     /// 其他数据（考试、成绩）只在进入对应页面时刷新，首页考试卡片只读缓存
     /// 按当前开关重排本地通知（内容在排期那一刻固定，所以每次数据变了都要重来一遍）
     func rescheduleNotifications() async {
+        guard !isDemoMode else { return }
         let classOn = NotificationSettings.classOn
         let examOn = NotificationSettings.examOn
         guard classOn || examOn else {
@@ -713,17 +776,11 @@ final class AppState: ObservableObject {
     }
 
     func startupRefreshIfNeeded() async {
+        guard !isDemoMode else { return }
         guard isLoggedIn else { return }
         await rescheduleNotifications()
 
-        let electricityIsStale: Bool = {
-            guard dorm != nil, electricityBalance != nil else { return dorm != nil }
-            guard let checked = electricityCheckedAt else { return true }
-            return !Calendar.current.isDateInToday(checked)
-        }()
-        if electricityIsStale {
-            await refreshElectricity()
-        }
+        await refreshElectricityIfNeeded()
 
         // 错峰过期，启动时最多补一份最该补的，避免一窝蜂联网。
         // 学业完成情况不参与启动补拉，只在进页面且过期时才拉。
@@ -751,41 +808,90 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// 冷启动/切回前台时顺手查一次，没选过宿舍就什么都不做
-    /// 每天第一次打开 app 才自动查一次，其余情况只靠用户手动刷新
-    /// 每日自动刷新开关，默认打开
-    var autoRefreshElectricity: Bool {
-        UserDefaults.standard.object(forKey: "autoRefreshElectricity") as? Bool ?? true
+    var autoRefreshElectricity: Bool { ElectricityRefreshSettings.automaticEnabled }
+
+    func scheduleBackgroundElectricityRefresh() {
+        guard !isDemoMode else { return }
+        backgroundElectricityScheduleError = BackgroundElectricityRefresh.schedule(
+            isLoggedIn: isLoggedIn, hasDorm: dorm != nil,
+            checkedAt: electricityCheckedAt, hasBalance: electricityBalance != nil
+        )
     }
 
+    /// SwiftUI 后台任务到期会取消当前 Task；尝试标记先落盘，避免中断后重复请求。
+    func performBackgroundElectricityRefresh() async {
+        guard !isDemoMode else { return }
+        defer {
+            CookieVault.pinAndSave()
+            scheduleBackgroundElectricityRefresh()
+        }
+        guard isLoggedIn, dorm != nil, !electricityLoading,
+              ElectricityRefreshSettings.backgroundEnabled, !Task.isCancelled,
+              ElectricityRefreshPolicy.canAttempt(
+                now: Date(), checkedAt: electricityCheckedAt, hasBalance: electricityBalance != nil,
+                lastAttempt: ElectricityRefreshSettings.lastBackgroundAttempt,
+                awaitingForeground: ElectricityRefreshSettings.awaitingForeground
+              ) else { return }
+        ElectricityRefreshSettings.lastBackgroundAttempt = Date()
+        ElectricityRefreshSettings.awaitingForeground = true
+        await refreshElectricity(source: .background)
+    }
+
+    /// 前台补查允许重试后台失败；当天已有成功记录则直接使用缓存。
     func refreshElectricityIfNeeded() async {
-        guard dorm != nil, autoRefreshElectricity else { return }
-        if let checked = electricityCheckedAt,
-           Calendar.current.isDateInToday(checked),
-           electricityBalance != nil {
+        guard !isDemoMode else { return }
+        guard isLoggedIn, dorm != nil, autoRefreshElectricity, !Task.isCancelled else { return }
+        guard !ElectricityRefreshPolicy.hasRefreshedToday(
+            checkedAt: electricityCheckedAt, hasBalance: electricityBalance != nil, now: Date()
+        ) else {
+            // 若上次在保存余额后、清理标记前中断，已有成功记录即可恢复排期。
+            ElectricityRefreshSettings.awaitingForeground = false
+            scheduleBackgroundElectricityRefresh()
             return
         }
-        await refreshElectricity()
+        await refreshElectricity(source: .automatic)
     }
 
-    func refreshElectricity() async {
-        guard let dorm, !electricityLoading else { return }
+    @discardableResult
+    func refreshElectricity(source: ElectricityRefreshSource = .manual) async -> Bool {
+        guard !isDemoMode else { return true }
+        guard let dorm, isLoggedIn, !electricityLoading, source.isAllowed, !Task.isCancelled else { return false }
+        if source != .manual, ElectricityRefreshPolicy.hasRefreshedToday(
+            checkedAt: electricityCheckedAt, hasBalance: electricityBalance != nil, now: Date()
+        ) {
+            ElectricityRefreshSettings.awaitingForeground = false
+            scheduleBackgroundElectricityRefresh()
+            return true
+        }
         electricityLoading = true
         electricityError = nil
+        defer {
+            electricityLoading = false
+            scheduleBackgroundElectricityRefresh()
+        }
         do {
             let balance = try await withPay { project -> String in
-                try await self.pay.balance(projectID: project.id, dorm: dorm)
+                try Task.checkCancellation()
+                return try await self.pay.balance(projectID: project.id, dorm: dorm)
             }
+            try Task.checkCancellation()
+            // 查询途中关掉自动刷新、退出账号或更换宿舍，不能把旧结果写回去。
+            guard isLoggedIn, self.dorm == dorm, source.isAllowed else { return false }
             electricityBalance = balance
             electricityCheckedAt = Date()
             Preferences.electricityBalance = balance
             Preferences.electricityCheckedAt = electricityCheckedAt
             recordElectricity(balance: balance)
+            ElectricityRefreshSettings.awaitingForeground = false
+            CookieVault.pinAndSave()
             publishWidgetSnapshot()
+            return true
         } catch {
-            electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+            if !Task.isCancelled {
+                electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+            }
+            return false
         }
-        electricityLoading = false
     }
 
     /// 一天只留一条，刷新多少次都只是覆盖当天这条
@@ -817,6 +923,8 @@ final class AppState: ObservableObject {
     }
 
     func saveDorm(_ selection: DormSelection) async {
+        if isDemoMode { dorm = selection; return }
+        ElectricityRefreshSettings.resetAttempts()
         dorm = selection
         Preferences.dorm = selection
         electricityBalance = nil
@@ -827,6 +935,9 @@ final class AppState: ObservableObject {
     }
 
     func clearDorm() {
+        if isDemoMode { dorm = nil; return }
+        ElectricityRefreshSettings.resetAttempts()
+        BackgroundElectricityRefresh.clearExitReminder()
         dorm = nil
         Preferences.dorm = nil
         electricityBalance = nil
@@ -834,24 +945,29 @@ final class AppState: ObservableObject {
         Preferences.electricityBalance = nil
         Preferences.electricityCheckedAt = nil
         electricityError = nil
+        scheduleBackgroundElectricityRefresh()
     }
 
     /// 充值页地址：走缴费平台的 casLogin，用现有 CAS 票据静默登录后停在落地页。
     /// 直接开充值路由/注入 token 都会被页面的登录态校验拦成「系统维护」。
     func chargePage() async -> (url: String, hash: String?)? {
-        (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
+        guard !isDemoMode else { return nil }
+        return (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
     }
 
     func loadSchools() async throws -> [DormOption] {
-        try await withPay { try await self.pay.schools(projectID: $0.id) }
+        if isDemoMode { return [DormOption(id: "demo-area", name: "未央校区")] }
+        return try await withPay { try await self.pay.schools(projectID: $0.id) }
     }
 
     func loadBuildings(areaID: String) async throws -> [DormOption] {
-        try await withPay { try await self.pay.buildings(projectID: $0.id, areaID: areaID) }
+        if isDemoMode { return [DormOption(id: "demo-build", name: "9号公寓")] }
+        return try await withPay { try await self.pay.buildings(projectID: $0.id, areaID: areaID) }
     }
 
     func loadRooms(areaID: String, buildID: String) async throws -> [DormOption] {
-        try await withPay { try await self.pay.rooms(projectID: $0.id, areaID: areaID, buildID: buildID) }
+        if isDemoMode { return [DormOption(id: "demo-room", name: "320宿舍")] }
+        return try await withPay { try await self.pay.rooms(projectID: $0.id, areaID: areaID, buildID: buildID) }
     }
 
     /// 借统一认证的登录态进 jfpay，顺手找到电费项目；会话过期会走一次自动重登
@@ -879,6 +995,7 @@ final class AppState: ObservableObject {
 
     /// 冷启动后补一次外壳信息：学生/班级记录 ID、学期 tagId，顺便刷新学期列表
     func ensureShell() async {
+        guard !isDemoMode else { return }
         guard studentTableID == nil || semesters.isEmpty else { return }
         do {
             try await bootstrap()
@@ -929,6 +1046,7 @@ final class AppState: ObservableObject {
     }
 
     private func persist() {
+        guard !isDemoMode else { return }
         let snapshot = TimetableSnapshot(
             occurrences: occurrences,
             studentID: studentID,

@@ -69,22 +69,34 @@ struct CASWebLoginView: UIViewRepresentable {
 
 struct CASWebLoginSheet: View {
     @EnvironmentObject var app: AppState
-    @Environment(\.dismiss) private var dismiss
+    @State private var completionTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             CASWebLoginView(startURL: CASService.loginURL()) { success in
-                dismiss()
                 if success {
-                    Task { await app.completeWebLogin() }
+                    completionTask = Task { await app.completeWebLogin() }
                 }
             }
+            .id(app.webLoginSessionID)
+            .onDisappear { completionTask?.cancel() }
             .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .top) {
+                if let notice = app.inAppNotice, notice.kind == .loginFailure {
+                    InAppNotificationLayer(notice: notice, onTap: app.dismissNotice, onClose: app.dismissNotice)
+                        .animation(InAppNotificationLayer.bannerAnimation, value: app.inAppNotice)
+                }
+            }
+            .overlay {
+                if app.isLoading {
+                    ProgressView().padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
             .navigationTitle("在网页里登录")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button("取消") { app.cancelWebLogin() }
                 }
             }
         }

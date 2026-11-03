@@ -4,6 +4,7 @@ import WidgetKit
 /// 把当前状态压成小组件能读的快照，写到 App Group 容器里
 extension AppState {
     func publishWidgetSnapshot() {
+        guard !isDemoMode else { return }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         // Calendar 里周日是 1，转成周一=1
@@ -52,7 +53,7 @@ extension AppState {
             tomorrowWeekday: tomorrowWeekday,
             balance: electricityBalance.flatMap(Double.init),
             balanceUpdatedAt: electricityCheckedAt,
-            roomName: dorm?.displayName,
+            roomName: dorm?.roomName,
             upcomingBreak: upcomingBreakForWidget(),
             nextExam: nextExamForWidget(),
             loggedIn: isLoggedIn

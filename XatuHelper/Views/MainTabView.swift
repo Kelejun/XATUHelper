@@ -104,6 +104,7 @@ extension View {
 
 struct MainTabView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selection: Tab = .home
     @State private var timetableWeek: Int?
@@ -146,16 +147,14 @@ struct MainTabView: View {
                 }
             }
         }
-        .task {
-            await app.startupRefreshIfNeeded()
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             await handlePendingRefresh()
+            await app.startupRefreshIfNeeded()
             app.publishWidgetSnapshot()
         }
         .onReceive(NotificationCenter.default.publisher(for: RefreshRequest.notification)) { _ in
             Task { await handlePendingRefresh() }
-        }
-        .sheet(isPresented: $app.showsWebLogin) {
-            CASWebLoginSheet()
         }
     }
 
@@ -309,6 +308,7 @@ struct MainTabView: View {
     }
 
     private func handlePendingRefresh() async {
+        guard !app.isDemoMode else { return }
         guard RefreshRequest.pendingElectricityRefresh() else { return }
         RefreshRequest.clearElectricityRefresh()
         await app.refreshElectricity()

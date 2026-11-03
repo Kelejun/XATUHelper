@@ -5,102 +5,118 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var showAbout = false
+    @State private var enterDemoAfterAbout = false
     @FocusState private var focused: Field?
 
-    private enum Field {
-        case username
-        case password
-    }
+    private enum Field { case username, password }
 
     private var canSubmit: Bool {
-        !app.isLoading && !username.isEmpty && !password.isEmpty
+        !app.isLoading && !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("学号", text: $username)
-                        .textContentType(.username)
-                        .keyboardType(.numberPad)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focused, equals: .username)
-
-                    SecureField("统一身份认证密码", text: $password)
-                        .textContentType(.password)
-                        .focused($focused, equals: .password)
-                } footer: {
-                    Text("密码只保存在本机的钥匙串里，不会上传到任何地方。")
+                    VStack(spacing: 12) {
+                        Image(systemName: "graduationcap.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.tint)
+                            .accessibilityHidden(true)
+                        Text("XATU Helper")
+                            .font(.title2.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
                 }
+                .listRowBackground(Color.clear)
 
                 Section {
-                    Button {
-                        focused = nil
-                        Task { await app.login(student: username, password: password) }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if app.isLoading {
-                                ProgressView()
-                                    .padding(.trailing, 6)
-                            }
+                    HStack(spacing: 12) {
+                        Image(systemName: "person")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
+                        TextField("学号", text: $username)
+                            .textContentType(.username)
+                            .keyboardType(.numberPad)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focused, equals: .username)
+                            .accessibilityLabel("学号")
+                    }
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
+                        SecureField("统一身份认证密码", text: $password)
+                            .textContentType(.password)
+                            .focused($focused, equals: .password)
+                            .submitLabel(.go)
+                            .onSubmit(submit)
+                            .accessibilityLabel("统一身份认证密码")
+                    }
+                }
+                .disabled(app.isLoading)
+
+                Section {
+                    Button(action: submit) {
+                        HStack(spacing: 8) {
+                            if app.isLoading { ProgressView() }
                             Text(app.isLoading ? "登录中…" : "登录")
-                            Spacer()
                         }
+                        .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(!canSubmit)
-                }
-
-                if let message = app.errorMessage {
-                    Section {
-                        Text(message)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                Section {
-                    Button("需要验证码？用网页登录") {
-                        focused = nil
-                        app.showsWebLogin = true
-                    }
-                    .disabled(app.isLoading)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 } footer: {
-                    Text("网页里可以输验证码，也可以用手机动态码。")
+                    Text("密码安全保存在本机钥匙串")
                 }
-
             }
+            .scrollDismissesKeyboard(.interactively)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("XATU Helper")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("登录")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAbout = true
-                    } label: {
+                    Button { showAbout = true } label: {
                         Image(systemName: "gearshape")
                     }
+                    .accessibilityLabel("设置")
+                    .disabled(app.isLoading)
                 }
             }
-            .sheet(isPresented: $showAbout) {
-                AboutSheet()
-            }
-            .sheet(isPresented: $app.showsWebLogin) {
-                CASWebLoginSheet()
+            .sheet(isPresented: $showAbout, onDismiss: {
+                if enterDemoAfterAbout {
+                    enterDemoAfterAbout = false
+                    app.showsDemoAccount = true
+                }
+            }) {
+                AboutSheet {
+                    enterDemoAfterAbout = true
+                    showAbout = false
+                }
             }
         }
         .onAppear {
             if username.isEmpty { username = app.studentID }
         }
     }
-}
 
+    private func submit() {
+        guard canSubmit else { return }
+        focused = nil
+        Task { await app.login(student: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password) }
+    }
+}
 
 struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
+    var onDemoAccount: () -> Void = {}
 
     private var version: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -115,15 +131,10 @@ struct AboutSheet: View {
                     LabeledContent("教务系统", value: "jwgl2018.xatu.edu.cn")
                     LabeledContent("统一认证", value: "authserver.xatu.edu.cn")
                 }
-
-                Section {
-                    Text("密码只存在本机钥匙串里，不会上传到任何地方。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section("关于") {
                     LabeledContent("版本", value: version)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 3, perform: onDemoAccount)
                 }
             }
             .navigationTitle("设置")
@@ -134,5 +145,18 @@ struct AboutSheet: View {
                 }
             }
         }
+    }
+}
+
+struct DemoAccountView: View {
+    @StateObject private var demo = AppState(isDemo: true)
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        MainTabView()
+            .environmentObject(demo)
+            .onChange(of: demo.isLoggedIn) { _, loggedIn in
+                if !loggedIn { dismiss() }
+            }
     }
 }
