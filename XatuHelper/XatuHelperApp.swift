@@ -21,7 +21,7 @@ struct XatuHelperApp: App {
             // 退到后台时把这一次运行里新拿到的 cookie 一起存下来，
             // 这样下次冷启动能接着用，不用重新登录。
             if phase == .active {
-                BackgroundElectricityRefresh.clearExitReminder()
+                BackgroundElectricityRefresh.clearExitReminder(includingTests: false)
             }
             if phase == .active || phase == .background {
                 app.scheduleBackgroundElectricityRefresh()
@@ -45,22 +45,21 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
-        .overlay(alignment: .top) {
-            if let notice = app.inAppNotice {
-                InAppNotificationLayer(
-                    notice: notice,
-                    onTap: {
-                        switch notice.kind {
-                        case .exam: app.deepLink = .exam
-                        case .grade: app.deepLink = .grade
-                        case .loginFailure: break
-                        }
-                        app.dismissNotice()
-                    },
-                    onClose: { app.dismissNotice() }
-                )
-                .animation(InAppNotificationLayer.bannerAnimation, value: app.inAppNotice)
-            }
+        .background {
+            InAppNotificationPresenter(
+                notice: app.inAppNotice,
+                onTap: {
+                    guard let notice = app.inAppNotice else { return }
+                    switch notice.kind {
+                    case .exam: app.deepLink = .exam
+                    case .grade: app.deepLink = .grade
+                    case .loginFailure: break
+                    }
+                    app.dismissNotice()
+                },
+                onClose: app.dismissNotice
+            )
+            .frame(width: 0, height: 0)
         }
         .fullScreenCover(isPresented: $app.showsDemoAccount) {
             DemoAccountView()

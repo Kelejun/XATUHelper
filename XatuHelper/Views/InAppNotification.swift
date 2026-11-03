@@ -1,8 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// App 内的通知横幅演示。
-/// 用系统材质 + 系统动画曲线，点击打开本 App 的系统设置页。
+/// App 内的通知横幅，点击行为由对应通知提供。
 struct InAppNotificationBanner: View {
     var title: String
     var message: String
@@ -81,7 +80,7 @@ struct InAppNotificationBanner: View {
     }
 }
 
-/// 挂在根视图上的容器：负责出现/消失的同一条动画，和 6 秒自动收回。
+/// 在统一顶部通知窗口中展示，支持手势关闭和 6 秒自动收回。
 struct InAppNotificationLayer: View {
     static let bannerAnimation = Animation.spring(response: 0.45, dampingFraction: 0.82)
 

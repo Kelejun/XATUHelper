@@ -6,6 +6,10 @@ import UserNotifications
 @MainActor
 enum BackgroundElectricityRefresh {
     static let identifier = "com.cell.xatuapp.electricity.refresh"
+    static let terminationCallbackKey = "electricity.exit.lastTerminationCallback"
+    static let exitNotificationErrorKey = "electricity.exit.lastNotificationError"
+    static let exitNotificationStatusKey = "electricity.exit.lastNotificationStatus"
+    static let testNotificationIdentifier = "electricity-background-exit-test"
     static let exitNotificationIdentifier = "electricity-background-exit"
 
     /// 每次用当前开关、账号和日期替换请求，关闭设置时同步撤销。
@@ -28,16 +32,49 @@ enum BackgroundElectricityRefresh {
         }
     }
 
-    static func clearExitReminder() {
+    static var lastTerminationCallback: Date? {
+        UserDefaults.standard.object(forKey: terminationCallbackKey) as? Date
+    }
+
+    static var lastExitNotificationError: String? {
+        UserDefaults.standard.string(forKey: exitNotificationErrorKey)
+    }
+
+    static var lastExitNotificationStatus: String? {
+        UserDefaults.standard.string(forKey: exitNotificationStatusKey)
+    }
+
+    /// 在进程仍运行时交给系统，单独验证通知通道，不依赖终止回调。
+    static func scheduleTestNotification() async throws {
+        let content = UNMutableNotificationContent()
+        content.title = "后台电费刷新提醒（测试）"
+        content.body = "这是一条测试通知。实际退出提醒仍依赖系统退出回调，后台自动刷新电费可能不生效。"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: testNotificationIdentifier, content: content,
+                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false))
+        try await UNUserNotificationCenter.current().add(request)
+    }
+
+    static func clearExitReminder(includingTests: Bool = true) {
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [exitNotificationIdentifier])
-        center.removeDeliveredNotifications(withIdentifiers: [exitNotificationIdentifier])
+        let identifiers = includingTests
+            ? [exitNotificationIdentifier, testNotificationIdentifier] : [exitNotificationIdentifier]
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     /// 只在系统实际发出终止回调时尽力发送，不把普通退后台当成强制退出。
     static func notifyOnTermination() {
-        guard ElectricityRefreshSettings.exitReminderEnabled,
-              Preferences.studentID != nil, Preferences.dorm != nil else { return }
+        UserDefaults.standard.set(Date(), forKey: terminationCallbackKey)
+        UserDefaults.standard.removeObject(forKey: exitNotificationErrorKey)
+        guard ElectricityRefreshSettings.exitReminderEnabled else {
+            UserDefaults.standard.set("提醒开关未开启", forKey: exitNotificationStatusKey)
+            return
+        }
+        guard Preferences.studentID != nil, Preferences.dorm != nil else {
+            UserDefaults.standard.set("缺少已保存的账号或宿舍信息", forKey: exitNotificationStatusKey)
+            return
+        }
         let content = UNMutableNotificationContent()
         content.title = "后台电费刷新提醒"
         content.body = "App 即将退出，自动后台刷新电费可能不生效。请重新打开 App，并避免在多任务界面划掉。"
@@ -45,7 +82,18 @@ enum BackgroundElectricityRefresh {
         let request = UNNotificationRequest(identifier: exitNotificationIdentifier,
                                             content: content, trigger: nil)
         // 终止回调中不能等待异步 Task；尽快把通知交给系统。
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+        UserDefaults.standard.set("已尝试提交通知", forKey: exitNotificationStatusKey)
+        let errorKey = exitNotificationErrorKey
+        let statusKey = exitNotificationStatusKey
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                UserDefaults.standard.set(error.localizedDescription, forKey: errorKey)
+                UserDefaults.standard.set("通知提交失败", forKey: statusKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: errorKey)
+                UserDefaults.standard.set("通知已提交系统", forKey: statusKey)
+            }
+        }
     }
 }
 

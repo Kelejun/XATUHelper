@@ -81,12 +81,6 @@ struct CASWebLoginSheet: View {
             .id(app.webLoginSessionID)
             .onDisappear { completionTask?.cancel() }
             .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .top) {
-                if let notice = app.inAppNotice, notice.kind == .loginFailure {
-                    InAppNotificationLayer(notice: notice, onTap: app.dismissNotice, onClose: app.dismissNotice)
-                        .animation(InAppNotificationLayer.bannerAnimation, value: app.inAppNotice)
-                }
-            }
             .overlay {
                 if app.isLoading {
                     ProgressView().padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
