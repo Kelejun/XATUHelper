@@ -81,18 +81,25 @@ enum BackgroundElectricityRefresh {
         content.sound = .default
         let request = UNNotificationRequest(identifier: exitNotificationIdentifier,
                                             content: content, trigger: nil)
-        // 终止回调中不能等待异步 Task；尽快把通知交给系统。
+        // 不能用会随进程退出而丢失的 Task。给同步终止回调最多一秒，等待系统确认提交。
+        // 回调不要求主线程；无论回调是否及时到达，都不会无限阻塞退出。
         UserDefaults.standard.set("已尝试提交通知", forKey: exitNotificationStatusKey)
         let errorKey = exitNotificationErrorKey
         let statusKey = exitNotificationStatusKey
+        let submission = TerminationNotificationSubmission()
         UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                UserDefaults.standard.set(error.localizedDescription, forKey: errorKey)
-                UserDefaults.standard.set("通知提交失败", forKey: statusKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: errorKey)
-                UserDefaults.standard.set("通知已提交系统", forKey: statusKey)
+            submission.complete {
+                if let error {
+                    UserDefaults.standard.set(error.localizedDescription, forKey: errorKey)
+                    UserDefaults.standard.set("通知提交失败", forKey: statusKey)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: errorKey)
+                    UserDefaults.standard.set("通知已提交系统", forKey: statusKey)
+                }
             }
+        }
+        submission.wait(timeout: 1) {
+            UserDefaults.standard.set("退出前未等到通知提交确认", forKey: statusKey)
         }
     }
 }
