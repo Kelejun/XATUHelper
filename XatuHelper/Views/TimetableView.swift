@@ -4,9 +4,12 @@ import UIKit
 struct TimetableView: View {
 
     @EnvironmentObject var app: AppState
+    @Environment(\.campusNavigation) private var navigate
     @State private var showSettings = false
     @State private var showNotificationSetup = false
-    @State private var detail: CourseBlock?
+    @State private var selection: TimetableSelection?
+    @State private var showAddCourse = false
+    @State private var showTimetableEdits = false
     @AppStorage("hideWeekend") private var hideWeekend = false
     /// 周次由主导航持有，折叠／展开重建布局时继续停留在所选周。
     @Binding var visibleWeek: Int?
@@ -23,7 +26,7 @@ struct TimetableView: View {
         return weeks.min() ?? 1
     }
 
-    private static let weekRange = 1...30
+    private static let weekRange = TimetableDates.weeks
 
     private func blocks(for target: Int) -> [CourseBlock] {
         app.occurrences(in: target).courseBlocks()
@@ -109,11 +112,11 @@ struct TimetableView: View {
     // MARK: - 周视图翻页
 
     /// 系统的分页滚动：手势、惯性、边缘回弹都交给 ScrollView 自己管
-    private func pager(width: CGFloat, height: CGFloat) -> some View {
+    private func pager(width: CGFloat, height: CGFloat, visibleHeight: CGFloat) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 0) {
                 ForEach(Self.weekRange, id: \.self) { target in
-                    weekPage(target, width: width)
+                    weekPage(target, width: width, visibleHeight: visibleHeight)
                         .frame(width: width, height: height)
                         .id(target)
                 }
@@ -140,7 +143,7 @@ struct TimetableView: View {
     }
 
     @ViewBuilder
-    private func weekPage(_ target: Int, width: CGFloat) -> some View {
+    private func weekPage(_ target: Int, width: CGFloat, visibleHeight: CGFloat) -> some View {
         let pageBlocks = blocks(for: target)
         if Self.weekRange.contains(target) {
             WeekGrid(
@@ -148,18 +151,24 @@ struct TimetableView: View {
                 unitCount: app.unitCount,
                 monday: mondayDate(for: target),
                 showWeekend: !hideWeekend,
-                onSelect: { detail = $0 }
+                visibleHeight: visibleHeight,
+                onSelect: { selection = TimetableSelection(week: target, blocks: $0) }
             )
             .frame(width: width)
-            .overlay {
-                if app.isLoading && pageBlocks.isEmpty {
-                    ProgressView()
-                } else if !app.isLoading && pageBlocks.isEmpty {
-                    ContentUnavailableView(
-                        "这一周没有课",
-                        systemImage: "calendar",
-                        description: Text("翻到别的周看看，或者在设置里校正周次")
-                    )
+            .overlay(alignment: .top) {
+                if pageBlocks.isEmpty {
+                    Group {
+                        if app.isLoading {
+                            ProgressView()
+                        } else {
+                            ContentUnavailableView(
+                                "这一周没有课",
+                                systemImage: "calendar",
+                                description: Text("翻到别的周看看，或者在设置里校正周次")
+                            )
+                        }
+                    }
+                    .frame(height: visibleHeight)
                 }
             }
         } else {
@@ -189,8 +198,11 @@ struct TimetableView: View {
                     .padding(.bottom, 6)
             }
 
-            GeometryReader { proxy in
-                pager(width: proxy.size.width, height: proxy.size.height)
+            GeometryReader { visible in
+                GeometryReader { full in
+                    pager(width: full.size.width, height: full.size.height, visibleHeight: visible.size.height)
+                }
+                .ignoresSafeArea(.container, edges: navigate == nil ? .bottom : [])
             }
         }
         // iPad 没有底部标签栏，让课表视口延伸到手势区底边，避免残留白条。
@@ -222,6 +234,14 @@ struct TimetableView: View {
                     }
 
                     Section {
+                        if app.canEditTimetable {
+                            Button {
+                                showTimetableEdits = true
+                            } label: {
+                                Label(app.pendingTimetableEdits.isEmpty ? "我的课表修改" : "我的课表修改 · 待确认",
+                                      systemImage: "clock.arrow.circlepath")
+                            }
+                        }
                         Button {
                             showSettings = true
                         } label: {
@@ -233,7 +253,14 @@ struct TimetableView: View {
                 }
             }
 
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if app.canEditTimetable {
+                    Button {
+                        showAddCourse = true
+                    } label: {
+                        Label("添加课程", systemImage: "plus")
+                    }
+                }
                 Button {
                     Task {
                         await app.refresh()
@@ -249,9 +276,15 @@ struct TimetableView: View {
                 .disabled(app.isLoading)
             }
         }
-        .sheet(item: $detail) { block in
-            CourseDetailSheet(block: block)
+        .sheet(item: $selection) { selection in
+            CourseDetailSheet(selection: selection)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showAddCourse) {
+            TimetableEditSheet(operation: .add, week: week)
+        }
+        .sheet(isPresented: $showTimetableEdits) {
+            TimetableHistorySheet()
         }
         .sheet(isPresented: $showSettings) {
             TimetableSettingsSheet()
@@ -331,36 +364,50 @@ struct TimetableView: View {
     }
 }
 
+struct TimetableSelection: Identifiable {
+    let id = UUID()
+    let week: Int
+    let blocks: [CourseBlock]
+}
+
 struct CourseDetailSheet: View {
-    let block: CourseBlock
+    let selection: TimetableSelection
+    @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
+    @State private var editMode: TimetableEditSheet.Operation?
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    LabeledContent("时间", value: "周\(block.weekdayLabel) \(block.periodText)")
-                    LabeledContent("周次", value: block.weeksText)
-                    LabeledContent("教室", value: block.room.isEmpty ? "—" : block.room)
-                    LabeledContent("教师", value: block.teacher.isEmpty ? "—" : block.teacher)
-                } header: {
-                    HStack(spacing: 6) {
-                        Text(block.name)
-                        if block.isRemote { Text("线上").font(.caption2) }
-                        if block.isPlaceholder { Text("占位").font(.caption2) }
+                ForEach(selection.blocks) { selected in
+                    let block = app.occurrences.courseBlocks().first {
+                        $0.occurrenceIDs == selected.occurrenceIDs && $0.weeks.contains(selection.week)
+                    } ?? selected
+                    Section(block.name) {
+                        LabeledContent("时间", value: "周\(block.weekdayLabel) \(block.periodText)")
+                        LabeledContent("周次", value: block.weeksText)
+                        LabeledContent("教室", value: block.room.isEmpty ? "—" : block.room)
+                        LabeledContent("教师", value: block.teacher.isEmpty ? "—" : block.teacher)
+                        if !block.courseKey.hasPrefix("local-"), !block.courseKey.isEmpty {
+                            LabeledContent("课程号", value: block.courseKey)
+                        }
+                        if app.canEditTimetable {
+                            Button("修改课程") { editMode = .move(block) }
+                            Button(block.courseKey.hasPrefix("local-") ? "删除课程" : "从我的课表移除",
+                                   role: .destructive) { editMode = .remove(block) }
+                        }
                     }
                 }
-
-                Section("课程") {
-                    LabeledContent("课程号", value: block.courseKey.isEmpty ? "—" : block.courseKey)
-                }
             }
-            .navigationTitle(block.name)
+            .navigationTitle(selection.blocks.count > 1 ? "课程冲突" : "课程详情")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
                 }
+            }
+            .sheet(item: $editMode) { mode in
+                TimetableEditSheet(operation: mode, week: selection.week, onSaved: { dismiss() })
             }
         }
     }
@@ -388,6 +435,8 @@ struct SettingsContent: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
+    @AppStorage(CheckinLocationSettings.revealedKey) private var showCheckinLocation = false
+    @State private var versionTapCount = 0
 
     /// 显示版本与构建时的 Git 提交。
     static var versionText: String {
@@ -433,8 +482,23 @@ struct SettingsContent: View {
                 Text("如果出现解析问题，可复制诊断信息给开发者处理")
             }
 
+            if showCheckinLocation {
+                CheckinLocationSettingsSection()
+            }
+
             Section {
-                LabeledContent("版本", value: Self.versionText)
+                Button {
+                    versionTapCount += 1
+                    if versionTapCount >= 5 {
+                        showCheckinLocation = true
+                        versionTapCount = 0
+                    }
+                } label: {
+                    LabeledContent("版本", value: Self.versionText)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                PrivacyPolicyLink()
                 Link(destination: URL(string: "https://github.com/Kelejun/XATUHelper")!) {
                     LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper")
                 }
@@ -477,7 +541,7 @@ struct TimetableSettingsContent: View {
     @AppStorage("hideWeekend") private var hideWeekend = false
     @AppStorage("showDiagnostics") private var showDiagnostics = false
 
-    private static let weekRange = 1...30
+    private static let weekRange = TimetableDates.weeks
 
     var body: some View {
         Form {

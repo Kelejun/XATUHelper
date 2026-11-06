@@ -157,7 +157,7 @@ enum NotificationService {
                     dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire),
                     repeats: false
                 )
-                let identifier = "class-\(item.courseKey)-\(week)-\(item.day)-\(item.startPeriod)"
+                let identifier = "class-\(week)-\(item.id)"
                 result.append((fire, UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)))
             }
         }

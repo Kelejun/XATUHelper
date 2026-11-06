@@ -5,6 +5,7 @@ import WidgetKit
 extension AppState {
     func publishWidgetSnapshot() {
         guard !isDemoMode else { return }
+        PhoneWatchBridge.shared.start(app: self)
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         // Calendar 里周日是 1，转成周一=1

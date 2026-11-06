@@ -142,7 +142,11 @@ struct GradeView: View {
                 Button {
                     Task { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if app.gradesLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .disabled(app.gradesLoading)
             }

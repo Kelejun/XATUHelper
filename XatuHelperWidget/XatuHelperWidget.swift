@@ -212,14 +212,14 @@ struct CourseWidgetView: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             if let course = visibleCourses.first {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         featuredCourse(course, compact: false)
                         Text(courseStatus(course))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(Self.color(for: course))
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 
                     Rectangle()
                         .fill(.primary.opacity(0.08))
@@ -244,13 +244,13 @@ struct CourseWidgetView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
             } else {
                 emptyCourses
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     private func featuredCourse(_ course: WidgetSnapshot.Course, compact: Bool) -> some View {
@@ -527,7 +527,7 @@ struct EmptyHint: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 5) {
                 Image(systemName: "square.grid.2x2.fill").foregroundStyle(.blue)
-                Text("XATU Helper").foregroundStyle(.secondary)
+                Text("XATune").foregroundStyle(.secondary)
             }
             .font(.system(size: 11, weight: .medium))
             Spacer(minLength: 10)

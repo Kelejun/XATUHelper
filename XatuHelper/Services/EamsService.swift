@@ -65,7 +65,7 @@ struct EamsService {
         let shell = lastShellRaw.isEmpty ? "(空，外壳页没抓到)" : String(lastShellRaw.prefix(30000))
         let semesters = lastSemesterRaw.isEmpty ? "(空，学期接口没抓到)" : String(lastSemesterRaw.prefix(30000))
         return """
-        ===== XATU Helper 诊断数据 =====
+        ===== XATune 诊断数据 =====
         时间: \(Date())
         最后一次错误: \(lastError.isEmpty ? "无" : lastError)
 

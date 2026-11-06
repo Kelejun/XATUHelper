@@ -19,6 +19,7 @@ struct CourseOccurrence: Identifiable, Codable, Hashable {
     var isRemote: Bool
     /// 实践环节选课之类的占位课
     var isPlaceholder: Bool
+    var usesFixedDates: Bool? = nil
 
     var weekdayLabel: String {
         let labels = ["一", "二", "三", "四", "五", "六", "日"]
@@ -73,6 +74,9 @@ struct CourseBlock: Identifiable, Hashable {
     var isRemote: Bool
     var isPlaceholder: Bool
 
+    var occurrenceIDs: [String] = []
+    var usesFixedDates = false
+
     var span: Int { max(1, endPeriod - startPeriod + 1) }
 
     var weekdayLabel: String {
@@ -109,56 +113,63 @@ struct CourseBlock: Identifiable, Hashable {
     }
 }
 
+private struct CourseBlockGroup: Hashable {
+    var day: Int
+    var courseKey: String
+    var room: String
+    var teacher: String
+    var localSeries: String?
+}
+
 extension Array where Element == CourseOccurrence {
     /// 把同一天、同一门课、同一间教室的连续节次合并成一块。
     func courseBlocks() -> [CourseBlock] {
-        var groups: [String: [CourseOccurrence]] = [:]
-        for item in self {
-            let key = "\(item.day)|\(item.courseKey)|\(item.room)|\(item.teacher)"
-            groups[key, default: []].append(item)
+        let groups = Dictionary(grouping: self) { item in
+            CourseBlockGroup(day: item.day, courseKey: item.courseKey, room: item.room, teacher: item.teacher,
+                  localSeries: item.id.hasPrefix("local-") ? item.id.split(separator: "|").first.map(String.init) : nil)
         }
 
-        var result: [CourseBlock] = []
+        var result: [[String]: CourseBlock] = [:]
         for items in groups.values {
-            let ordered = items.sorted { $0.period < $1.period }
-
-            // 先按连续节次切成若干段
-            var runs: [[CourseOccurrence]] = []
-            for item in ordered {
-                if var tail = runs.last, let previous = tail.last, item.period == previous.period + 1 {
-                    tail.append(item)
-                    runs[runs.count - 1] = tail
-                } else {
-                    runs.append([item])
+            let ordered = items.sorted { ($0.period, $0.id) < ($1.period, $1.id) }
+            for week in Set(items.flatMap(\.weeks)).sorted() {
+                var runs: [[CourseOccurrence]] = []
+                for item in ordered where item.weeks.contains(week) {
+                    if let previous = runs.last?.last, item.period == previous.period + 1 {
+                        runs[runs.count - 1].append(item)
+                    } else {
+                        runs.append([item])
+                    }
                 }
-            }
 
-            for run in runs {
-                guard let first = run.first, let last = run.last else { continue }
-                var weekSet: Set<Int> = []
-                for occurrence in run {
-                    weekSet.formUnion(occurrence.weeks)
+                for run in runs {
+                    guard let first = run.first, let last = run.last else { continue }
+                    let ids = run.map(\.id)
+                    if result[ids] != nil {
+                        result[ids]?.weeks.append(week)
+                    } else {
+                        result[ids] = CourseBlock(
+                            id: "\(first.id)#\(last.period)",
+                            courseKey: first.courseKey,
+                            name: first.name,
+                            teacher: first.teacher,
+                            room: first.room,
+                            day: first.day,
+                            startPeriod: first.period,
+                            endPeriod: last.period,
+                            weeks: [week],
+                            isRemote: first.isRemote,
+                            isPlaceholder: first.isPlaceholder,
+                            occurrenceIDs: ids,
+                            usesFixedDates: first.usesFixedDates == true
+                        )
+                    }
                 }
-                result.append(
-                    CourseBlock(
-                        id: first.id,
-                        courseKey: first.courseKey,
-                        name: first.name,
-                        teacher: first.teacher,
-                        room: first.room,
-                        day: first.day,
-                        startPeriod: first.period,
-                        endPeriod: last.period,
-                        weeks: weekSet.sorted(),
-                        isRemote: first.isRemote,
-                        isPlaceholder: first.isPlaceholder
-                    )
-                )
             }
         }
 
-        return result.sorted {
-            $0.day == $1.day ? $0.startPeriod < $1.startPeriod : $0.day < $1.day
+        return result.values.sorted {
+            ($0.day, $0.startPeriod, $0.id) < ($1.day, $1.startPeriod, $1.id)
         }
     }
 }
@@ -183,6 +194,11 @@ struct Semester: Codable, Hashable, Identifiable {
 }
 
 struct TimetableSnapshot: Codable {
+    struct WeekAnchor: Codable {
+        var semesterID: String
+        var monday: Date
+    }
+
     var occurrences: [CourseOccurrence]
     var studentID: String
     var semesterID: String
@@ -195,6 +211,7 @@ struct TimetableSnapshot: Codable {
     var selectedSemesterID: String?
     var currentSemesterID: String?
     var kind: String?
+    var manualWeekAnchor: WeekAnchor? = nil
 }
 
 /// 登录期信息，用于刷新时复用

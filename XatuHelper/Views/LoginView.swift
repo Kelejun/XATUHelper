@@ -5,7 +5,6 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var showAbout = false
-    @State private var enterDemoAfterAbout = false
     @FocusState private var focused: Field?
 
     private enum Field { case username, password }
@@ -23,7 +22,7 @@ struct LoginView: View {
                             .font(.system(size: 40))
                             .foregroundStyle(.tint)
                             .accessibilityHidden(true)
-                        Text("XATU Helper")
+                        Text("XATune")
                             .font(.title2.weight(.semibold))
                     }
                     .frame(maxWidth: .infinity)
@@ -74,6 +73,17 @@ struct LoginView: View {
                 } footer: {
                     Text("密码安全保存在本机钥匙串")
                 }
+
+                Section {
+                    Button("体验示例") {
+                        focused = nil
+                        app.showsDemoAccount = true
+                    }
+                    .disabled(app.isLoading)
+                    PrivacyPolicyLink()
+                } footer: {
+                    Text("无需登录，可查看示例课表、考试、成绩和电费。")
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .frame(maxWidth: 560)
@@ -90,16 +100,8 @@ struct LoginView: View {
                     .disabled(app.isLoading)
                 }
             }
-            .sheet(isPresented: $showAbout, onDismiss: {
-                if enterDemoAfterAbout {
-                    enterDemoAfterAbout = false
-                    app.showsDemoAccount = true
-                }
-            }) {
-                AboutSheet {
-                    enterDemoAfterAbout = true
-                    showAbout = false
-                }
+            .sheet(isPresented: $showAbout) {
+                AboutSheet()
             }
         }
         .onAppear {
@@ -116,7 +118,6 @@ struct LoginView: View {
 
 struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
-    var onDemoAccount: () -> Void = {}
 
     private var version: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -133,8 +134,7 @@ struct AboutSheet: View {
                 }
                 Section("关于") {
                     LabeledContent("版本", value: version)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 3, perform: onDemoAccount)
+                    PrivacyPolicyLink()
                 }
             }
             .navigationTitle("设置")

@@ -88,7 +88,7 @@ private struct WebPage: UIViewRepresentable {
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "location")
         controller.addUserScript(WKUserScript(
-            source: Self.locationShim,
+            source: WebLocationScript.source,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
@@ -129,58 +129,10 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL)
+        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL,
+                    allowsCustomLocation: url.host == "ehall.xatu.edu.cn"
+                        && url.path.hasPrefix("/xsfw/sys/swmqdzsapp/"))
     }
-
-    /// 把 navigator.geolocation 接到 window.webkit.messageHandlers.location
-    private static let locationShim = """
-    (function(){
-      if (!window.webkit || !window.webkit.messageHandlers || !window.webkit.messageHandlers.location) return;
-      if (!navigator.geolocation) {
-        try { Object.defineProperty(navigator, 'geolocation', {value: {}, configurable: true}); } catch (e) { return; }
-      }
-      var bridge = window.webkit.messageHandlers.location;
-      var seq = 0, pending = {}, watches = {};
-      function reply(id, ok, lat, lng, acc, msg){
-        var cb = pending[id] || watches[id];
-        if (!cb) return;
-        if (ok) {
-          cb.success && cb.success({
-            coords: {latitude: lat, longitude: lng, accuracy: acc, altitude: null, altitudeAccuracy: null, heading: null, speed: null},
-            timestamp: Date.now()
-          });
-          if (!watches[id]) delete pending[id];
-        } else {
-          cb.error && cb.error({code: 2, message: msg || '定位失败', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3});
-          delete pending[id];
-          delete watches[id];
-        }
-      }
-      window.__xatuLocation = reply;
-      navigator.geolocation.getCurrentPosition = function(success, error){
-        var id = ++seq;
-        pending[id] = {success: success, error: error};
-        bridge.postMessage({id: id, watch: false});
-      };
-      navigator.geolocation.watchPosition = function(success, error){
-        var id = ++seq;
-        watches[id] = {success: success, error: error};
-        bridge.postMessage({id: id, watch: true});
-        return id;
-      };
-      navigator.geolocation.clearWatch = function(id){
-        delete watches[id];
-        bridge.postMessage({id: id, clear: true});
-      };
-      if (navigator.permissions && navigator.permissions.query) {
-        var query = navigator.permissions.query.bind(navigator.permissions);
-        navigator.permissions.query = function(desc){
-          if (desc && desc.name === 'geolocation') return Promise.resolve({state: 'granted', onchange: null});
-          return query(desc);
-        };
-      }
-    })();
-    """
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
@@ -188,12 +140,15 @@ private struct WebPage: UIViewRepresentable {
         private let followUpURL: String?
         private var appliedFollowUp = false
         weak var webView: WKWebView?
-        private let location = LocationBridge()
+        private let location: LocationBridge
+        private var nextWatchID = 0
+        private var watchIDs: [String: Int] = [:]
 
-        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpURL: String?) {
+        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpURL: String?, allowsCustomLocation: Bool) {
             _isLoading = isLoading
             _errorText = errorText
             self.followUpURL = followUpURL
+            self.location = LocationBridge(allowsCustomLocation: allowsCustomLocation)
         }
 
         func userContentController(_ userContentController: WKUserContentController,
@@ -201,39 +156,35 @@ private struct WebPage: UIViewRepresentable {
             guard message.name == "location",
                   let body = message.body as? [String: Any],
                   let id = body["id"] as? Int else { return }
+            let frame = message.frameInfo
+            let key = "\(body["context"] as? String ?? "main"):\(id)"
             if body["clear"] as? Bool == true {
-                location.stopWatching(id: id)
+                if let watchID = watchIDs.removeValue(forKey: key) {
+                    location.stopWatching(id: watchID)
+                }
                 return
             }
             let isWatch = body["watch"] as? Bool ?? false
             if isWatch {
-                location.startWatching(id: id) { [weak self] location in
+                nextWatchID += 1
+                let watchID = nextWatchID
+                watchIDs[key] = watchID
+                location.startWatching(id: watchID) { [weak self] location in
                     guard let self, let location else { return }
-                    self.reply(id: id, location: location)
+                    WebLocationScript.reply(to: frame, in: self.webView, id: id, location: location)
                 }
             } else {
                 location.request { [weak self] result in
                     guard let self else { return }
                     switch result {
                     case let .success(location):
-                        self.reply(id: id, location: location)
+                        WebLocationScript.reply(to: frame, in: self.webView, id: id, location: location)
                     case let .failure(error):
                         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                        self.reply(id: id, error: message)
+                        WebLocationScript.reply(to: frame, in: self.webView, id: id, error: message)
                     }
                 }
             }
-        }
-
-        private func reply(id: Int, location: CLLocation) {
-            let js = "window.__xatuLocation && window.__xatuLocation(\(id), true, \(location.coordinate.latitude), \(location.coordinate.longitude), \(location.horizontalAccuracy), '')"
-            webView?.evaluateJavaScript(js)
-        }
-
-        private func reply(id: Int, error: String) {
-            let escaped = error.replacingOccurrences(of: "'", with: "\\'")
-            let js = "window.__xatuLocation && window.__xatuLocation(\(id), false, 0, 0, 0, '\(escaped)')"
-            webView?.evaluateJavaScript(js)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

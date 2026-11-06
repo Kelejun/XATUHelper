@@ -120,6 +120,12 @@ final class AppState: ObservableObject {
     private var pendingPasswordVerified = false
 
     private let store = TimetableStore()
+    private let editStore = TimetableEditStore()
+    private var officialOccurrences: [CourseOccurrence] = []
+    private var manualWeekAnchor: TimetableSnapshot.WeekAnchor?
+    @Published private(set) var timetableEdits: [TimetableEdit] = []
+    @Published private(set) var pendingTimetableEdits: [UUID: [Int]] = [:]
+    private var notificationRefresh: Task<Void, Never>?
     private let cas = CASService()
     private let eams = EamsService()
     private let pay = PayService()
@@ -157,8 +163,10 @@ final class AppState: ObservableObject {
             plan = payload.plan
             planFetchedAt = payload.fetchedAt
         }
-        if let snapshot = store.load() {
-            occurrences = snapshot.occurrences
+        if let snapshot = store.load(),
+           studentID.isEmpty || snapshot.studentID.isEmpty || snapshot.studentID == studentID {
+            officialOccurrences = snapshot.occurrences
+            manualWeekAnchor = snapshot.manualWeekAnchor
             unitCount = snapshot.unitCount
             weekOneMonday = snapshot.weekOneMonday
             fetchedAt = snapshot.fetchedAt
@@ -169,6 +177,7 @@ final class AppState: ObservableObject {
             if let raw = snapshot.kind, let parsed = TableKind(rawValue: raw) {
                 kind = parsed
             }
+            rebuildTimetable()
             isLoggedIn = true
         }
     }
@@ -222,9 +231,12 @@ final class AppState: ObservableObject {
 
     var hasClassTable: Bool { classTableID != nil }
 
-    /// 当前选中学期的第 1 周周一：优先用学期开学日期，退回落到 weekOneMonday
+    /// 当前学期第 1 周的周一，优先使用手动校正，其次使用教务开学日期。
     var semesterStartMonday: Date {
-        guard let semester = semesters.first(where: { $0.id == selectedSemesterID }),
+        if let anchor = manualWeekAnchor, anchor.semesterID == timetableSemesterID {
+            return anchor.monday
+        }
+        guard let semester = semesters.first(where: { $0.id == timetableSemesterID }),
               let raw = semester.startDate,
               let day = AppState.parseDate(raw),
               let monday = AppState.mondayOfWeek(containing: day) else {
@@ -234,15 +246,17 @@ final class AppState: ObservableObject {
     }
 
     func week(of date: Date) -> Int {
-        let calendar = Calendar(identifier: .gregorian)
-        let from = calendar.startOfDay(for: semesterStartMonday)
-        let to = calendar.startOfDay(for: date)
-        let days = calendar.dateComponents([.day], from: from, to: to).day ?? 0
-        return max(1, min(30, days / 7 + 1))
+        let week = TimetableDates.week(of: date, monday: semesterStartMonday)
+        return min(max(week, TimetableDates.weeks.lowerBound), TimetableDates.weeks.upperBound)
     }
 
     func occurrences(in week: Int) -> [CourseOccurrence] {
-        occurrences.filter { $0.weeks.contains(week) }
+        occurrences.compactMap { occurrence in
+            guard occurrence.weeks.contains(week) else { return nil }
+            var item = occurrence
+            item.weeks = [week]
+            return item
+        }
     }
 
     // MARK: - 周次对齐
@@ -274,6 +288,7 @@ final class AppState: ObservableObject {
         let calendar = Calendar(identifier: .gregorian)
         if let base = calendar.date(byAdding: .day, value: -(week - 1) * 7, to: thisMonday) {
             weekOneMonday = base
+            rebuildTimetable()
         }
     }
 
@@ -299,7 +314,7 @@ final class AppState: ObservableObject {
             recordLoginTime()
             Keychain.savePassword(password, account: student)
             Preferences.studentID = student
-            studentID = student
+            setTimetableAccount(student)
             try await bootstrap()
             selectedSemesterID = currentSemesterID
             await calibrateFromServer()
@@ -329,6 +344,9 @@ final class AppState: ObservableObject {
             if selectedSemesterID.isEmpty {
                 selectedSemesterID = currentSemesterID
             }
+            if let credentials = pendingCredentials {
+                setTimetableAccount(credentials.student)
+            }
             await calibrateFromServer()
             try await loadTable()
 
@@ -340,7 +358,6 @@ final class AppState: ObservableObject {
                     Keychain.savePassword(credentials.password, account: credentials.student)
                 }
                 Preferences.studentID = credentials.student
-                studentID = credentials.student
                 pendingCredentials = nil
             }
             showsWebLogin = false
@@ -385,6 +402,7 @@ final class AppState: ObservableObject {
             }
             isLoggedIn = true
             publishWidgetSnapshot()
+            if isCurrentSemester && kind == .student { await rescheduleNotifications() }
         } catch {
             handle(error)
         }
@@ -393,17 +411,21 @@ final class AppState: ObservableObject {
 
     /// 换学期
     func selectSemester(_ id: String) async {
-        guard id != selectedSemesterID else { return }
+        guard !isLoading, id != selectedSemesterID else { return }
         selectedSemesterID = id
-        occurrences = []
+        officialOccurrences = []
+        fetchedAt = nil
+        rebuildTimetable()
         await reloadTable()
     }
 
     /// 换课表类型
     func selectKind(_ newKind: TableKind) async {
-        guard newKind != kind else { return }
+        guard !isLoading, newKind != kind else { return }
         kind = newKind
-        occurrences = []
+        officialOccurrences = []
+        fetchedAt = nil
+        rebuildTimetable()
         await reloadTable()
     }
 
@@ -428,7 +450,6 @@ final class AppState: ObservableObject {
         examStore.clear()
         gradeStore.clear()
         planStore.clear()
-        Task { await NotificationService.clearAll() }
         exams = []
         examsFetchedAt = nil
         grades = []
@@ -437,6 +458,10 @@ final class AppState: ObservableObject {
         planFetchedAt = nil
         planCatalog = PlanCatalog(updatedAt: Date(), courses: [])
         PlanCatalogStore.clear()
+        officialOccurrences = []
+        manualWeekAnchor = nil
+        timetableEdits = []
+        pendingTimetableEdits = [:]
         occurrences = []
         studentID = ""
         semesters = []
@@ -448,16 +473,21 @@ final class AppState: ObservableObject {
         fetchedAt = nil
         weekOneMonday = AppState.fallStart
         isLoggedIn = false
+        Task { await rescheduleNotifications() }
+        PhoneWatchBridge.shared.start(app: self)
+        PhoneWatchBridge.shared.publish(force: true)
         scheduleBackgroundElectricityRefresh()
     }
 
     /// 用当前周次反推第 1 周周一，方便老大手动校正
     func calibrate(currentWeek: Int) {
-        let calendar = Calendar(identifier: .gregorian)
-        let today = calendar.startOfDay(for: Date())
-        let offset = (currentWeek - 1) * 7
-        weekOneMonday = calendar.date(byAdding: .day, value: -offset, to: today) ?? weekOneMonday
+        guard let monday = Self.mondayOfWeek(containing: Date()) else { return }
+        manualWeekAnchor = .init(semesterID: timetableSemesterID,
+                                 monday: TimetableDates.date(week: 2 - currentWeek, day: 1, monday: monday))
+        rebuildTimetable()
         persist()
+        publishWidgetSnapshot()
+        Task { await rescheduleNotifications() }
     }
 
     // MARK: - 内部
@@ -467,6 +497,8 @@ final class AppState: ObservableObject {
         errorMessage = nil
         do {
             try await withRelogin { try await self.loadTable() }
+            publishWidgetSnapshot()
+            if isCurrentSemester && kind == .student { await rescheduleNotifications() }
         } catch {
             handle(error)
         }
@@ -760,9 +792,19 @@ final class AppState: ObservableObject {
     /// 按当前开关重排本地通知（内容在排期那一刻固定，所以每次数据变了都要重来一遍）
     func rescheduleNotifications() async {
         guard !isDemoMode else { return }
+        let previous = notificationRefresh
+        let next = Task {
+            await previous?.value
+            await applyNotificationSchedule()
+        }
+        notificationRefresh = next
+        await next.value
+    }
+
+    private func applyNotificationSchedule() async {
         let classOn = NotificationSettings.classOn
         let examOn = NotificationSettings.examOn
-        guard classOn || examOn else {
+        guard isLoggedIn, classOn || examOn else {
             await NotificationService.clearAll()
             return
         }
@@ -1036,30 +1078,93 @@ final class AppState: ObservableObject {
             ids = value
         }
 
-        let parsed = try await eams.fetchTable(kind: kind, ids: ids,
+        let account = studentID
+        let requestedKind = kind
+        let parsed = try await eams.fetchTable(kind: requestedKind, ids: ids,
                                                semesterID: semester, projectID: projectID)
-        occurrences = parsed.occurrences
+        try Task.checkCancellation()
+        guard account == studentID, requestedKind == kind,
+              semester == timetableSemesterID else { throw CancellationError() }
+        officialOccurrences = parsed.occurrences
         unitCount = parsed.unitCount
+        rebuildTimetable()
         fetchedAt = Date()
         CookieVault.save()
         persist()
     }
 
     private func persist() {
-        guard !isDemoMode else { return }
+        guard !isDemoMode, let fetchedAt else { return }
         let snapshot = TimetableSnapshot(
-            occurrences: occurrences,
+            occurrences: officialOccurrences,
             studentID: studentID,
             semesterID: selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID,
-            fetchedAt: fetchedAt ?? Date(),
+            fetchedAt: fetchedAt,
             weekOneMonday: weekOneMonday,
             unitCount: unitCount,
             semesters: semesters,
             selectedSemesterID: selectedSemesterID,
             currentSemesterID: currentSemesterID,
-            kind: kind.rawValue
+            kind: kind.rawValue,
+            manualWeekAnchor: manualWeekAnchor
         )
         store.save(snapshot)
+    }
+
+    private var timetableSemesterID: String {
+        selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
+    }
+
+    var canEditTimetable: Bool {
+        isLoggedIn && !isDemoMode && kind == .student && !studentID.isEmpty && !timetableSemesterID.isEmpty
+    }
+
+    var canUseTimetableDates: Bool {
+        isCurrentSemester || manualWeekAnchor?.semesterID == timetableSemesterID
+            || semesters.contains { $0.id == timetableSemesterID && $0.startDate.flatMap(Self.parseDate) != nil }
+    }
+
+    private func setTimetableAccount(_ account: String) {
+        guard account != studentID else { return }
+        studentID = account
+        selectedSemesterID = currentSemesterID
+        kind = .student
+        weekOneMonday = Self.fallStart
+        officialOccurrences = []
+        manualWeekAnchor = nil
+        fetchedAt = nil
+        rebuildTimetable()
+    }
+
+    private func rebuildTimetable() {
+        let edits: [TimetableEdit]
+        if kind == .student, !studentID.isEmpty, !timetableSemesterID.isEmpty {
+            edits = (try? editStore.load())?[studentID]?[timetableSemesterID] ?? []
+        } else {
+            edits = []
+        }
+        timetableEdits = edits
+        applyTimetable(editedTimetable(edits))
+    }
+
+    func editedTimetable(_ edits: [TimetableEdit]) -> EditedTimetable {
+        EditedTimetable(base: officialOccurrences, edits: edits, monday: semesterStartMonday, unitCount: unitCount)
+    }
+
+    private func applyTimetable(_ result: EditedTimetable) {
+        occurrences = result.occurrences
+        pendingTimetableEdits = result.pending
+    }
+
+    func saveTimetableEdits(_ edits: [TimetableEdit]) throws {
+        guard canEditTimetable else { throw TimetableEditError.unavailable }
+        var accounts = try editStore.load()
+        accounts[studentID, default: [:]][timetableSemesterID] = edits
+        try editStore.save(accounts)
+        timetableEdits = edits
+        applyTimetable(editedTimetable(edits))
+        publishWidgetSnapshot()
+        if isCurrentSemester { Task { await rescheduleNotifications() } }
     }
 
     private func handle(_ error: Error) {

@@ -315,5 +315,6 @@ struct SchoolCalendarView: View {
         }
         info = parsed
         CalendarCache.save(parsed)
+        PhoneWatchBridge.shared.publish()
     }
 }

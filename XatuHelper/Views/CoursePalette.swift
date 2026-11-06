@@ -5,22 +5,7 @@ import SwiftUI
 /// 先用「本学期课程码排序后的序号」取色，保证同一学期的课不会撞色；
 /// 没注册过（比如冷启动只读到某门课）再退回哈希取色。
 enum CoursePalette {
-    static let colors: [Color] = [
-        Color(red: 0.20, green: 0.47, blue: 0.90),
-        Color(red: 0.85, green: 0.42, blue: 0.20),
-        Color(red: 0.18, green: 0.60, blue: 0.45),
-        Color(red: 0.58, green: 0.35, blue: 0.75),
-        Color(red: 0.82, green: 0.55, blue: 0.12),
-        Color(red: 0.12, green: 0.53, blue: 0.68),
-        Color(red: 0.74, green: 0.30, blue: 0.45),
-        Color(red: 0.35, green: 0.50, blue: 0.25),
-        Color(red: 0.45, green: 0.38, blue: 0.80),
-        Color(red: 0.72, green: 0.52, blue: 0.30),
-        Color(red: 0.16, green: 0.58, blue: 0.58),
-        Color(red: 0.62, green: 0.42, blue: 0.62),
-        Color(red: 0.30, green: 0.45, blue: 0.62),
-        Color(red: 0.78, green: 0.38, blue: 0.32)
-    ]
+    static let colors = CampusCourseColors.colors
 
     private static var registeredKeys: [String] = []
 

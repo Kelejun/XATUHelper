@@ -10,6 +10,8 @@
 		0000000000000000000000BC /* XatuHelperWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B0 /* XatuHelperWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0000000000000000000000BD /* XatuHelper/Services/WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */; };
 		0000000000000000000000BF /* XatuHelper/Services/RefreshElectricityIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C0 /* XatuHelper/Services/RefreshElectricityIntent.swift */; };
+		A9000000000000000000003C /* XatuHelperWatchWidget.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = A90000000000000000000005 /* XatuHelperWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A9000000000000000000003D /* XatuHelperWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A90000000000000000000004 /* XatuHelperWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,6 +21,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = 0000000000000000000000B2;
 			remoteInfo = XatuHelperWidget;
+		};
+		A90000000000000000000033 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9000000000000000000000A;
+			remoteInfo = XatuHelperWatch;
+		};
+		A90000000000000000000035 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9000000000000000000000B;
+			remoteInfo = XatuHelperWatchWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -34,6 +50,28 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9000000000000000000001A /* Embed Watch Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A9000000000000000000003C /* XatuHelperWatchWidget.appex in Embed Watch Extensions */,
+			);
+			name = "Embed Watch Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9000000000000000000001B /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A9000000000000000000003D /* XatuHelperWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +79,8 @@
 		0000000000000000000000B0 /* XatuHelperWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = XatuHelperWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0000000000000000000000BE /* XatuHelper/Services/WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/WidgetSnapshot.swift; sourceTree = "<group>"; };
 		0000000000000000000000C0 /* XatuHelper/Services/RefreshElectricityIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XatuHelper/Services/RefreshElectricityIntent.swift; sourceTree = "<group>"; };
+		A90000000000000000000004 /* XatuHelperWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XatuHelperWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A90000000000000000000005 /* XatuHelperWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = XatuHelperWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +92,21 @@
 		0000000000000000000000B1 /* XatuHelperWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = XatuHelperWidget;
+			sourceTree = "<group>";
+		};
+		A90000000000000000000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		A90000000000000000000002 /* XatuHelperWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = XatuHelperWatch;
+			sourceTree = "<group>";
+		};
+		A90000000000000000000003 /* XatuHelperWatchWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = XatuHelperWatchWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -71,6 +126,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A90000000000000000000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000000000000000000018 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +147,9 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000009 /* XatuHelper */,
+				A90000000000000000000001 /* Shared */,
+				A90000000000000000000002 /* XatuHelperWatch */,
+				A90000000000000000000003 /* XatuHelperWatchWidget */,
 				0000000000000000000000B1 /* XatuHelperWidget */,
 				000000000000000000000003 /* Products */,
 				2B8776EC308E4F5500E0B23C /* Recovered References */,
@@ -88,6 +160,8 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000004 /* XatuHelper.app */,
+				A90000000000000000000004 /* XatuHelperWatch.app */,
+				A90000000000000000000005 /* XatuHelperWatchWidget.appex */,
 				0000000000000000000000B0 /* XatuHelperWidget.appex */,
 			);
 			name = Products;
@@ -114,14 +188,17 @@
 				000000000000000000000007 /* Frameworks */,
 				000000000000000000000008 /* Resources */,
 				0000000000000000000000BB /* Embed Foundation Extensions */,
+				A9000000000000000000001B /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				0000000000000000000000B9 /* PBXTargetDependency */,
+				A90000000000000000000032 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000009 /* XatuHelper */,
+				A90000000000000000000001 /* Shared */,
 			);
 			name = XatuHelper;
 			productName = XatuHelper;
@@ -146,6 +223,50 @@
 			name = XatuHelperWidget;
 			productName = XatuHelperWidget;
 			productReference = 0000000000000000000000B0 /* XatuHelperWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A9000000000000000000000A /* XatuHelperWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9000000000000000000001E /* Build configuration list for PBXNativeTarget "XatuHelperWatch" */;
+			buildPhases = (
+				A90000000000000000000014 /* Sources */,
+				A90000000000000000000015 /* Frameworks */,
+				A90000000000000000000016 /* Resources */,
+				A9000000000000000000001A /* Embed Watch Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A90000000000000000000034 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A90000000000000000000001 /* Shared */,
+				A90000000000000000000002 /* XatuHelperWatch */,
+			);
+			name = XatuHelperWatch;
+			productName = XatuHelperWatch;
+			productReference = A90000000000000000000004 /* XatuHelperWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A9000000000000000000000B /* XatuHelperWatchWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9000000000000000000001F /* Build configuration list for PBXNativeTarget "XatuHelperWatchWidget" */;
+			buildPhases = (
+				A90000000000000000000017 /* Sources */,
+				A90000000000000000000018 /* Frameworks */,
+				A90000000000000000000019 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A90000000000000000000001 /* Shared */,
+				A90000000000000000000003 /* XatuHelperWatchWidget */,
+			);
+			name = XatuHelperWatchWidget;
+			productName = XatuHelperWatchWidget;
+			productReference = A90000000000000000000005 /* XatuHelperWatchWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -181,6 +302,8 @@
 			targets = (
 				000000000000000000000005 /* XatuHelper */,
 				0000000000000000000000B2 /* XatuHelperWidget */,
+				A9000000000000000000000A /* XatuHelperWatch */,
+				A9000000000000000000000B /* XatuHelperWatchWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -194,6 +317,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0000000000000000000000B5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000000000000000000016 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000000000000000000019 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -240,6 +377,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A90000000000000000000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A90000000000000000000017 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -247,6 +398,16 @@
 			isa = PBXTargetDependency;
 			target = 0000000000000000000000B2 /* XatuHelperWidget */;
 			targetProxy = 0000000000000000000000BA /* PBXContainerItemProxy */;
+		};
+		A90000000000000000000032 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9000000000000000000000A /* XatuHelperWatch */;
+			targetProxy = A90000000000000000000033 /* PBXContainerItemProxy */;
+		};
+		A90000000000000000000034 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9000000000000000000000B /* XatuHelperWatchWidget */;
+			targetProxy = A90000000000000000000035 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -315,16 +476,17 @@
 		00000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_ENTITLEMENTS = XatuHelper/XatuHelper.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = XZ349G3H8D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = XATUHelper;
+				INFOPLIST_KEY_CFBundleDisplayName = XATune;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -344,16 +506,17 @@
 		00000000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_ENTITLEMENTS = XatuHelper/XatuHelper.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = XZ349G3H8D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = XATUHelper;
+				INFOPLIST_KEY_CFBundleDisplayName = XATune;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -424,6 +587,124 @@
 			};
 			name = Release;
 		};
+		A90000000000000000000028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = XatuHelperWatch/XatuHelperWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = XZ349G3H8D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/Watch-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = XATune;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cell.xatuapp.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A90000000000000000000029 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = XatuHelperWatch/XatuHelperWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = XZ349G3H8D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/Watch-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = XATune;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cell.xatuapp.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		A9000000000000000000002A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = XatuHelperWatchWidget/XatuHelperWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = XZ349G3H8D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/WatchWidget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cell.xatuapp.watchkitapp.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A9000000000000000000002B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = XatuHelperWatchWidget/XatuHelperWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = XZ349G3H8D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/WatchWidget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cell.xatuapp.watchkitapp.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -450,6 +731,24 @@
 			buildConfigurations = (
 				0000000000000000000000B7 /* Debug */,
 				0000000000000000000000B8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9000000000000000000001E /* Build configuration list for PBXNativeTarget "XatuHelperWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A90000000000000000000028 /* Debug */,
+				A90000000000000000000029 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9000000000000000000001F /* Build configuration list for PBXNativeTarget "XatuHelperWatchWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9000000000000000000002A /* Debug */,
+				A9000000000000000000002B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

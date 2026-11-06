@@ -185,7 +185,7 @@ struct MainTabView: View {
             }
             .listStyle(.sidebar)
             .toolbar(removing: .sidebarToggle)
-            .navigationTitle("XATU Helper")
+            .navigationTitle("XATune")
             .navigationBarTitleDisplayMode(.inline)
             .navigationSplitViewColumnWidth(min: 200, ideal: 224, max: 260)
             .safeAreaInset(edge: .bottom, spacing: 0) {

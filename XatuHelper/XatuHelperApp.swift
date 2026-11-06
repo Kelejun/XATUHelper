@@ -3,8 +3,15 @@ import SwiftUI
 @main
 struct XatuHelperApp: App {
     @UIApplicationDelegateAdaptor(ElectricityRefreshAppDelegate.self) private var delegate
-    @StateObject private var app = AppState()
+    @StateObject private var app: AppState
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        let state = AppState()
+        _app = StateObject(wrappedValue: state)
+        // Activate even for a background launch triggered by the paired watch.
+        PhoneWatchBridge.shared.start(app: state)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -21,12 +28,15 @@ struct XatuHelperApp: App {
             // 退到后台时把这一次运行里新拿到的 cookie 一起存下来，
             // 这样下次冷启动能接着用，不用重新登录。
             if phase == .active {
+                PhoneWatchBridge.shared.start(app: app)
+                PhoneWatchBridge.shared.publish(force: true)
                 BackgroundElectricityRefresh.clearExitReminder(includingTests: false)
             }
             if phase == .active || phase == .background {
                 app.scheduleBackgroundElectricityRefresh()
             }
             if phase == .background || phase == .inactive {
+                PhoneWatchBridge.shared.publish()
                 CookieVault.pinAndSave()
             }
         }

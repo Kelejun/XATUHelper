@@ -40,13 +40,7 @@ struct HomeView: View {
 
     /// 按时间段换问候语。分界点：5:00 早起、11:30 午饭、13:30 下午、18:00 晚上、22:30 晚安。
     private var greeting: String {
-        switch nowMinutes {
-        case 300..<690: return "早，"
-        case 690..<810: return "吃饭没？"
-        case 810..<1080: return "下午好，"
-        case 1080..<1350: return "晚上好，"
-        default: return "晚安。"
-        }
+        CampusGreeting.text(at: now)
     }
 
     private var nowMinutes: Int {
@@ -252,7 +246,7 @@ struct HomeView: View {
                         Text(now.formatted(.dateTime.month(.wide).day().weekday(.wide)))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text(greeting.trimmingCharacters(in: CharacterSet(charactersIn: "，。")))
+                        Text(greeting)
                             .font(.largeTitle.bold())
                         Text(statusLine)
                             .font(.subheadline)
@@ -263,7 +257,7 @@ struct HomeView: View {
 
                 if showsContent {
                     layout {
-                        scheduleOverview
+                        scheduleOverview(fillHeight: wide)
                             .overviewPanel(fillHeight: wide)
 
                         supportingCards(fillHeight: wide)
@@ -333,8 +327,8 @@ struct HomeView: View {
         return remainingToday.count == todayBlocks.count ? "今天要上这些课：" : "今天还有这些课："
     }
 
-    private var scheduleOverview: some View {
-        VStack(alignment: .leading, spacing: 18) {
+    private func scheduleOverview(fillHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(scheduleTitle)
                     .font(.title3.weight(.semibold))
@@ -346,11 +340,11 @@ struct HomeView: View {
 
             let displayed = showingTomorrow ? tomorrowBlocks : todayBlocks.filter { PeriodSchedule.endMinutes(of: $0) > nowMinutes }
             if displayed.isEmpty {
-                VStack(spacing: 14) {
+                VStack(spacing: 8) {
                     Image(systemName: "sun.horizon")
                         .font(.system(size: 32, weight: .light))
                         .foregroundStyle(.teal)
-                        .frame(width: 72, height: 72)
+                        .frame(width: 60, height: 60)
                         .background(Color.teal.opacity(0.08), in: Circle())
                     Text("明天没有课程安排").font(.headline)
                     Text("本周的其他课程可在课程表中查看")
@@ -358,7 +352,7 @@ struct HomeView: View {
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 28)
+                .padding(.vertical, 14)
             } else {
                 ForEach(displayed) { block in
                     courseOverviewRow(block)
@@ -366,7 +360,9 @@ struct HomeView: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            if fillHeight {
+                Spacer(minLength: 0)
+            }
 
             Button { openHomePage(.timetable) } label: {
                 HStack {
@@ -375,7 +371,8 @@ struct HomeView: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.subheadline.weight(.medium))
-                .padding(.top, 4)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
@@ -427,7 +424,8 @@ struct HomeView: View {
                     .frame(width: 3)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(badge == nil ? Color.clear : tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }

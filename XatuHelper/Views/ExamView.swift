@@ -138,7 +138,11 @@ struct ExamView: View {
                 Button {
                     Task { await app.refreshExams() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    if app.examsLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .disabled(app.examsLoading)
             }

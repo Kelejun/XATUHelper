@@ -69,7 +69,8 @@ struct WeekGrid: View {
     var monday: Date?
     /// 只显示周一到周五
     var showWeekend: Bool = true
-    var onSelect: (CourseBlock) -> Void
+    let visibleHeight: CGFloat
+    var onSelect: ([CourseBlock]) -> Void
 
     @Environment(\.campusNavigation) private var navigate
     @ScaledMetric(relativeTo: .caption) private var minimumRowHeight: CGFloat = 52
@@ -91,10 +92,15 @@ struct WeekGrid: View {
             let axisWidth: CGFloat = proxy.size.width >= 600 ? 76 : 56
             let gridWidth = max(0, proxy.size.width - axisWidth)
             let dayWidth = gridWidth / CGFloat(dayCount)
-            let available = max(proxy.size.height - headerHeight, 0)
+            let available = max(visibleHeight - headerHeight, 0)
             let minimum = max(minimumRowHeight, navigate == nil ? 44 : 56)
             let fitted = available / CGFloat(periods)
             let rowHeight = max(minimum, navigate == nil ? min(maxRowHeight, fitted) : fitted)
+            let courseHeight = CGFloat(periods) * rowHeight
+            let bottomExtension = max(proxy.size.height - visibleHeight, 0)
+            let gridHeight = bottomExtension > 0 ? max(courseHeight, available) + bottomExtension : courseHeight
+            let drawnPeriods = Int(ceil(gridHeight / rowHeight))
+            let labeledPeriods = min(drawnPeriods, max(periods, unitCount))
 
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
@@ -108,12 +114,15 @@ struct WeekGrid: View {
 
                 ScrollView(.vertical) {
                     HStack(alignment: .top, spacing: 0) {
-                        if axisWidth > 0 { timeAxis(width: axisWidth, rowHeight: rowHeight) }
+                        if axisWidth > 0 {
+                            timeAxis(width: axisWidth, rowHeight: rowHeight, height: gridHeight, count: labeledPeriods)
+                        }
                         ZStack(alignment: .topLeading) {
-                            gridLines(dayWidth: dayWidth, rowHeight: rowHeight)
+                            gridLines(dayWidth: dayWidth, rowHeight: rowHeight, height: gridHeight, count: drawnPeriods)
                             blockLayer(dayWidth: dayWidth, rowHeight: rowHeight)
                         }
-                        .frame(width: gridWidth, height: CGFloat(periods) * rowHeight, alignment: .topLeading)
+                        .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
+                        .clipped()
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -122,9 +131,9 @@ struct WeekGrid: View {
         }
     }
 
-    private func timeAxis(width: CGFloat, rowHeight: CGFloat) -> some View {
+    private func timeAxis(width: CGFloat, rowHeight: CGFloat, height: CGFloat, count: Int) -> some View {
         VStack(spacing: 0) {
-            ForEach(1...periods, id: \.self) { period in
+            ForEach(1...count, id: \.self) { period in
                 VStack(spacing: 4) {
                     Text("\(period)").font(.caption.weight(.medium))
                     Text(width >= 70 ? PeriodSchedule.axisStartTime(period) : PeriodSchedule.axisStartTime(period).replacingOccurrences(of: "/", with: "/\n"))
@@ -138,6 +147,8 @@ struct WeekGrid: View {
                 .frame(width: width, height: rowHeight, alignment: .top)
             }
         }
+        .frame(height: height, alignment: .top)
+        .clipped()
         .background(Color(.secondarySystemBackground).opacity(0.55))
     }
 
@@ -176,16 +187,16 @@ struct WeekGrid: View {
 
     // MARK: - 网格
 
-    private func gridLines(dayWidth: CGFloat, rowHeight: CGFloat) -> some View {
+    private func gridLines(dayWidth: CGFloat, rowHeight: CGFloat, height: CGFloat, count: Int) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(0..<dayCount, id: \.self) { index in
                 let today = date(at: index).map { Calendar.current.isDateInToday($0) } ?? false
                 Rectangle()
                     .fill(today ? Color.accentColor.opacity(0.04) : (index >= 5 ? Color(.secondarySystemBackground).opacity(0.4) : Color.clear))
-                    .frame(width: dayWidth, height: CGFloat(periods) * rowHeight)
+                    .frame(width: dayWidth, height: height)
                     .offset(x: CGFloat(index) * dayWidth)
             }
-            ForEach(0...periods, id: \.self) { row in
+            ForEach(0...count, id: \.self) { row in
                 Rectangle()
                     .fill(Color(.separator).opacity(0.5))
                     .frame(width: dayWidth * CGFloat(dayCount), height: 0.5)
@@ -194,7 +205,7 @@ struct WeekGrid: View {
             ForEach(1..<dayCount, id: \.self) { column in
                 Rectangle()
                     .fill(Color(.separator).opacity(0.5))
-                    .frame(width: 0.5, height: CGFloat(periods) * rowHeight)
+                    .frame(width: 0.5, height: height)
                     .offset(x: CGFloat(column) * dayWidth)
             }
         }
@@ -202,13 +213,51 @@ struct WeekGrid: View {
 
     // MARK: - 课程块
 
+    private struct BlockGroup: Identifiable {
+        var blocks: [CourseBlock]
+        var id: String { blocks[0].id }
+        var day: Int { blocks[0].day }
+        var start: Int { blocks[0].startPeriod }
+        var end: Int { blocks.map(\.endPeriod).max() ?? start }
+    }
+
+    private var blockGroups: [BlockGroup] {
+        var groups: [BlockGroup] = []
+        for block in blocks.sorted(by: { ($0.day, $0.startPeriod) < ($1.day, $1.startPeriod) })
+            where block.day <= dayCount {
+            if let last = groups.last, last.day == block.day, block.startPeriod <= last.end {
+                groups[groups.count - 1].blocks.append(block)
+            } else {
+                groups.append(BlockGroup(blocks: [block]))
+            }
+        }
+        return groups
+    }
+
     private func blockLayer(dayWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        ForEach(blocks.filter { $0.day <= dayCount }) { block in
-            blockView(block, dayWidth: dayWidth, rowHeight: rowHeight)
-                .offset(
-                    x: CGFloat(block.day - 1) * dayWidth + 1.5,
-                    y: CGFloat(block.startPeriod - 1) * rowHeight + 1
-                )
+        ForEach(blockGroups) { group in
+            Group {
+                if group.blocks.count == 1, let block = group.blocks.first {
+                    blockView(block, dayWidth: dayWidth, rowHeight: rowHeight)
+                } else {
+                    Button { onSelect(group.blocks) } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text("\(group.blocks.count) 门课冲突")
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: dayWidth - 3, height: rowHeight * CGFloat(group.end - group.start + 1) - 2)
+                        .background(Color.orange.opacity(0.26), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .offset(x: CGFloat(group.day - 1) * dayWidth + 1.5,
+                    y: CGFloat(group.start - 1) * rowHeight + 1)
         }
     }
 
@@ -217,7 +266,7 @@ struct WeekGrid: View {
         let height = rowHeight * CGFloat(block.span) - 2
 
         return Button {
-            onSelect(block)
+            onSelect([block])
         } label: {
             HStack(alignment: .top, spacing: 3) {
                 RoundedRectangle(cornerRadius: 1.5)

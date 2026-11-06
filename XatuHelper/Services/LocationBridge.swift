@@ -10,9 +10,10 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var pending: [(Result<CLLocation, Error>) -> Void] = []
     private var watchTimers: [Int: Timer] = [:]
-    private var lastLocation: CLLocation?
+    private let allowsCustomLocation: Bool
 
-    override init() {
+    init(allowsCustomLocation: Bool = false) {
+        self.allowsCustomLocation = allowsCustomLocation
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
@@ -20,6 +21,14 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
 
     /// 取一次定位，结果回主线程
     func request(completion: @escaping (Result<CLLocation, Error>) -> Void) {
+        if usesCustomLocation {
+            if let coordinate = CheckinLocationSettings.coordinate() {
+                completion(.success(coordinate.location))
+            } else {
+                completion(.failure(BridgeError.missingCustomLocation))
+            }
+            return
+        }
         switch manager.authorizationStatus {
         case .notDetermined:
             pending.append(completion)
@@ -32,17 +41,21 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// watchPosition：先立刻取一次，再按间隔回传最后一次的位置
+    /// watchPosition：立即回传，并定期从当前选定的定位来源重新取值。
     func startWatching(id: Int, handler: @escaping (CLLocation?) -> Void) {
         watchTimers[id]?.invalidate()
         request { result in
             if case let .success(location) = result {
-                self.lastLocation = location
+                handler(location)
             }
         }
         watchTimers[id] = Timer.scheduledTimer(withTimeInterval: watchInterval, repeats: true) { [weak self] _ in
             guard let self else { return }
-            handler(self.lastLocation)
+            self.request { result in
+                if case let .success(location) = result {
+                    handler(location)
+                }
+            }
         }
     }
 
@@ -53,12 +66,18 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
 
     enum BridgeError: LocalizedError {
         case denied
+        case missingCustomLocation
 
         var errorDescription: String? {
             switch self {
             case .denied: return "App 没有定位权限"
+            case .missingCustomLocation: return "请先在设置中选择有效的签到位置"
             }
         }
+    }
+
+    private var usesCustomLocation: Bool {
+        allowsCustomLocation && UserDefaults.standard.bool(forKey: CheckinLocationSettings.enabledKey)
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -78,7 +97,6 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        lastLocation = location
         flush(.success(location))
     }
 
@@ -90,7 +108,15 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
         let handlers = pending
         pending = []
         DispatchQueue.main.async {
-            handlers.forEach { $0(result) }
+            // 若真实定位尚未完成时打开了测试开关，也不能回传实际坐标。
+            let resolved: Result<CLLocation, Error>
+            if self.usesCustomLocation {
+                resolved = CheckinLocationSettings.coordinate().map { .success($0.location) }
+                    ?? .failure(BridgeError.missingCustomLocation)
+            } else {
+                resolved = result
+            }
+            handlers.forEach { $0(resolved) }
         }
     }
 }
