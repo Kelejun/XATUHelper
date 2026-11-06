@@ -4,6 +4,8 @@
 
 > 本仓库维护 iOS App、Apple Watch App 与 Widget。原生 Android 版请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)，使用 Kotlin、Jetpack Compose 和 Material Design 3 独立实现；原 Skip 迁移工程已移除。
 
+[隐私政策](PRIVACY.md)
+
 ## 当前功能
 
 - 统一身份认证密码登录；登录失败自动弹出学校网页登录，并显示应用内提示，支持验证码或手机动态码。登录页可直接选择「体验示例」，无需校园账号；示例数据不写入真实账号缓存、小组件或后台任务。
