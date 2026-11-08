@@ -2,13 +2,49 @@
   "fill" : {
     "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
   },
+  "fill-specializations" : [
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
   "groups" : [
     {
       "layers" : [
         {
           "glass" : false,
+          "hidden-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "dark",
+              "value" : true
+            }
+          ],
           "image-name" : "XATUHelper-AppIcon-v2.png",
           "name" : "XATUHelper-AppIcon-v2",
+          "position" : {
+            "scale" : 0.8166,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "hidden-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "dark",
+              "value" : false
+            }
+          ],
+          "image-name" : "GraduationCap.svg",
+          "name" : "GraduationCap",
           "position" : {
             "scale" : 0.8166,
             "translation-in-points" : [

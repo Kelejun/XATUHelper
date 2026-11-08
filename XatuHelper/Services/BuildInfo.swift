@@ -1,6 +1,6 @@
 import Foundation
 
 enum BuildInfo {
-    static let commit = "349c04f"
-    static let builtAt = "20261106"
+    static let commit = "f7065e7"
+    static let builtAt = "20261108"
 }
