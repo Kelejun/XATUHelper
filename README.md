@@ -1,8 +1,14 @@
+![XATune](docs/assets/readme-header.png)
+
 # XATune for iOS
 
 仙宫小助手 iOS 版，从教务官网自动拉取课程表、考试安排、成绩及学分等信息，同时提供宿舍电费查询、签到与请销假等功能。使用 Swift、SwiftUI 和 WidgetKit，支持 iPhone、iPad、Apple Watch 与桌面小组件。
 
 > Android 用户请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)
+
+<a href="https://apps.apple.com/us/app/xatune/id6831484863"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="40"></a>
+
+App Store 下载不适用于中国大陆区，中国大陆区请使用下方 TestFlight 下载。
 
 [TestFlight 下载](https://testflight.apple.com/join/PbKpCUU6) · [隐私政策](PRIVACY.md)
 
