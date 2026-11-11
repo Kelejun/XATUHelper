@@ -7,11 +7,10 @@
 > Android 用户请前往 [XATUHelper-Android](https://github.com/Kelejun/XATUHelper-Android)
 
 <a href="https://apps.apple.com/us/app/xatune/id6831484863"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="40"></a>
-<a href="https://testflight.apple.com/join/PbKpCUU6"><img src="docs/assets/testflight-badge.svg" alt="Download on TestFlight" height="40"></a>
 
-App Store 下载不适用于中国大陆区，中国大陆区请使用 TestFlight 下载。
+App Store 下载不适用于中国大陆区，中国大陆区请使用下方 TestFlight 下载。
 
-[隐私政策](PRIVACY.md)
+[TestFlight 下载](https://testflight.apple.com/join/PbKpCUU6) · [隐私政策](PRIVACY.md)
 
 ## 编译
 
