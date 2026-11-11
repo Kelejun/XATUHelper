@@ -16,6 +16,7 @@ struct WebSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
     @State private var errorText: String?
+    @State private var paymentError: String?
     @State private var reloadToken = 0
 
     var body: some View {
@@ -34,7 +35,8 @@ struct WebSheet: View {
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL)
+                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText,
+                            paymentError: $paymentError, followUpURL: followUpURL)
                         .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
@@ -43,6 +45,14 @@ struct WebSheet: View {
             .campusSidebarToolbar(enabled: showsSidebarToggle)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .alert("无法打开支付应用", isPresented: Binding(
+                get: { paymentError != nil },
+                set: { if !$0 { paymentError = nil } }
+            )) {
+                Button("好", role: .cancel) { paymentError = nil }
+            } message: {
+                Text(paymentError ?? "")
+            }
             .toolbar {
                 if showsCloseButton {
                     ToolbarItem(placement: .cancellationAction) {
@@ -77,6 +87,7 @@ private struct WebPage: UIViewRepresentable {
     let url: URL
     @Binding var isLoading: Bool
     @Binding var errorText: String?
+    @Binding var paymentError: String?
     let followUpURL: String?
 
     func makeUIView(context: Context) -> WKWebView {
@@ -96,6 +107,7 @@ private struct WebPage: UIViewRepresentable {
 
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         context.coordinator.webView = web
 
@@ -129,14 +141,16 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading, errorText: $errorText, followUpURL: followUpURL,
+        Coordinator(isLoading: $isLoading, errorText: $errorText, paymentError: $paymentError,
+                    followUpURL: followUpURL,
                     allowsCustomLocation: url.host == "ehall.xatu.edu.cn"
                         && url.path.hasPrefix("/xsfw/sys/swmqdzsapp/"))
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         @Binding private var isLoading: Bool
         @Binding private var errorText: String?
+        @Binding private var paymentError: String?
         private let followUpURL: String?
         private var appliedFollowUp = false
         weak var webView: WKWebView?
@@ -144,9 +158,11 @@ private struct WebPage: UIViewRepresentable {
         private var nextWatchID = 0
         private var watchIDs: [String: Int] = [:]
 
-        init(isLoading: Binding<Bool>, errorText: Binding<String?>, followUpURL: String?, allowsCustomLocation: Bool) {
+        init(isLoading: Binding<Bool>, errorText: Binding<String?>, paymentError: Binding<String?>,
+             followUpURL: String?, allowsCustomLocation: Bool) {
             _isLoading = isLoading
             _errorText = errorText
+            _paymentError = paymentError
             self.followUpURL = followUpURL
             self.location = LocationBridge(allowsCustomLocation: allowsCustomLocation)
         }
@@ -185,6 +201,39 @@ private struct WebPage: UIViewRepresentable {
                     }
                 }
             }
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if let url = navigationAction.request.url, openPaymentApp(url) {
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            guard navigationAction.targetFrame == nil else { return nil }
+            if let url = navigationAction.request.url, openPaymentApp(url) { return nil }
+            // 保留原始请求（包括 POST），让新窗口中的支付页沿用当前会话。
+            webView.load(navigationAction.request)
+            return nil
+        }
+
+        private func openPaymentApp(_ url: URL) -> Bool {
+            let appName: String
+            switch url.scheme?.lowercased() {
+            case "weixin": appName = "微信"
+            case "alipay", "alipays": appName = "支付宝"
+            default: return false
+            }
+            // 直接打开并检查结果，无需依赖 canOpenURL 的查询白名单。
+            UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+                guard !opened else { return }
+                self?.paymentError = "未能打开\(appName)，请确认已安装\(appName)后重试。"
+            }
+            return true
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
