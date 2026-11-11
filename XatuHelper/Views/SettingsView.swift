@@ -22,6 +22,8 @@ struct SettingsContent: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(CheckinLocationSettings.revealedKey) private var showCheckinLocation = false
     @State private var versionTapCount = 0
+    @EnvironmentObject private var announcements: AnnouncementCenter
+    @State private var selectedAnnouncement: ReceivedAnnouncement?
 
     static var versionText: String {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -33,34 +35,60 @@ struct SettingsContent: View {
     var body: some View {
         Form {
             Section("账号") {
-                LabeledContent("学号", value: app.studentID.isEmpty ? "—" : app.studentID)
-                Button("退出登录", role: .destructive) {
-                    app.logout()
-                    dismiss()
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundStyle(.tint)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(accountName)
+                                .font(.title3.weight(.semibold))
+                            Text("学号：\(app.studentID.isEmpty ? "—" : app.studentID)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        app.logout()
+                        dismiss()
+                    } label: {
+                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                            .frame(maxWidth: .infinity, minHeight: 32)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
                 }
+                .padding(.vertical, 8)
             }
+
+            AnnouncementSettingsSection { selectedAnnouncement = $0 }
 
             Section("通用") {
-                NavigationLink {
-                    GeneralSettingsContent()
-                } label: {
-                    Label("通用设置", systemImage: "gearshape")
+                if !app.isDemoMode {
+                    NavigationLink {
+                        Form {
+                            ElectricityRefreshSettingsSection()
+                        }
+                        .formStyle(.grouped)
+                        .navigationTitle("电费更新")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        Label("电费更新", systemImage: "bolt")
+                    }
+                    NavigationLink {
+                        ReminderSettingsContent()
+                    } label: {
+                        Label("提醒", systemImage: "bell")
+                    }
                 }
-            }
-
-            Section("课程表") {
                 NavigationLink {
                     TimetableSettingsContent()
                 } label: {
-                    Label("课程表设置", systemImage: "calendar")
-                }
-            }
-
-            Section("诊断") {
-                NavigationLink {
-                    DiagnosticsSettingsContent()
-                } label: {
-                    Label("诊断设置", systemImage: "stethoscope")
+                    Label("课程表", systemImage: "calendar")
                 }
             }
 
@@ -87,66 +115,51 @@ struct SettingsContent: View {
                     Text("构建于 \(BuildInfo.builtAt)")
                 }
             }
+
+            DiagnosticsSettingsSections()
         }
-        .formStyle(.grouped)
-        .navigationTitle("设置")
-        .navigationBarTitleDisplayMode(.inline)
-        .modifier(SettingsAnnouncementBlocker())
-    }
-}
-
-private struct GeneralSettingsContent: View {
-    @EnvironmentObject private var app: AppState
-    @EnvironmentObject private var announcements: AnnouncementCenter
-    @State private var selectedAnnouncement: ReceivedAnnouncement?
-
-    var body: some View {
-        Form {
-            if !app.isDemoMode {
-                Section {
-                    NavigationLink {
-                        Form {
-                            ElectricityRefreshSettingsSection()
-                        }
-                        .formStyle(.grouped)
-                        .navigationTitle("电费刷新")
-                        .navigationBarTitleDisplayMode(.inline)
-                    } label: {
-                        Label("电费刷新", systemImage: "bolt")
-                    }
-                    NavigationLink {
-                        Form {
-                            ExamNotificationSection()
-                        }
-                        .formStyle(.grouped)
-                        .navigationTitle("考试提醒")
-                        .navigationBarTitleDisplayMode(.inline)
-                    } label: {
-                        Label("考试提醒", systemImage: "bell")
-                    }
-                }
-            }
-
-            AnnouncementSettingsSection { selectedAnnouncement = $0 }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("通用")
-        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedAnnouncement) { record in
             AnnouncementDetailView(announcement: record.announcement, receivedAt: record.receivedAt) {
                 announcements.acknowledge(record)
                 selectedAnnouncement = nil
             }
         }
+        .task {
+            if app.plan.studentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               app.isLoggedIn, !app.isDemoMode {
+                await app.refreshPlan()
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .modifier(SettingsAnnouncementBlocker())
+    }
+
+    private var accountName: String {
+        let name = app.plan.studentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "未获取姓名" : name
     }
 }
 
-private struct DiagnosticsSettingsContent: View {
+private struct ReminderSettingsContent: View {
+    var body: some View {
+        Form {
+            ClassNotificationSection()
+            ExamNotificationSection()
+        }
+        .formStyle(.grouped)
+        .navigationTitle("提醒")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct DiagnosticsSettingsSections: View {
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     @AppStorage(CheckinLocationSettings.revealedKey) private var showCheckinLocation = false
 
     var body: some View {
-        Form {
+        Group {
             Section {
                 Toggle("显示诊断数据", isOn: $showDiagnostics)
                 if showDiagnostics {
@@ -155,7 +168,7 @@ private struct DiagnosticsSettingsContent: View {
                     }
                 }
             } header: {
-                Text("诊断数据")
+                Text("诊断")
             } footer: {
                 Text("如果出现解析问题，可复制诊断信息给开发者处理")
             }
@@ -164,9 +177,6 @@ private struct DiagnosticsSettingsContent: View {
                 CheckinLocationSettingsSection()
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("诊断")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -207,7 +217,13 @@ struct TimetableSettingsContent: View {
             }
 
             if !app.isDemoMode {
-                ClassNotificationSection()
+                Section {
+                    NavigationLink {
+                        ReminderSettingsContent()
+                    } label: {
+                        Label("提醒", systemImage: "bell")
+                    }
+                }
             }
 
             Section {
