@@ -45,8 +45,6 @@ xcodebuild -project XatuHelper.xcodeproj -scheme XatuHelperWatch \
 xcodebuild -project XatuHelper.xcodeproj -scheme XatuHelper \
   -configuration Release -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO build
-
-sh Tests/run-watch-tests.sh
 ```
 
 Debug 模拟器启动参数：`--watch-preview` 使用内存示例数据；叠加 `--watch-preview-exam` 展示当天考试，`--watch-preview-long` 展示长课程名。这些参数不写入缓存、不连接手机，Release 构建不包含示例入口。
