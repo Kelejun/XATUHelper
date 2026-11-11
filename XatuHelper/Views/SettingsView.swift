@@ -108,7 +108,6 @@ struct SettingsContent: View {
                 Link(destination: URL(string: "https://qm.qq.com/q/k1mGynJlrW")!) {
                     LabeledContent {
                         Text("934935585")
-                            .font(.caption)
                             .foregroundStyle(.secondary)
                     } label: {
                         Text("加入QQ交流群")
