@@ -56,7 +56,7 @@ struct SettingsContent: View {
                         app.logout()
                         dismiss()
                     } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                        Text("退出登录")
                             .frame(maxWidth: .infinity, minHeight: 32)
                     }
                     .buttonStyle(.bordered)
@@ -77,18 +77,18 @@ struct SettingsContent: View {
                         .navigationTitle("电费更新")
                         .navigationBarTitleDisplayMode(.inline)
                     } label: {
-                        Label("电费更新", systemImage: "bolt")
+                        Text("电费更新")
                     }
                     NavigationLink {
                         ReminderSettingsContent()
                     } label: {
-                        Label("提醒", systemImage: "bell")
+                        Text("提醒")
                     }
                 }
                 NavigationLink {
                     TimetableSettingsContent()
                 } label: {
-                    Label("课程表", systemImage: "calendar")
+                    Text("课程表")
                 }
             }
 
@@ -105,6 +105,15 @@ struct SettingsContent: View {
                 }
                 .buttonStyle(.plain)
                 PrivacyPolicyLink()
+                Link(destination: URL(string: "https://qm.qq.com/q/k1mGynJlrW")!) {
+                    LabeledContent {
+                        Text("934935585")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        Text("加入QQ交流群")
+                    }
+                }
                 Link(destination: URL(string: "https://github.com/Kelejun/XATUHelper")!) {
                     LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper")
                 }
@@ -221,7 +230,7 @@ struct TimetableSettingsContent: View {
                     NavigationLink {
                         ReminderSettingsContent()
                     } label: {
-                        Label("提醒", systemImage: "bell")
+                        Text("提醒")
                     }
                 }
             }
