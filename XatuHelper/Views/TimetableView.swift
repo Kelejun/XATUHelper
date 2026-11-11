@@ -433,6 +433,9 @@ struct SettingsSheet: View {
 /// 不带 NavigationStack 的总设置，课程表设置里也能跳进来
 struct SettingsContent: View {
     @EnvironmentObject var app: AppState
+    @EnvironmentObject private var announcements: AnnouncementCenter
+    @State private var announcementBlocker = UUID()
+    @State private var selectedAnnouncement: ReceivedAnnouncement?
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     @AppStorage(CheckinLocationSettings.revealedKey) private var showCheckinLocation = false
@@ -455,6 +458,8 @@ struct SettingsContent: View {
                     dismiss()
                 }
             }
+
+            AnnouncementSettingsSection { selectedAnnouncement = $0 }
 
             if !app.isDemoMode {
                 ElectricityRefreshSettingsSection()
@@ -510,6 +515,14 @@ struct SettingsContent: View {
                 }
             }
         }
+        .sheet(item: $selectedAnnouncement) { record in
+            AnnouncementDetailView(announcement: record.announcement, receivedAt: record.receivedAt) {
+                announcements.acknowledge(record)
+                selectedAnnouncement = nil
+            }
+        }
+        .onAppear { announcements.presentationBlockers.insert(announcementBlocker) }
+        .onDisappear { announcements.presentationBlockers.remove(announcementBlocker) }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
     }

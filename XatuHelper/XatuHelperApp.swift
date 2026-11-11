@@ -4,6 +4,7 @@ import SwiftUI
 struct XatuHelperApp: App {
     @UIApplicationDelegateAdaptor(ElectricityRefreshAppDelegate.self) private var delegate
     @StateObject private var app: AppState
+    @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -17,6 +18,7 @@ struct XatuHelperApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(app)
+                .environmentObject(announcements)
         }
         .backgroundTask(.appRefresh(BackgroundElectricityRefresh.identifier)) {
             await app.performBackgroundElectricityRefresh()
@@ -28,6 +30,7 @@ struct XatuHelperApp: App {
             // 退到后台时把这一次运行里新拿到的 cookie 一起存下来，
             // 这样下次冷启动能接着用，不用重新登录。
             if phase == .active {
+                Task { await announcements.refresh() }
                 PhoneWatchBridge.shared.start(app: app)
                 PhoneWatchBridge.shared.publish(force: true)
                 BackgroundElectricityRefresh.clearExitReminder(includingTests: false)
@@ -45,6 +48,8 @@ struct XatuHelperApp: App {
 
 struct ContentView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var announcements: AnnouncementCenter
 
     var body: some View {
         Group {
@@ -55,6 +60,12 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
+        .background {
+            AnnouncementNotice(center: announcements,
+                canPresent: scenePhase == .active && app.inAppNotice == nil &&
+                    !app.showsWebLogin && !app.showsDemoAccount && app.deepLink == nil)
+        }
+        .task { await announcements.refresh() }
         .background {
             InAppNotificationPresenter(
                 notice: app.inAppNotice,
@@ -95,5 +106,6 @@ struct ContentView: View {
                 }
             }
         }
+        .environmentObject(announcements)
     }
 }
