@@ -18,8 +18,11 @@ struct LoginView: View {
             Form {
                 Section {
                     VStack(spacing: 12) {
-                        Image(systemName: "graduationcap.fill")
-                            .font(.system(size: 40))
+                        Image("XATuneMark")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
                             .foregroundStyle(.tint)
                             .accessibilityHidden(true)
                         Text("XATune")
