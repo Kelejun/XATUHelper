@@ -35,7 +35,7 @@ struct PlanView: View {
             if !app.plan.sections.isEmpty {
                 if searchText.isEmpty {
                     overview
-                    Section {
+                    Section("各板块完成情况") {
                         ForEach(filteredSections) { section in
                             moduleRow(section)
                         }
@@ -145,6 +145,7 @@ struct PlanView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if !app.plan.gpa.isEmpty {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Spacer(minLength: 0)
                             Text("GPA").font(.subheadline).foregroundStyle(.secondary)
                             Text(app.plan.gpa)
                                 .font(.headline)
