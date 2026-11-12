@@ -9,7 +9,7 @@ struct PlanView: View {
     @State private var termFilter: String?
 
     var body: some View {
-        Form {
+        List {
             if app.planLoading && app.plan.sections.isEmpty {
                 Section {
                     HStack(spacing: 10) {
@@ -43,8 +43,9 @@ struct PlanView: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("学业完成情况")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -101,36 +102,80 @@ struct PlanView: View {
     }
 
     private var overview: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(number(app.plan.totalEarned))
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    Text("/ \(number(app.plan.totalRequired)) 学分")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        let tint: Color = app.plan.totalRequired > 0 && app.plan.shortfall <= 0 ? .green : .blue
+
+        return Section {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("毕业学分")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(tint)
+                        Text(app.plan.major.isEmpty ? "学业进度" : app.plan.major)
+                            .font(.title2.bold())
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "graduationcap.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 48, height: 48)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityHidden(true)
                 }
-                ProgressView(value: app.plan.progress)
-                    .tint(.blue)
-                HStack(spacing: 12) {
-                    if !app.plan.major.isEmpty {
-                        Text(app.plan.major).lineLimit(1)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        earnedCredits(tint: tint)
+                        Text("/ \(number(app.plan.totalRequired)) 学分")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    if !app.plan.gpa.isEmpty {
-                        Text("GPA \(app.plan.gpa)")
-                    }
-                    if app.plan.shortfall > 0 {
-                        Text("还差 \(number(app.plan.shortfall)) 学分")
-                            .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        earnedCredits(tint: tint)
+                        Text("/ \(number(app.plan.totalRequired)) 学分")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    ProgressView(value: app.plan.progress)
+                        .tint(tint)
+                        .accessibilityLabel("毕业学分进度")
+                    HStack(alignment: .top) {
+                        summaryMetric("待修学分", value: number(app.plan.shortfall),
+                                      tint: app.plan.shortfall > 0 ? .orange : .green)
+                        Spacer(minLength: 16)
+                        if !app.plan.gpa.isEmpty {
+                            summaryMetric("GPA", value: app.plan.gpa, tint: .indigo, alignment: .trailing)
+                        }
+                    }
+                }
             }
-            .padding(.vertical, 4)
-        } header: {
-            Text("毕业学分")
+            .padding(.vertical, 8)
+            .listRowBackground(
+                LinearGradient(colors: [tint.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
         }
+    }
+
+    private func earnedCredits(tint: Color) -> some View {
+        Text(number(app.plan.totalEarned))
+            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+    }
+
+    private func summaryMetric(_ title: String, value: String, tint: Color,
+                               alignment: HorizontalAlignment = .leading) -> some View {
+        VStack(alignment: alignment, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.headline).monospacedDigit().foregroundStyle(tint)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var searchResults: some View {
@@ -156,7 +201,7 @@ struct PlanView: View {
     private func moduleSection(_ section: PlanSection) -> some View {
         Section {
             DisclosureGroup {
-                PlanSectionContent(section: section, number: number, detail: detailFor)
+                PlanSectionContent(section: section, tint: moduleTint(section), number: number, detail: detailFor)
             } label: {
                 sectionRow(section)
             }
@@ -166,48 +211,67 @@ struct PlanView: View {
         }
     }
 
+    private func moduleTint(_ section: PlanSection) -> Color {
+        let colors: [Color] = [.blue, .indigo, .teal, .orange, .purple]
+        let index = app.plan.sections.firstIndex { $0.id == section.id } ?? 0
+        return colors[index % colors.count]
+    }
+
     private func sectionRow(_ section: PlanSection) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
+        let tint = moduleTint(section)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "books.vertical.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 11))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 10) {
                 Text(section.title)
-                    .lineLimit(2)
-                Spacer(minLength: 12)
-                Text("\(number(section.earned)) / \(number(section.required))")
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(section.shortfall <= 0 ? Color.green : Color.secondary)
-            }
-            if section.required > 0 {
-                ProgressView(value: section.progress)
-                    .tint(section.shortfall <= 0 ? Color.green : Color.blue)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        moduleCredits(section)
+                        Spacer(minLength: 0)
+                        moduleStatus(section, tint: tint)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        moduleCredits(section)
+                        moduleStatus(section, tint: tint)
+                    }
+                }
+                if section.required > 0 {
+                    ProgressView(value: section.progress)
+                        .tint(section.shortfall <= 0 ? .green : tint)
+                        .accessibilityLabel("模块学分进度")
+                }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
+    }
+
+    private func moduleCredits(_ section: PlanSection) -> some View {
+        Text("\(number(section.earned)) / \(number(section.required)) 学分")
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(.secondary)
+    }
+
+    private func moduleStatus(_ section: PlanSection, tint: Color) -> some View {
+        let completed = section.shortfall <= 0
+        let color: Color = completed ? .green : tint
+        return Text(completed ? "已达标" : "差 \(number(section.shortfall)) 学分")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10), in: Capsule())
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func courseRow(_ course: PlanCourse) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(course.name)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    Text(course.code)
-                    if !course.score.isEmpty, course.score != "--" {
-                        Text(course.score)
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                if let info = app.courseInfo(for: course) {
-                    Text(detailText(info))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            Text("\(number(course.earned)) / \(number(course.required))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(course.passed ? Color.secondary : Color.orange)
-        }
+        PlanCourseRow(course: course, number: number, detail: detailFor(course))
     }
 
     private struct Match {
@@ -300,56 +364,74 @@ struct PlanView: View {
 /// 递归展开：点某一层，直接看到它下面的分组和课程。
 private struct PlanSectionContent: View {
     let section: PlanSection
+    let tint: Color
     let number: (Double) -> String
     let detail: (PlanCourse) -> String?
 
     var body: some View {
         ForEach(section.children) { child in
             DisclosureGroup {
-                PlanSectionContent(section: child, number: number, detail: detail)
+                PlanSectionContent(section: child, tint: tint, number: number, detail: detail)
             } label: {
                 label(child)
             }
         }
         ForEach(section.courses) { course in
-            row(course)
+            PlanCourseRow(course: course, number: number, detail: detail(course))
         }
     }
 
     private func label(_ section: PlanSection) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(section.title)
-                .lineLimit(2)
-            Spacer(minLength: 12)
-            Text("\(number(section.earned)) / \(number(section.required))")
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(section.shortfall <= 0 ? Color.green : Color.secondary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(number(section.earned)) / \(number(section.required)) 学分")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(section.shortfall <= 0 ? .green : tint)
         }
+        .padding(.vertical, 4)
     }
+}
 
-    private func row(_ course: PlanCourse) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+private struct PlanCourseRow: View {
+    let course: PlanCourse
+    let number: (Double) -> String
+    let detail: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: course.passed ? "checkmark.circle.fill" : "circle.dashed")
+                .font(.subheadline)
+                .foregroundStyle(course.passed ? Color.green : Color.orange)
+                .padding(.top, 2)
+                .accessibilityLabel(course.passed ? "已通过" : "未通过")
+            VStack(alignment: .leading, spacing: 6) {
                 Text(course.name)
-                    .lineLimit(2)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    Text(course.code)
+                    if !course.code.isEmpty { Text(course.code) }
                     if !course.score.isEmpty, course.score != "--" {
                         Text(course.score)
                     }
                 }
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                if let detail = detail(course) {
+                if let detail, !detail.isEmpty {
                     Text(detail)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Text("\(number(course.earned)) / \(number(course.required)) 学分")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(course.passed ? Color.secondary : Color.orange)
             }
-            Spacer(minLength: 8)
-            Text("\(number(course.earned)) / \(number(course.required))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(course.passed ? Color.secondary : Color.orange)
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
     }
 }
