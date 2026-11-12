@@ -5,7 +5,6 @@ struct PlanView: View {
     @EnvironmentObject var app: AppState
     @State private var showWebPage = false
     @State private var searchText = ""
-    @FocusState private var searchFocused: Bool
     /// nil 表示不筛选
     @State private var termFilter: String?
 
@@ -44,13 +43,11 @@ struct PlanView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
+        .modifier(PlanSearchToolbarBehavior())
         .navigationTitle("学业完成情况")
         .navigationBarTitleDisplayMode(.large)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            searchField
-        }
         .scrollDismissesKeyboard(.interactively)
-        .onDisappear { searchFocused = false }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -103,40 +100,6 @@ struct PlanView: View {
             if app.isStale(.plan) { await app.refreshPlan() }
             await app.refreshPlanCatalogIfNeeded()
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                TextField("搜索课程名称", text: $searchText)
-                    .focused($searchFocused)
-                    .submitLabel(.search)
-                    .autocorrectionDisabled()
-                    .onSubmit { searchFocused = false }
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel("清除搜索")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-            if searchFocused || !searchText.isEmpty {
-                Button("取消") {
-                    searchFocused = false
-                    searchText = ""
-                }
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     private var overview: some View {
@@ -425,5 +388,16 @@ private struct PlanCourseRow: View {
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct PlanSearchToolbarBehavior: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.1, *) {
+            content.searchPresentationToolbarBehavior(.avoidHidingContent)
+        } else {
+            content
+        }
     }
 }
