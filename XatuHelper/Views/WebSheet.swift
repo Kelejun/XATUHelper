@@ -18,6 +18,9 @@ struct WebSheet: View {
     @State private var errorText: String?
     @State private var paymentError: String?
     @State private var reloadToken = 0
+    @State private var usesFreshSession = false
+    @State private var hasRedirectLoop = false
+    @State private var diagnosticText = ""
 
     var body: some View {
         NavigationStack {
@@ -28,15 +31,29 @@ struct WebSheet: View {
                     } description: {
                         Text(message)
                     } actions: {
+                        if hasRedirectLoop {
+                            Button("重新登录网页") {
+                                usesFreshSession = true
+                                hasRedirectLoop = false
+                                errorText = nil
+                                isLoading = true
+                                reloadToken += 1
+                            }
+                        }
                         Button("重试") {
                             errorText = nil
                             isLoading = true
                             reloadToken += 1
                         }
+                        if !diagnosticText.isEmpty {
+                            ShareLink("分享诊断信息", item: diagnosticText)
+                        }
                     }
                 } else if let url = Self.makeURL(urlString) {
                     WebPage(url: url, isLoading: $isLoading, errorText: $errorText,
-                            paymentError: $paymentError, followUpURL: followUpURL)
+                            paymentError: $paymentError, followUpURL: followUpURL,
+                            usesFreshSession: usesFreshSession, hasRedirectLoop: $hasRedirectLoop,
+                            diagnosticText: $diagnosticText)
                         .id(reloadToken)
                 } else {
                     ContentUnavailableView("地址不对", systemImage: "link.badge.plus")
@@ -89,10 +106,16 @@ private struct WebPage: UIViewRepresentable {
     @Binding var errorText: String?
     @Binding var paymentError: String?
     let followUpURL: String?
+    let usesFreshSession: Bool
+    @Binding var hasRedirectLoop: Bool
+    @Binding var diagnosticText: String
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        if usesFreshSession {
+            config.websiteDataStore = .nonPersistent()
+        }
 
         // WKWebView 自带的 navigator.geolocation 是空的，签到这类页面会一直转圈。
         // 注入一段垫片，把定位请求转给原生 CLLocationManager。
@@ -113,6 +136,11 @@ private struct WebPage: UIViewRepresentable {
 
         // 把 app 已经拿到的 xatu cookie 带进 WebKit 的存储，少登一次。
         // setCookie 是异步的，等全部落盘再发第一个请求，否则第一次会被踢去登录页。
+        if usesFreshSession {
+            // 不导入共享 Cookie，也不删除其他网页或原生请求的会话。
+            web.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
+            return web
+        }
         let store = web.configuration.websiteDataStore.httpCookieStore
         // 页面自己会写 token；先清掉旧的，免得 SPA 启动时读到过期值、后面怎么跳都报「系统维护」
         store.getAllCookies { existing in
@@ -140,9 +168,17 @@ private struct WebPage: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.navigationDelegate = nil
+        uiView.uiDelegate = nil
+        uiView.stopLoading()
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "location")
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(isLoading: $isLoading, errorText: $errorText, paymentError: $paymentError,
-                    followUpURL: followUpURL,
+                    followUpURL: followUpURL, usesFreshSession: usesFreshSession,
+                    hasRedirectLoop: $hasRedirectLoop, diagnosticText: $diagnosticText,
                     allowsCustomLocation: url.host == "ehall.xatu.edu.cn"
                         && url.path.hasPrefix("/xsfw/sys/swmqdzsapp/"))
     }
@@ -152,6 +188,10 @@ private struct WebPage: UIViewRepresentable {
         @Binding private var errorText: String?
         @Binding private var paymentError: String?
         private let followUpURL: String?
+        private let usesFreshSession: Bool
+        @Binding private var hasRedirectLoop: Bool
+        @Binding private var diagnosticText: String
+        private var diagnosticEvents: [String] = []
         private var appliedFollowUp = false
         weak var webView: WKWebView?
         private let location: LocationBridge
@@ -159,11 +199,15 @@ private struct WebPage: UIViewRepresentable {
         private var watchIDs: [String: Int] = [:]
 
         init(isLoading: Binding<Bool>, errorText: Binding<String?>, paymentError: Binding<String?>,
-             followUpURL: String?, allowsCustomLocation: Bool) {
+             followUpURL: String?, usesFreshSession: Bool,
+             hasRedirectLoop: Binding<Bool>, diagnosticText: Binding<String>, allowsCustomLocation: Bool) {
             _isLoading = isLoading
             _errorText = errorText
             _paymentError = paymentError
             self.followUpURL = followUpURL
+            self.usesFreshSession = usesFreshSession
+            _hasRedirectLoop = hasRedirectLoop
+            _diagnosticText = diagnosticText
             self.location = LocationBridge(allowsCustomLocation: allowsCustomLocation)
         }
 
@@ -209,6 +253,22 @@ private struct WebPage: UIViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
+            if navigationAction.targetFrame?.isMainFrame != false {
+                trace("navigate", url: navigationAction.request.url)
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+            trace("redirect", url: webView.url)
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            if navigationResponse.isForMainFrame {
+                let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+                trace("response \(status)", url: navigationResponse.response.url)
+            }
             decisionHandler(.allow)
         }
 
@@ -243,6 +303,8 @@ private struct WebPage: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading = false
             applyFollowUpIfNeeded(webView)
+            // 恢复会话保持隔离，避免登录过程中的 Cookie 改动影响 App 当前账号。
+            guard !usesFreshSession else { return }
             // 网页里如果重新登过，把新 cookie 回写给 app，别让两边各登一次
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
                 for cookie in cookies where cookie.domain.contains("xatu.edu.cn") {
@@ -280,15 +342,34 @@ private struct WebPage: UIViewRepresentable {
             }
         }
 
+        // 只记录主机，不收集 URL 路径、查询、fragment、请求头或 Cookie。
+        private func trace(_ event: String, url: URL?) {
+            diagnosticEvents.append("\(event): \(url?.host ?? "unknown")")
+            if diagnosticEvents.count > 32 { diagnosticEvents.removeFirst() }
+        }
+
         /// 只有真的打不开才提示，用户自己取消（-999）之类的忽略
         private func record(_ error: Error) {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
-            let detail = ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
-            if ns.code == NSURLErrorNotConnectedToInternet || ns.code == NSURLErrorCannotFindHost {
-                errorText = "这个页面要连校内网才能打开，先连上校园网再试。"
-            } else if let detail {
-                errorText = "\(ns.localizedDescription)\n\(detail)"
+            let failingURL = (ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+                ?? (ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:))
+            trace("failure \(ns.domain) \(ns.code)", url: failingURL)
+            let info = Bundle.main.infoDictionary ?? [:]
+            diagnosticText = [
+                "网页访问诊断",
+                "App \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?"))",
+                "iOS \(UIDevice.current.systemVersion)",
+                "Time \(Date().ISO8601Format())",
+                "Session \(usesFreshSession ? "isolated" : "shared")",
+                diagnosticEvents.joined(separator: "\n")
+            ].joined(separator: "\n")
+            hasRedirectLoop = ns.domain == NSURLErrorDomain && ns.code == NSURLErrorHTTPTooManyRedirects
+            if hasRedirectLoop {
+                errorText = "网页跳转次数过多，可尝试重新登录网页。若仍无法打开，请稍后重试并分享诊断信息。"
+            } else if ns.domain == NSURLErrorDomain &&
+                        (ns.code == NSURLErrorNotConnectedToInternet || ns.code == NSURLErrorCannotFindHost) {
+                errorText = "网络不可用或无法找到服务器，请检查网络连接后重试。"
             } else {
                 errorText = ns.localizedDescription
             }
