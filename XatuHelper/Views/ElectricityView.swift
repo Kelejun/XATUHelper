@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import UIKit
 
 /// 电费页：没选过宿舍就引导去选，选过就直接显示余额。
 struct ElectricityView: View {
@@ -12,16 +13,24 @@ struct ElectricityView: View {
     @State private var preparingCharge = false
 
     var body: some View {
-        Form {
+        List {
             if let dorm = app.dorm {
                 Section {
                     balanceCard
+                        .listRowBackground(
+                            LinearGradient(
+                                colors: [Color.orange.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        )
                 }
 
                 Section {
                     trendChart
-                    NavigationLink("历史余额") {
+                    NavigationLink {
                         ElectricityHistoryView()
+                    } label: {
+                        Label("历史余额", systemImage: "clock.arrow.circlepath")
                     }
                 } header: {
                     Text("近 7 天用量")
@@ -34,25 +43,52 @@ struct ElectricityView: View {
                     if !dorm.areaName.isEmpty, dorm.areaName != dorm.buildName {
                         LabeledContent("校区", value: dorm.areaName)
                     }
-                    Button("换一个宿舍") { editing = true }
+                    Button { editing = true } label: {
+                        Label("换一个宿舍", systemImage: "arrow.left.arrow.right")
+                    }
                 }
 
                 if let error = app.electricityError {
                     Section {
-                        Text(error)
+                        Label(error, systemImage: "exclamationmark.circle")
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
                 }
             } else {
                 Section {
-                    Button("选择宿舍") { editing = true }
-                } footer: {
-                    Text("先告诉我在哪栋楼哪个房间，以后打开 app 自动查。")
+                    ContentUnavailableView {
+                        Label("选择宿舍", systemImage: "building.2")
+                    } description: {
+                        Text("选择楼栋和房间后，即可查看剩余电量。")
+                    } actions: {
+                        Button("选择宿舍") { editing = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                    }
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("电费")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if app.dorm != nil {
+                    Button {
+                        Task { await app.refreshElectricity() }
+                    } label: {
+                        if app.electricityLoading {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(app.electricityLoading)
+                    .accessibilityLabel("刷新电费")
+                }
+            }
+        }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 DormPickerView()
@@ -69,7 +105,6 @@ struct ElectricityView: View {
         }
     }
 
-    /// 余额卡片右边那个绿色充值按钮，点了用内置网页打开缴费平台的充值页
     private var chargeButton: some View {
         Button {
             Task {
@@ -84,69 +119,97 @@ struct ElectricityView: View {
                 preparingCharge = false
             }
         } label: {
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.12))
-                    .frame(width: 34, height: 34)
+            HStack(spacing: 8) {
                 if preparingCharge {
-                    ProgressView()
+                    ProgressView().tint(.orange)
                 } else {
-                    Image(systemName: "yensign")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.green)
+                    Image(systemName: "yensign.circle.fill")
                 }
+                Text(preparingCharge ? "正在打开充值…" : "电费充值")
+                    .fontWeight(.medium)
             }
+            .font(.subheadline)
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.orange.opacity(0.12), in: Capsule())
         }
         .buttonStyle(.borderless)
         .disabled(preparingCharge)
         .accessibilityLabel("充值")
     }
 
-    /// 余额卡片：大字余额、右边一个蓝色刷新图标，余额下面灰色小字写上次查询时间
-    private var balanceCard: some View {        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .center) {
-                balanceValue
-                Spacer(minLength: 12)
-                chargeButton
-                Button {
-                    Task { await app.refreshElectricity() }
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.12))
-                            .frame(width: 34, height: 34)
-                        if app.electricityLoading {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                }
-                .buttonStyle(.borderless)
-                .disabled(app.electricityLoading)
-                .accessibilityLabel("刷新电费")
+    private var balanceCard: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(app.dorm?.displayName ?? "宿舍电费")
+                    .font(.title2.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 48, height: 48)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .accessibilityHidden(true)
             }
 
-            if let checked = app.electricityCheckedAt {
-                Text("上次查询 \(checked.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("剩余电量")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.orange)
+                balanceValue
+                    .accessibilityElement(children: .combine)
+                if app.isLowBalance {
+                    Label("电量偏低，请及时充值", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    lastChecked
+                    Spacer(minLength: 0)
+                    chargeButton
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    lastChecked
+                    chargeButton
+                }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 
-    /// 近几天的每日用量柱状图：余额曲线太平，看不出每天花了多少
+    @ViewBuilder
+    private var lastChecked: some View {
+        if let checked = app.electricityCheckedAt {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("上次查询").font(.caption)
+                Text(checked.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption.weight(.medium))
+            }
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     @ViewBuilder
     private var trendChart: some View {
         let points = usagePoints
 
         if points.isEmpty {
-            Text("再攒几天就能看到每天用多少了")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                Image(systemName: "chart.xyaxis.line")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                Text("再攒几天就能看到每天用多少了")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Chart(points) { point in
@@ -157,7 +220,7 @@ struct ElectricityView: View {
                     .interpolationMethod(.monotone)
                     .foregroundStyle(
                         .linearGradient(
-                            colors: [.blue.opacity(0.30), .blue.opacity(0.02)],
+                            colors: [.orange.opacity(0.30), .orange.opacity(0.02)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -168,14 +231,14 @@ struct ElectricityView: View {
                         y: .value("用量", point.usage)
                     )
                     .interpolationMethod(.monotone)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.orange)
                     .lineStyle(StrokeStyle(lineWidth: 2))
 
                     PointMark(
                         x: .value("日期", point.date, unit: .day),
                         y: .value("用量", point.usage)
                     )
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.orange)
                     .symbolSize(26)
                 }
                 .chartYAxis {
@@ -237,8 +300,9 @@ struct ElectricityView: View {
         if let balance = app.electricityBalance {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(balance)
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    .foregroundStyle(app.isLowBalance ? .orange : .primary)
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.orange)
                 Text("度")
                     .font(.title3)
                     .foregroundStyle(.secondary)
