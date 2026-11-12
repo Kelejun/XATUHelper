@@ -5,6 +5,7 @@ struct PlanView: View {
     @EnvironmentObject var app: AppState
     @State private var showWebPage = false
     @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
     /// nil 表示不筛选
     @State private var termFilter: String?
 
@@ -48,7 +49,11 @@ struct PlanView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("学业完成情况")
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            searchField
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .onDisappear { searchFocused = false }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -103,6 +108,40 @@ struct PlanView: View {
         }
     }
 
+    private var searchField: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("搜索课程名称", text: $searchText)
+                    .focused($searchFocused)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .onSubmit { searchFocused = false }
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("清除搜索")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            if searchFocused || !searchText.isEmpty {
+                Button("取消") {
+                    searchFocused = false
+                    searchText = ""
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
     private var overview: some View {
         let tint: Color = .green
 
@@ -125,39 +164,31 @@ struct PlanView: View {
                     Text("毕业学分")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(tint)
-                    ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             earnedCredits(tint: tint)
                             Text("/ \(number(app.plan.totalRequired)) 学分")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            earnedCredits(tint: tint)
-                            Text("/ \(number(app.plan.totalRequired)) 学分")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    if !app.plan.gpa.isEmpty {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Spacer(minLength: 0)
-                            Text("GPA").font(.subheadline).foregroundStyle(.secondary)
-                            Text(app.plan.gpa)
-                                .font(.headline)
-                                .monospacedDigit()
-                                .foregroundStyle(tint)
                         }
                         .accessibilityElement(children: .combine)
+                        Spacer(minLength: 0)
+                        if !app.plan.gpa.isEmpty {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("GPA").font(.subheadline).foregroundStyle(.secondary)
+                                Text(app.plan.gpa)
+                                    .font(.headline)
+                                    .monospacedDigit()
+                                    .foregroundStyle(tint)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                     }
-                    ProgressView(value: app.plan.progress)
-                        .tint(tint)
-                        .accessibilityLabel("毕业学分进度")
                 }
+
+                ProgressView(value: app.plan.progress)
+                    .tint(tint)
+                    .accessibilityLabel("毕业学分进度")
             }
             .padding(.vertical, 8)
             .listRowBackground(
