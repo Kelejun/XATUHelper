@@ -34,6 +34,8 @@ struct ElectricityView: View {
                     } label: {
                         Label("历史余额", systemImage: "clock.arrow.circlepath")
                     }
+                } header: {
+                    Text("近30天余额")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
