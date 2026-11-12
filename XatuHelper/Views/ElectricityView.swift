@@ -11,6 +11,9 @@ struct ElectricityView: View {
     @State private var chargeURL: String?
     @State private var chargeTarget: String?
     @State private var preparingCharge = false
+    @State private var trendDays = 15
+    @GestureState private var inspectingUsage = false
+    @State private var selectedUsageDate: Date?
 
     var body: some View {
         List {
@@ -26,6 +29,12 @@ struct ElectricityView: View {
                 }
 
                 Section {
+                    Picker("用量范围", selection: $trendDays) {
+                        Text("15 天").tag(15)
+                        Text("30 天").tag(30)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: trendDays) { _, _ in selectedUsageDate = nil }
                     trendChart
                     NavigationLink {
                         ElectricityHistoryView()
@@ -33,7 +42,7 @@ struct ElectricityView: View {
                         Label("历史余额", systemImage: "clock.arrow.circlepath")
                     }
                 } header: {
-                    Text("近 7 天用量")
+                    Text("近 \(trendDays) 天用量")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
@@ -198,6 +207,7 @@ struct ElectricityView: View {
     @ViewBuilder
     private var trendChart: some View {
         let points = usagePoints
+        let selected = inspectingUsage ? points.first { $0.date == selectedUsageDate } : nil
 
         if points.isEmpty {
             VStack(spacing: 10) {
@@ -211,35 +221,73 @@ struct ElectricityView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Chart(points) { point in
-                    AreaMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("用量", point.usage)
-                    )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(
-                        .linearGradient(
-                            colors: [.orange.opacity(0.30), .orange.opacity(0.02)],
-                            startPoint: .top,
-                            endPoint: .bottom
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(selected.map { $0.date.formatted(.dateTime.month().day()) } ?? "每日用量")
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let selected {
+                        Text(String(format: "%.2f 度", selected.usage))
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("长按查看")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.subheadline)
+                .accessibilityElement(children: .combine)
+
+                Chart {
+                    ForEach(points) { point in
+                        AreaMark(
+                            x: .value("日期", point.date, unit: .day),
+                            y: .value("用量", point.usage)
                         )
-                    )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(
+                            .linearGradient(
+                                colors: [.orange.opacity(0.30), .orange.opacity(0.02)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
 
-                    LineMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("用量", point.usage)
-                    )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(.orange)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
+                        LineMark(
+                            x: .value("日期", point.date, unit: .day),
+                            y: .value("用量", point.usage)
+                        )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(.orange)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
 
-                    PointMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("用量", point.usage)
-                    )
-                    .foregroundStyle(.orange)
-                    .symbolSize(26)
+                        PointMark(
+                            x: .value("日期", point.date, unit: .day),
+                            y: .value("用量", point.usage)
+                        )
+                        .foregroundStyle(.orange)
+                        .symbolSize(trendDays == 30 ? 14 : 26)
+                        .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
+                        .accessibilityValue(String(format: "%.2f 度", point.usage))
+                    }
+                    if let selected {
+                        RuleMark(x: .value("日期", selected.date, unit: .day))
+                            .foregroundStyle(.orange.opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .accessibilityHidden(true)
+                        PointMark(x: .value("日期", selected.date, unit: .day),
+                                  y: .value("用量", selected.usage))
+                            .foregroundStyle(.orange)
+                            .symbolSize(65)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .chartXScale(domain: trendStart...trendPlotEnd)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: trendDays == 30 ? 7 : 3)) {
+                        AxisValueLabel(format: .dateTime.month().day())
+                    }
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
@@ -251,9 +299,36 @@ struct ElectricityView: View {
                         }
                     }
                 }
-                .frame(height: 150)
+                .frame(height: 180)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(.clear)
+                            .contentShape(Rectangle())
+                            .gesture(
+                                LongPressGesture(minimumDuration: 0.25)
+                                    .sequenced(before: DragGesture(minimumDistance: 0))
+                                    .updating($inspectingUsage) { value, state, _ in
+                                        if case .second(true, _) = value { state = true }
+                                    }
+                                    .onChanged { value in
+                                        guard case let .second(true, drag?) = value,
+                                              let plotFrame = proxy.plotFrame else { return }
+                                        let frame = geometry[plotFrame]
+                                        let x = min(max(drag.location.x - frame.minX, 0), frame.width)
+                                        guard let date = proxy.value(atX: x, as: Date.self) else { return }
+                                        let day = Calendar.current.startOfDay(for: date)
+                                        selectedUsageDate = points.min {
+                                            abs($0.date.timeIntervalSince(day)) < abs($1.date.timeIntervalSince(day))
+                                        }?.date
+                                    }
+                                    .onEnded { _ in selectedUsageDate = nil }
+                            )
+                            .accessibilityHidden(true)
+                    }
+                }
 
-                if let average = averageUsageText(app.electricityTrend()) {
+                if let average = averageUsageText {
                     Text(average)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -269,30 +344,36 @@ struct ElectricityView: View {
         var id: Date { date }
     }
 
-    /// 每天用量 = 前一天余额 - 当天余额；余额涨了（充值）就记 0
+    private var trendEnd: Date { Calendar.current.startOfDay(for: Date()) }
+
+    private var trendPlotEnd: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: trendEnd) ?? trendEnd
+    }
+
+    private var trendStart: Date {
+        Calendar.current.date(byAdding: .day, value: 1 - trendDays, to: trendEnd) ?? trendEnd
+    }
+
+    /// 仅用连续两天的余额计算当天用量，避免把多天的差额显示成一天。
     private var usagePoints: [UsagePoint] {
-        let trend = app.electricityTrend()
+        let trend = app.electricityHistory
         guard trend.count >= 2 else { return [] }
         var points: [UsagePoint] = []
         for index in 1..<trend.count {
             let previous = trend[index - 1]
             let current = trend[index]
-            guard previous.day != current.day else { continue }
+            guard current.date >= trendStart, current.date <= trendEnd,
+                  Calendar.current.dateComponents([.day], from: previous.date, to: current.date).day == 1 else { continue }
             points.append(UsagePoint(date: current.date, usage: max(0, previous.balance - current.balance)))
         }
         return points
     }
 
-    private func averageUsageText(_ trend: [ElectricityRecord]) -> String? {
-        guard let first = trend.first, let last = trend.last, trend.count >= 2 else { return nil }
-        let days = Calendar.current.dateComponents(
-            [.day],
-            from: Calendar.current.startOfDay(for: first.date),
-            to: Calendar.current.startOfDay(for: last.date)
-        ).day ?? 0
-        guard days > 0 else { return nil }
-        let used = usagePoints.reduce(0) { $0 + $1.usage }
-        return String(format: "平均每天用 %.2f 度", used / Double(days))
+    private var averageUsageText: String? {
+        let points = usagePoints
+        guard !points.isEmpty else { return nil }
+        let used = points.reduce(0) { $0 + $1.usage }
+        return String(format: "有记录的 %d 天，平均每天用 %.2f 度", points.count, used / Double(points.count))
     }
 
     @ViewBuilder
