@@ -86,7 +86,6 @@ final class AppState: ObservableObject {
     @Published var gradesFetchedAt: Date?
     @Published var gradesLoading = false
     @Published var plan: PlanSnapshot = .empty
-    @Published var planNeedsLogin = false
     @Published var planCatalog = PlanCatalog(updatedAt: .distantPast, courses: [])
     @Published var inAppNotice: InAppNotice?
     @Published var deepLink: DeepLink?
@@ -311,7 +310,6 @@ final class AppState: ObservableObject {
         do {
             try await cas.login(username: student, password: password)
             pendingPasswordVerified = true
-            recordLoginTime()
             Keychain.savePassword(password, account: student)
             Preferences.studentID = student
             setTimetableAccount(student)
@@ -506,15 +504,7 @@ final class AppState: ObservableObject {
     }
 
     private func withRelogin(_ operation: () async throws -> Void) async throws {
-        do {
-            try await operation()
-        } catch let error as AppError {
-            guard isRecoverable(error) else { throw error }
-            try await reloginAndRetry(operation)
-        } catch {
-            guard Net.isTransportProblem(error) else { throw error }
-            try await reloginAndRetry(operation)
-        }
+        try await withReloginValue(operation)
     }
 
     /// 会话过期、或者网络层被 ATS 之类挡住，都是"清掉 cookie 重登一次"能救回来的
@@ -535,57 +525,23 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func reloginAndRetry(_ operation: () async throws -> Void) async throws {
-        try await performRelogin()
-        do {
-            try await operation()
-        } catch let error as AppError {
-            throw error
-        } catch {
-            throw AppError.network(Net.describe(error))
-        }
-    }
-
-    /// 同一时间只允许一次 CAS 登录；并发调用共用同一个 Task，避免一串请求同时换票把账号打成"登录频繁"
+    /// 并发请求共用完整的会话恢复过程，包括静默续期。
     private func performRelogin() async throws {
         if let existing = reloginTask {
             try await existing.value
             return
         }
 
-        // 统一认证那边的票还在的话，静默换一次就够了：不碰密码，也不算一次登录。
-        if await CASService.silentRenew() {
-            CookieVault.pinAndSave()
-            return
-        }
-
-        let now = Date()
-        let recent = Preferences.loginTimes.filter { now.timeIntervalSince($0) < 3600 }
-        if let last = recent.last {
-            let wait = 60 - now.timeIntervalSince(last)
-            if wait > 0 {
-                throw AppError.reloginFailed("刚刚已经登录过一次了，\(Int(wait.rounded(.up))) 秒后再试。连着登会被学校冻结账号")
+        let task = Task<Void, Error> {
+            if await CASService.silentRenew() {
+                CookieVault.pinAndSave()
+                return
             }
+            try await self.rawRelogin()
         }
-        if recent.count >= 4 {
-            throw AppError.reloginFailed("一小时内已经自动登录过 \(recent.count) 次，先别再试了，免得账号被冻结")
-        }
-        Preferences.loginTimes = recent + [now]
-
-        let task = Task<Void, Error> { try await self.rawRelogin() }
         reloginTask = task
-        do {
-            try await task.value
-            reloginTask = nil
-        } catch {
-            reloginTask = nil
-            throw error
-        }
-    }
-
-    private func recordLoginTime() {
-        let now = Date()
-        Preferences.loginTimes = Preferences.loginTimes.filter { now.timeIntervalSince($0) < 3600 } + [now]
+        defer { reloginTask = nil }
+        try await task.value
     }
 
     private func rawRelogin() async throws {
@@ -606,25 +562,39 @@ final class AppState: ObservableObject {
     /// 带返回值版本的 withRelogin
     private func withReloginValue<T>(_ operation: () async throws -> T) async throws -> T {
         do {
+            do {
+                return try await operation()
+            } catch let error as AppError {
+                guard isRecoverable(error) else { throw error }
+            } catch {
+                guard Net.isTransportProblem(error) else { throw error }
+            }
+            try await performRelogin()
             return try await operation()
-        } catch let error as AppError {
-            guard isRecoverable(error) else { throw error }
-            return try await reloginAndRetryValue(operation)
         } catch {
-            guard Net.isTransportProblem(error) else { throw error }
-            return try await reloginAndRetryValue(operation)
+            _ = contentErrorDescription(error)
+            throw error
         }
     }
 
-    private func reloginAndRetryValue<T>(_ operation: () async throws -> T) async throws -> T {
-        try await performRelogin()
-        do {
-            return try await operation()
-        } catch let error as AppError {
-            throw error
-        } catch {
-            throw AppError.network(Net.describe(error))
+    /// 重登失败或重试后仍过期时返回登录页，保留本地数据和已保存的账号。
+    private func contentErrorDescription(_ error: Error) -> String? {
+        if let appError = error as? AppError {
+            switch appError {
+            case .sessionExpired, .reloginFailed:
+                errorMessage = nil
+                planError = nil
+                examsError = nil
+                gradesError = nil
+                electricityError = nil
+                showsWebLogin = false
+                isLoggedIn = false
+                return nil
+            default:
+                return appError.errorDescription
+            }
         }
+        return error.localizedDescription
     }
 
     // MARK: - 考试
@@ -644,7 +614,7 @@ final class AppState: ObservableObject {
             notifyIfNewExams(previous: previous, current: exams, semesterID: target)
             await rescheduleNotifications()
         } catch {
-            examsError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+            examsError = contentErrorDescription(error)
         }
         examsLoading = false
     }
@@ -672,7 +642,7 @@ final class AppState: ObservableObject {
             gradesFetchedAt = Date()
             gradeStore.save(grades, at: gradesFetchedAt ?? Date())
         } catch {
-            gradesError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+            gradesError = contentErrorDescription(error)
         }
         gradesLoading = false
     }
@@ -724,21 +694,16 @@ final class AppState: ObservableObject {
         guard !planLoading else { return }
         planLoading = true
         planError = nil
-        planNeedsLogin = false
         do {
-            // 不在这里自动重登：培养计划页一进来就拉，自动重登会把 CAS 登录次数打满
-            plan = try await eams.fetchPlan()
+            plan = try await withReloginValue { try await self.eams.fetchPlan() }
             planFetchedAt = Date()
             planStore.save(plan, at: planFetchedAt ?? Date())
             await refreshPlanCatalogIfNeeded()
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
             }
-        } catch AppError.sessionExpired {
-            planNeedsLogin = true
-            planError = "教务的登录状态过期了，点下面重新登录一次就好"
         } catch {
-            planError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+            planError = contentErrorDescription(error)
         }
         planLoading = false
     }
@@ -748,7 +713,7 @@ final class AppState: ObservableObject {
         guard !isDemoMode else { return }
         guard force || planCatalog.courses.isEmpty else { return }
         do {
-            let courses = try await eams.fetchPlanCatalog()
+            let courses = try await withReloginValue { try await self.eams.fetchPlanCatalog() }
             guard !courses.isEmpty else { return }
             planCatalog = PlanCatalog(updatedAt: Date(), courses: courses)
             PlanCatalogStore.save(planCatalog)
@@ -768,20 +733,6 @@ final class AppState: ObservableObject {
         }
         return planCatalog.courses.first {
             $0.name.trimmingCharacters(in: .whitespacesAndNewlines) == name
-        }
-    }
-
-    /// 用户手动点「重新登录」，只走一次，不受自动重登的冷却限制
-    func reloginNow() async {
-        guard !isDemoMode else { return }
-        do {
-            try await rawRelogin()
-            recordLoginTime()
-            planNeedsLogin = false
-            await refreshPlanCatalogIfNeeded(force: true)
-            await refreshPlan()
-        } catch {
-            planError = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -930,7 +881,7 @@ final class AppState: ObservableObject {
             return true
         } catch {
             if !Task.isCancelled {
-                electricityError = (error as? AppError)?.errorDescription ?? error.localizedDescription
+                electricityError = contentErrorDescription(error)
             }
             return false
         }
@@ -1175,14 +1126,7 @@ final class AppState: ObservableObject {
                 showsWebLogin = true
                 return
             }
-            errorMessage = appError.errorDescription
-            switch appError {
-            case .sessionExpired, .reloginFailed:
-                // 自动重登这条路走不通了，直接退回登录页，别留个报错横幅让人干瞪眼
-                isLoggedIn = false
-            default:
-                break
-            }
+            errorMessage = contentErrorDescription(appError)
         } else {
             errorMessage = error.localizedDescription
         }
