@@ -24,7 +24,7 @@ struct SchoolCalendarView: View {
 
     var body: some View {
         List {
-            if isLoading {
+            if isLoading && info == nil {
                 Section {
                     HStack(spacing: 10) {
                         ProgressView()
@@ -34,10 +34,13 @@ struct SchoolCalendarView: View {
             } else if let info {
                 if let errorText {
                     Section {
-                        Text(errorText)
+                        Label(errorText, systemImage: "wifi.exclamationmark")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+                if let semester = highlightedSemester(info) {
+                    semesterSummary(semester)
                 }
                 semestersSection(info)
                 if !breakRows(info).isEmpty {
@@ -56,6 +59,7 @@ struct SchoolCalendarView: View {
                         }
                     } label: {
                         Label("查看校历原图", systemImage: "photo")
+                            .font(.body.weight(.medium))
                     }
                     if diagnosticsEnabled {
                         Button {
@@ -69,20 +73,21 @@ struct SchoolCalendarView: View {
                 }
             } else {
                 Section {
-                    Text(errorText ?? "没拿到校历，过会儿再试。")
-                        .foregroundStyle(.secondary)
-                    Text("校历放在教务处的网站上，只有连校内网才打得开。")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                    Button("重新加载") { Task { await load(force: true) } }
-                    if let info {
-                        Text(info.rawText).font(.caption2)
+                    ContentUnavailableView {
+                        Label("暂时无法加载校历", systemImage: "calendar.badge.exclamationmark")
+                    } description: {
+                        Text(errorText ?? "没拿到校历，过会儿再试。")
+                        Text("校历放在教务处的网站上，只有连校内网才打得开。")
+                    } actions: {
+                        Button("重新加载") { Task { await load(force: true) } }
+                            .buttonStyle(.borderedProminent)
                     }
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("校历")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .task { await load(force: false) }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showsCachedImage) {
@@ -113,25 +118,132 @@ struct SchoolCalendarView: View {
 
     // MARK: - 分区
 
+    private func highlightedSemester(_ info: CalendarService.Info) -> CalendarService.SemesterSpan? {
+        let today = Calendar.current.startOfDay(for: Date())
+        let semesters = info.semesters.sorted { $0.start < $1.start }
+        return semesters.first {
+            guard let end = AppState.parseDate($0.end) else { return false }
+            return end >= today
+        } ?? semesters.last
+    }
+
+    private func semesterProgress(_ span: CalendarService.SemesterSpan) -> Double? {
+        guard let start = AppState.parseDate(span.start),
+              let end = AppState.parseDate(span.end), end > start else { return nil }
+        let today = Calendar.current.startOfDay(for: Date())
+        return min(max(today.timeIntervalSince(start) / end.timeIntervalSince(start), 0), 1)
+    }
+
+    private func semesterSummary(_ span: CalendarService.SemesterSpan) -> some View {
+        let untilStart = remainingDays(span.start)
+        let untilEnd = remainingDays(span.end)
+        let upcoming = (untilStart ?? 0) > 0
+        let active = !upcoming && (untilEnd ?? -1) >= 0
+        let tint: Color = active ? .blue : .indigo
+
+        return Section {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(active ? "当前学期" : upcoming ? "即将开学" : "学期回顾")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(tint)
+                        Text(span.label)
+                            .font(.title2.bold())
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "calendar")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 48, height: 48)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityHidden(true)
+                }
+
+                if let days = upcoming ? untilStart : active ? untilEnd : nil {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(upcoming ? "距开学" : "距结课")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("\(days)")
+                            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(tint)
+                        Text("天")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+
+                VStack(spacing: 10) {
+                    if let progress = semesterProgress(span) {
+                        ProgressView(value: progress)
+                            .tint(tint)
+                            .accessibilityLabel("学期进度")
+                    }
+                    HStack(alignment: .top) {
+                        summaryDate("开学", date: span.start, alignment: .leading)
+                        Spacer(minLength: 16)
+                        summaryDate("结课", date: span.end, alignment: .trailing)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .listRowBackground(
+                LinearGradient(colors: [tint.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+        }
+    }
+
+    private func summaryDate(_ title: String, date: String, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(dayText(date)).font(.subheadline.weight(.semibold))
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func statusBadge(_ title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(tint.opacity(0.10), in: Capsule())
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func calendarIcon(_ symbol: String, tint: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 38, height: 38)
+            .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 11))
+            .accessibilityHidden(true)
+    }
+
     @ViewBuilder
     private func semestersSection(_ info: CalendarService.Info) -> some View {
-        Section("学期") {
+        Section("学期安排") {
             ForEach(info.semesters, id: \.self) { span in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
+                let tint: Color = span == info.semesters.first ? .blue : .indigo
+                HStack(alignment: .top, spacing: 12) {
+                    calendarIcon("book.closed.fill", tint: tint)
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(span.label).font(.headline)
-                        Spacer()
+                        Text("\(dayText(span.start)) — \(dayText(span.end))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         if let status = semesterStatus(span) {
-                            Text(status.text)
-                                .font(.caption)
-                                .foregroundStyle(status.finished ? Color.orange : Color.secondary)
+                            statusBadge(status.text, tint: status.finished ? .secondary : tint)
                         }
                     }
-                    Text("开学 \(dayText(span.start)) · 结课 \(dayText(span.end))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
         }
     }
@@ -157,24 +269,42 @@ struct SchoolCalendarView: View {
 
     @ViewBuilder
     private func breaksSection(_ info: CalendarService.Info) -> some View {
-        Section("假期") {
+        Section("假期安排") {
             ForEach(breakRows(info), id: \.title) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(row.title).font(.headline)
-                        Spacer()
-                        if let days = remainingDays(row.start), days > 0 {
-                            Text("还有 \(days) 天").font(.caption).foregroundStyle(.secondary)
-                        } else if let days = remainingDays(row.start), days <= 0, remainingDays(row.end).map({ $0 >= 0 }) == true {
-                            Text("放假中").font(.caption).foregroundStyle(.orange)
+                let winter = row.title == "寒假"
+                let tint: Color = winter ? .teal : .orange
+                HStack(alignment: .top, spacing: 12) {
+                    calendarIcon(winter ? "snowflake" : "sun.max.fill", tint: tint)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(row.title).font(.headline)
+                                Spacer(minLength: 12)
+                                breakStatus(row, tint: tint)
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(row.title).font(.headline)
+                                breakStatus(row, tint: tint)
+                            }
                         }
+                        Text("\(dayText(row.start)) — \(dayText(row.end))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    Text("\(dayText(row.start)) – \(dayText(row.end))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func breakStatus(_ row: BreakRow, tint: Color) -> some View {
+        if let days = remainingDays(row.start), days > 0 {
+            statusBadge("还有 \(days) 天", tint: tint)
+        } else if let days = remainingDays(row.start), days <= 0,
+                  remainingDays(row.end).map({ $0 >= 0 }) == true {
+            statusBadge("放假中", tint: tint)
         }
     }
 
@@ -182,12 +312,19 @@ struct SchoolCalendarView: View {
     private func notesSection(_ info: CalendarService.Info) -> some View {
         Section {
             ForEach(info.notes, id: \.self) { note in
-                Text(note)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text(note)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "text.alignleft")
+                        .font(.subheadline)
+                        .foregroundStyle(.indigo)
+                }
+                .padding(.vertical, 4)
             }
         } header: {
-            Text("其他")
+            Text("校历备注")
         } footer: {
             Text("这一节是从校历图上自动识别出来的文字，可能有识别错误，仅供参考。")
         }
