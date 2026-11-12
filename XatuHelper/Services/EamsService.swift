@@ -60,7 +60,7 @@ struct EamsService {
         return ns.code == NSURLErrorHTTPTooManyRedirects
     }
 
-    /// 设置页「复制诊断数据」导出的内容
+    /// 设置页诊断文件导出的内容
     static var diagnosticDump: String {
         let shell = lastShellRaw.isEmpty ? "(空，外壳页没抓到)" : String(lastShellRaw.prefix(30000))
         let semesters = lastSemesterRaw.isEmpty ? "(空，学期接口没抓到)" : String(lastSemesterRaw.prefix(30000))

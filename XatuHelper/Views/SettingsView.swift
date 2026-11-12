@@ -171,14 +171,14 @@ private struct DiagnosticsSettingsSections: View {
             Section {
                 Toggle("显示诊断数据", isOn: $showDiagnostics)
                 if showDiagnostics {
-                    Button("复制诊断数据") {
-                        UIPasteboard.general.string = EamsService.diagnosticDump
+                    DiagnosticExportButton {
+                        EamsService.diagnosticDump
                     }
                 }
             } header: {
                 Text("诊断")
             } footer: {
-                Text("如果出现解析问题，可复制诊断信息给开发者处理")
+                Text("如果出现解析问题，可导出诊断文件给开发者处理")
             }
 
             if showCheckinLocation {

@@ -275,8 +275,8 @@ struct DormPickerView: View {
                     Text(error).font(.footnote).foregroundStyle(.red)
                     Button("重试") { Task { await loadSchools() } }
                     if showDiagnostics {
-                        Button("复制电费诊断数据") {
-                            UIPasteboard.general.string = [
+                        DiagnosticExportButton(filenamePrefix: "XATune-electricity-diagnostics") {
+                            [
                                 PayService.lastLogin ?? "(没有登录记录)",
                                 PayService.lastRaw ?? "(没有接口返回)",
                                 PayService.lastError ?? "(没有错误记录)"

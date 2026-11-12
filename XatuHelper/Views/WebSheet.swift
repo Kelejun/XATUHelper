@@ -46,7 +46,7 @@ struct WebSheet: View {
                             reloadToken += 1
                         }
                         if !diagnosticText.isEmpty {
-                            ShareLink("分享诊断信息", item: diagnosticText)
+                            DiagnosticExportButton(filenamePrefix: "XATune-web-diagnostics") { diagnosticText }
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
@@ -366,7 +366,7 @@ private struct WebPage: UIViewRepresentable {
             ].joined(separator: "\n")
             hasRedirectLoop = ns.domain == NSURLErrorDomain && ns.code == NSURLErrorHTTPTooManyRedirects
             if hasRedirectLoop {
-                errorText = "网页跳转次数过多，可尝试重新登录网页。若仍无法打开，请稍后重试并分享诊断信息。"
+                errorText = "网页跳转次数过多，可尝试重新登录网页。若仍无法打开，请稍后重试并导出诊断文件。"
             } else if ns.domain == NSURLErrorDomain &&
                         (ns.code == NSURLErrorNotConnectedToInternet || ns.code == NSURLErrorCannotFindHost) {
                 errorText = "网络不可用或无法找到服务器，请检查网络连接后重试。"

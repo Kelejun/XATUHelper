@@ -170,16 +170,14 @@ struct ExamView: View {
                     .foregroundStyle(.secondary)
 
                 if !raw.isEmpty {
-                    Button {
-                        UIPasteboard.general.string = """
+                    DiagnosticExportButton(filenamePrefix: "XATune-exam-diagnostics") {
+                        """
                         ===== 外壳 stdExamTable.action =====
                         \(shell)
 
                         ===== 考试表 stdExamTable!examTable.action =====
                         \(raw)
                         """
-                    } label: {
-                        Label("复制原始返回", systemImage: "doc.on.doc")
                     }
 
                     Text(summary(of: raw))
@@ -189,7 +187,7 @@ struct ExamView: View {
             } header: {
                 Text("诊断")
             } footer: {
-                Text("复制出来发给我，就能对上真实的页面结构。")
+                Text("可导出诊断文件给开发者排查页面解析问题。")
             }
         }
     }

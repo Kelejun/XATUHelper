@@ -67,11 +67,7 @@ struct SchoolCalendarView: View {
                         Label("手动校正", systemImage: "square.and.pencil")
                     }
                     if diagnosticsEnabled {
-                        Button {
-                            UIPasteboard.general.string = info.rawText
-                        } label: {
-                            Label("复制识别到的文字", systemImage: "doc.on.doc")
-                        }
+                        DiagnosticExportButton(filenamePrefix: "XATune-calendar-diagnostics") { info.rawText }
                     }
                 } footer: {
                     Text("图片 \(info.title) · 识别于 \(info.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
