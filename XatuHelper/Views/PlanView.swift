@@ -35,8 +35,10 @@ struct PlanView: View {
             if !app.plan.sections.isEmpty {
                 if searchText.isEmpty {
                     overview
-                    ForEach(filteredSections) { section in
-                        moduleSection(section)
+                    Section {
+                        ForEach(filteredSections) { section in
+                            moduleRow(section)
+                        }
                     }
                 } else {
                     searchResults
@@ -102,7 +104,7 @@ struct PlanView: View {
     }
 
     private var overview: some View {
-        let tint: Color = app.plan.totalRequired > 0 && app.plan.shortfall <= 0 ? .green : .blue
+        let tint: Color = .green
 
         return Section {
             VStack(alignment: .leading, spacing: 20) {
@@ -141,17 +143,19 @@ struct PlanView: View {
                 .accessibilityElement(children: .combine)
 
                 VStack(alignment: .leading, spacing: 10) {
+                    if !app.plan.gpa.isEmpty {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("GPA").font(.subheadline).foregroundStyle(.secondary)
+                            Text(app.plan.gpa)
+                                .font(.headline)
+                                .monospacedDigit()
+                                .foregroundStyle(tint)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
                     ProgressView(value: app.plan.progress)
                         .tint(tint)
                         .accessibilityLabel("毕业学分进度")
-                    HStack(alignment: .top) {
-                        summaryMetric("待修学分", value: number(app.plan.shortfall),
-                                      tint: app.plan.shortfall > 0 ? .orange : .green)
-                        Spacer(minLength: 16)
-                        if !app.plan.gpa.isEmpty {
-                            summaryMetric("GPA", value: app.plan.gpa, tint: .indigo, alignment: .trailing)
-                        }
-                    }
                 }
             }
             .padding(.vertical, 8)
@@ -167,15 +171,6 @@ struct PlanView: View {
             .font(.system(.largeTitle, design: .rounded, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(tint)
-    }
-
-    private func summaryMetric(_ title: String, value: String, tint: Color,
-                               alignment: HorizontalAlignment = .leading) -> some View {
-        VStack(alignment: alignment, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.headline).monospacedDigit().foregroundStyle(tint)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private var searchResults: some View {
@@ -198,17 +193,13 @@ struct PlanView: View {
         }
     }
 
-    private func moduleSection(_ section: PlanSection) -> some View {
-        Section {
-            DisclosureGroup {
-                PlanSectionContent(section: section, tint: moduleTint(section), number: number, detail: detailFor)
-            } label: {
-                sectionRow(section)
-            }
-            .font(.subheadline)
-        } header: {
-            Text(section.title)
+    private func moduleRow(_ section: PlanSection) -> some View {
+        DisclosureGroup {
+            PlanSectionContent(section: section, tint: moduleTint(section), number: number, detail: detailFor)
+        } label: {
+            sectionRow(section)
         }
+        .font(.subheadline)
     }
 
     private func moduleTint(_ section: PlanSection) -> Color {
@@ -218,56 +209,26 @@ struct PlanView: View {
     }
 
     private func sectionRow(_ section: PlanSection) -> some View {
-        let tint = moduleTint(section)
-        return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "books.vertical.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
-                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 11))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(section.title)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        moduleCredits(section)
-                        Spacer(minLength: 0)
-                        moduleStatus(section, tint: tint)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        moduleCredits(section)
-                        moduleStatus(section, tint: tint)
-                    }
-                }
-                if section.required > 0 {
-                    ProgressView(value: section.progress)
-                        .tint(section.shortfall <= 0 ? .green : tint)
-                        .accessibilityLabel("模块学分进度")
-                }
+                Spacer(minLength: 0)
+                Text("\(number(section.earned)) / \(number(section.required)) 学分")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if section.required > 0 {
+                ProgressView(value: section.progress)
+                    .tint(section.shortfall <= 0 ? .green : moduleTint(section))
+                    .accessibilityLabel("模块学分进度")
             }
         }
         .padding(.vertical, 6)
-    }
-
-    private func moduleCredits(_ section: PlanSection) -> some View {
-        Text("\(number(section.earned)) / \(number(section.required)) 学分")
-            .font(.subheadline.monospacedDigit())
-            .foregroundStyle(.secondary)
-    }
-
-    private func moduleStatus(_ section: PlanSection, tint: Color) -> some View {
-        let completed = section.shortfall <= 0
-        let color: Color = completed ? .green : tint
-        return Text(completed ? "已达标" : "差 \(number(section.shortfall)) 学分")
-            .font(.caption.weight(.medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.10), in: Capsule())
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func courseRow(_ course: PlanCourse) -> some View {
@@ -382,14 +343,16 @@ private struct PlanSectionContent: View {
     }
 
     private func label(_ section: PlanSection) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(section.title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
             Text("\(number(section.earned)) / \(number(section.required)) 学分")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(section.shortfall <= 0 ? .green : tint)
+                .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 4)
     }
