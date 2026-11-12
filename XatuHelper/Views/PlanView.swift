@@ -109,14 +109,9 @@ struct PlanView: View {
         return Section {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("毕业学分")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(tint)
-                        Text(app.plan.major.isEmpty ? "学业进度" : app.plan.major)
-                            .font(.title2.bold())
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text(app.plan.major.isEmpty ? "学业进度" : app.plan.major)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                     Image(systemName: "graduationcap.fill")
                         .font(.system(size: 22, weight: .semibold))
@@ -126,21 +121,26 @@ struct PlanView: View {
                         .accessibilityHidden(true)
                 }
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        earnedCredits(tint: tint)
-                        Text("/ \(number(app.plan.totalRequired)) 学分")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("毕业学分")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(tint)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            earnedCredits(tint: tint)
+                            Text("/ \(number(app.plan.totalRequired)) 学分")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            earnedCredits(tint: tint)
+                            Text("/ \(number(app.plan.totalRequired)) 学分")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        earnedCredits(tint: tint)
-                        Text("/ \(number(app.plan.totalRequired)) 学分")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    .accessibilityElement(children: .combine)
                 }
-                .accessibilityElement(children: .combine)
 
                 VStack(alignment: .leading, spacing: 10) {
                     if !app.plan.gpa.isEmpty {
