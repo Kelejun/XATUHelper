@@ -218,6 +218,9 @@ struct HomeView: View {
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
         .onAppear { calendarInfo = CalendarCache.load() }
+        .onReceive(NotificationCenter.default.publisher(for: CalendarCache.didChange)) { _ in
+            calendarInfo = CalendarCache.load()
+        }
         .task {
             guard !app.hasPlayedIntro else {
                 showsGreeting = true

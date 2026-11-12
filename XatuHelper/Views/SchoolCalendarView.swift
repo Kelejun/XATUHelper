@@ -2,6 +2,13 @@ import SwiftUI
 import UIKit
 
 struct SchoolCalendarView: View {
+    @EnvironmentObject private var app: AppState
+    @State private var correctionTarget: CorrectionTarget?
+
+    private struct CorrectionTarget: Identifiable {
+        let id = UUID()
+        let info: CalendarService.Info
+    }
     @State private var info: CalendarService.Info?
     @State private var isLoading = false
     @State private var errorText: String?
@@ -32,13 +39,6 @@ struct SchoolCalendarView: View {
                     }
                 }
             } else if let info {
-                if let errorText {
-                    Section {
-                        Label(errorText, systemImage: "wifi.exclamationmark")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
                 if let semester = highlightedSemester(info) {
                     semesterSummary(semester)
                 }
@@ -61,6 +61,11 @@ struct SchoolCalendarView: View {
                         Label("查看校历原图", systemImage: "photo")
                             .font(.body.weight(.medium))
                     }
+                    Button {
+                        correctionTarget = CorrectionTarget(info: info)
+                    } label: {
+                        Label("手动校正", systemImage: "square.and.pencil")
+                    }
                     if diagnosticsEnabled {
                         Button {
                             UIPasteboard.general.string = info.rawText
@@ -76,12 +81,21 @@ struct SchoolCalendarView: View {
                     ContentUnavailableView {
                         Label("暂时无法加载校历", systemImage: "calendar.badge.exclamationmark")
                     } description: {
-                        Text(errorText ?? "没拿到校历，过会儿再试。")
-                        Text("校历放在教务处的网站上，只有连校内网才打得开。")
+                        Text("请稍后重试。")
                     } actions: {
                         Button("重新加载") { Task { await load(force: true) } }
                             .buttonStyle(.borderedProminent)
                     }
+                }
+            }
+            Section {
+                EmptyView()
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let errorText {
+                        Text(errorText)
+                    }
+                    Text("校历放在教务处的网站上，只有连校内网才打得开。")
                 }
             }
         }
@@ -107,6 +121,23 @@ struct SchoolCalendarView: View {
                             .accessibilityLabel("关闭")
                     }
                 }
+            }
+        }
+        .sheet(item: $correctionTarget) { target in
+            SchoolCalendarCorrectionView(info: target.info) { correction in
+                CalendarCache.saveCorrection(correction, for: target.info.imageURL)
+                if info?.imageURL == target.info.imageURL, let current = info {
+                    if let original = CalendarCache.original(), original.imageURL == current.imageURL {
+                        info = CalendarCache.applyingCorrection(to: original)
+                    } else {
+                        info = CalendarCache.applyingCorrection(to: current)
+                    }
+                }
+                if errorText == "校历上的日期没认出来，可以先看原图。", info?.semesters.isEmpty == false {
+                    errorText = nil
+                }
+                app.publishWidgetSnapshot()
+                PhoneWatchBridge.shared.publish()
             }
         }
         .sheet(isPresented: $showsOriginal) {
@@ -445,13 +476,131 @@ struct SchoolCalendarView: View {
         }.value
 
         let parsed = CalendarService.parse(text, title: page.title, pageURL: page.pageURL, imageURL: page.imageURL)
-        guard !parsed.semesters.isEmpty else {
+        CalendarCache.save(parsed)
+        let effective = CalendarCache.applyingCorrection(to: parsed)
+        guard !effective.semesters.isEmpty else {
             errorText = "校历上的日期没认出来，可以先看原图。"
-            info = parsed
+            info = effective
             return
         }
-        info = parsed
-        CalendarCache.save(parsed)
+        info = effective
         PhoneWatchBridge.shared.publish()
+    }
+}
+
+
+private struct SchoolCalendarCorrectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var semesters: [SemesterDraft]
+    @State private var notes: String
+    let info: CalendarService.Info
+    let onSave: (CalendarCache.Correction) -> Void
+
+    private struct SemesterDraft: Identifiable {
+        let id = UUID()
+        var label: String
+        var start: Date
+        var end: Date
+
+        init(label: String, start: Date, end: Date) {
+            self.label = label
+            self.start = start
+            self.end = end
+        }
+
+        @MainActor init(_ span: CalendarService.SemesterSpan) {
+            label = span.label
+            start = AppState.parseDate(span.start) ?? Calendar.current.startOfDay(for: Date())
+            end = AppState.parseDate(span.end) ?? start
+        }
+    }
+
+    init(info: CalendarService.Info, onSave: @escaping (CalendarCache.Correction) -> Void) {
+        self.info = info
+        self.onSave = onSave
+        _semesters = State(initialValue: info.semesters.map(SemesterDraft.init))
+        _notes = State(initialValue: info.notes.joined(separator: "\n"))
+    }
+
+    private var correction: CalendarCache.Correction {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return CalendarCache.Correction(
+            semesters: semesters.map {
+                CalendarService.SemesterSpan(
+                    label: $0.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                    start: formatter.string(from: $0.start), end: formatter.string(from: $0.end))
+            }.sorted { $0.start < $1.start },
+            notes: notes.components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                ForEach($semesters) { $semester in
+                    Section {
+                        TextField("学期名称", text: $semester.label)
+                        DatePicker("开学日期", selection: $semester.start, displayedComponents: .date)
+                        DatePicker("结课日期", selection: $semester.end, displayedComponents: .date)
+                        Button("删除学期", role: .destructive) {
+                            semesters.removeAll { $0.id == semester.id }
+                        }
+                    }
+                }
+                Section {
+                    Button {
+                        let start = semesters.map(\.end).max()
+                            .flatMap { Calendar.current.date(byAdding: .day, value: 1, to: $0) } ?? Date()
+                        let end = Calendar.current.date(byAdding: .day, value: 139, to: start) ?? start
+                        semesters.append(SemesterDraft(label: "第\(semesters.count + 1)学期", start: start, end: end))
+                    } label: {
+                        Label("添加学期", systemImage: "plus.circle.fill")
+                    }
+                } footer: {
+                    Text("假期日期根据学期起止日期自动计算。")
+                }
+                Section("校历备注") {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 120)
+                        .accessibilityLabel("校历备注")
+                }
+                if let error = correction.validationError {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+                if let original = CalendarCache.original(), original.imageURL == info.imageURL {
+                    Section {
+                        Button("恢复识别结果") {
+                            semesters = original.semesters.map(SemesterDraft.init)
+                            notes = original.notes.joined(separator: "\n")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("手动校正")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        let value = correction
+                        guard value.validationError == nil else { return }
+                        onSave(value)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(correction.validationError != nil)
+                }
+            }
+        }
     }
 }
