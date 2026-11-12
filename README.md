@@ -11,7 +11,7 @@
 
 **App Store 下载不适用于中国大陆区，中国大陆用户请使用下方 TestFlight 下载。**
 
-[TestFlight 下载](https://testflight.apple.com/join/PbKpCUU6) · [隐私政策](PRIVACY.md)
+[TestFlight 下载](https://testflight.apple.com/join/PbKpCUU6) · [隐私政策](PRIVACY.md) · [QQ交流群](https://qm.qq.com/q/k1mGynJlrW)
 
 ## 编译
 
