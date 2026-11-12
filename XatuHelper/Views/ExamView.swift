@@ -67,13 +67,6 @@ struct ExamView: View {
 
     var body: some View {
         List {
-            Section {
-                semesterMenu
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
-            .listSectionSpacing(12)
-
             if let error = app.examsError {
                 Section {
                     Label(error, systemImage: "exclamationmark.circle")
@@ -102,7 +95,12 @@ struct ExamView: View {
                 if let exam = nextExam {
                     Section {
                         nextExamCard(exam)
-                            .listRowBackground(Color.yellow.opacity(0.12))
+                            .listRowBackground(
+                                LinearGradient(
+                                    colors: [Color.yellow.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                )
+                            )
                     }
                 }
                 if !laterGroups.isEmpty {
@@ -151,6 +149,9 @@ struct ExamView: View {
         .navigationBarTitleDisplayMode(.large)
         .refreshable { await app.refreshExams(semesterID: effectiveSemesterID) }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                semesterMenu
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await app.refreshExams(semesterID: effectiveSemesterID) }
@@ -186,15 +187,9 @@ struct ExamView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Text(selectedSemester?.name ?? "当前学期")
-                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-            }
-            .font(.subheadline).foregroundStyle(.secondary)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            Image(systemName: "line.3.horizontal")
         }
+        .accessibilityLabel("切换学期")
         .disabled(app.semesters.isEmpty || app.examsLoading)
     }
 
@@ -208,50 +203,64 @@ struct ExamView: View {
     }
 
     private func nextExamCard(_ exam: ExamRecord) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("下一场考试", systemImage: "calendar.badge.clock")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Text(remainingText(for: exam))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Color.yellow.opacity(0.2), in: RoundedRectangle(cornerRadius: 7))
+        let tint: Color = .yellow
+
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("下一场考试")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text(courseTitle(exam))
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 48, height: 48)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .accessibilityHidden(true)
             }
-            .foregroundStyle(Color.primary.opacity(0.75))
-            VStack(alignment: .leading, spacing: 7) {
-                Text(courseTitle(exam)).font(.title3.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(remainingText(for: exam))
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                Text([dateText(exam.dateKey, format: "M月d日 EEEE"), exam.timeWithoutDate]
+                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
                 if !subtitle(for: exam).isEmpty {
                     Text(subtitle(for: exam)).font(.caption).foregroundStyle(.secondary)
                 }
-                Text([dateText(exam.dateKey, format: "M月d日 EEEE"), exam.timeWithoutDate]
-                    .filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.subheadline).monospacedDigit()
             }
-            Divider()
+
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: 24) {
+                HStack(alignment: .top, spacing: 24) {
                     locationField("考场", value: exam.room.isEmpty ? "待公布" : exam.room)
                     Spacer(minLength: 12)
-                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat, prominent: true)
+                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat, alignment: .trailing)
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     locationField("考场", value: exam.room.isEmpty ? "待公布" : exam.room)
-                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat, prominent: true)
+                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat)
                 }
             }
             if !exam.note.isEmpty {
                 Text(exam.note).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
     }
 
-    private func locationField(_ title: String, value: String, prominent: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+    private func locationField(_ title: String, value: String, alignment: HorizontalAlignment = .leading) -> some View {
+        VStack(alignment: alignment, spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(value)
-                .font(prominent ? .title2.weight(.semibold) : .body.weight(.medium))
+                .font(.subheadline.weight(.medium))
                 .monospacedDigit().fixedSize(horizontal: false, vertical: true)
         }
     }
