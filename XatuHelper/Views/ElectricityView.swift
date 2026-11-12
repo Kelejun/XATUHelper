@@ -41,8 +41,6 @@ struct ElectricityView: View {
                     } label: {
                         Label("历史余额", systemImage: "clock.arrow.circlepath")
                     }
-                } header: {
-                    Text("近 \(trendDays) 天用量")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
@@ -81,23 +79,6 @@ struct ElectricityView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("电费")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if app.dorm != nil {
-                    Button {
-                        Task { await app.refreshElectricity() }
-                    } label: {
-                        if app.electricityLoading {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(app.electricityLoading)
-                    .accessibilityLabel("刷新电费")
-                }
-            }
-        }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 DormPickerView()
@@ -148,6 +129,34 @@ struct ElectricityView: View {
         .accessibilityLabel("充值")
     }
 
+    private var refreshButton: some View {
+        Button {
+            Task { await app.refreshElectricity() }
+        } label: {
+            ZStack {
+                Circle().fill(Color.orange.opacity(0.12))
+                if app.electricityLoading {
+                    ProgressView().tint(.orange)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.borderless)
+        .disabled(app.electricityLoading)
+        .accessibilityLabel("刷新电费")
+    }
+
+    private var balanceActions: some View {
+        HStack(spacing: 10) {
+            chargeButton
+            refreshButton
+        }
+    }
+
     private var balanceCard: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 12) {
@@ -180,11 +189,11 @@ struct ElectricityView: View {
                 HStack(spacing: 16) {
                     lastChecked
                     Spacer(minLength: 0)
-                    chargeButton
+                    balanceActions
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     lastChecked
-                    chargeButton
+                    balanceActions
                 }
             }
         }
@@ -222,23 +231,6 @@ struct ElectricityView: View {
             .padding(.vertical, 24)
         } else {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(selected.map { $0.date.formatted(.dateTime.month().day()) } ?? "每日用量")
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    if let selected {
-                        Text(String(format: "%.2f 度", selected.usage))
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(.orange)
-                    } else {
-                        Text("长按查看")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .font(.subheadline)
-                .accessibilityElement(children: .combine)
-
                 Chart {
                     ForEach(points) { point in
                         AreaMark(
@@ -300,6 +292,23 @@ struct ElectricityView: View {
                     }
                 }
                 .frame(height: 180)
+                .overlay(alignment: .topTrailing) {
+                    if let selected {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(selected.date.formatted(.dateTime.month().day()))
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "%.2f 度", selected.usage))
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .accessibilityElement(children: .combine)
+                        .allowsHitTesting(false)
+                    }
+                }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle()
