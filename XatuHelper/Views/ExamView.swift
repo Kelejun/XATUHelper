@@ -9,6 +9,7 @@ struct ExamView: View {
     /// 空表示跟当前学期走；选了历史学期就钉住那一个
     @State private var semesterID = ""
     @State private var showNotificationSetup = false
+    @State private var showsCompleted = false
 
     private var effectiveSemesterID: String {
         semesterID.isEmpty ? app.currentSemesterID : semesterID
@@ -44,26 +45,39 @@ struct ExamView: View {
         groups.filter { !$0.key.isEmpty && $0.key >= todayKey }
     }
 
-    /// 已经考完的、以及日期都认不出来的，统一压到最后
-    private var bottomExams: [ExamRecord] {
-        app.exams
-            .filter { $0.dateKey.isEmpty || $0.dateKey < todayKey }
-            .sorted { lhs, rhs in
-                if lhs.dateKey.isEmpty != rhs.dateKey.isEmpty { return !lhs.dateKey.isEmpty }
-                if lhs.dateKey != rhs.dateKey { return lhs.dateKey > rhs.dateKey }
-                return lhs.time < rhs.time
-            }
+    private var nextExam: ExamRecord? { upcomingGroups.first?.items.first }
+
+    private var laterGroups: [(key: String, items: [ExamRecord])] {
+        upcomingGroups.compactMap { group in
+            let items = group.items.filter { $0.id != nextExam?.id }
+            return items.isEmpty ? nil : (key: group.key, items: items)
+        }
+    }
+
+    private var pendingExams: [ExamRecord] {
+        app.exams.filter { $0.dateKey.isEmpty }
+    }
+
+    private var completedExams: [ExamRecord] {
+        app.exams.filter { !$0.dateKey.isEmpty && $0.dateKey < todayKey }
+            .sorted { $0.dateKey == $1.dateKey ? $0.time < $1.time : $0.dateKey > $1.dateKey }
     }
 
     private var todayKey: String { ExamView.dayFormatter.string(from: Date()) }
 
     var body: some View {
         List {
+            Section {
+                semesterMenu
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+            .listSectionSpacing(12)
+
             if let error = app.examsError {
                 Section {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Label(error, systemImage: "exclamationmark.circle")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
 
@@ -72,78 +86,79 @@ struct ExamView: View {
                     Section {
                         HStack {
                             ProgressView()
-                            Text("正在查考试安排…")
-                                .foregroundStyle(.secondary)
+                            Text("正在查考试安排…").foregroundStyle(.secondary)
                         }
                     }
                 } else if app.examsError == nil {
                     Section {
                         ContentUnavailableView(
-                            "还没有考试安排",
-                            systemImage: "calendar.badge.clock",
+                            "还没有考试安排", systemImage: "calendar.badge.clock",
                             description: Text("学校排考后会出现在这里")
                         )
                     }
                 }
-
-                if app.exams.isEmpty {
-                    debugSection
-                }
+                debugSection
             } else {
-                ForEach(upcomingGroups, id: \.key) { group in
+                if let exam = nextExam {
                     Section {
-                        ForEach(group.items) { exam in
-                            row(exam)
-                        }
-                    } header: {
-                        Text(headerText(for: group.key, count: group.items.count))
+                        nextExamCard(exam)
+                            .listRowBackground(Color.yellow.opacity(0.12))
                     }
                 }
-
-                if !bottomExams.isEmpty {
+                if !laterGroups.isEmpty {
                     Section {
-                        ForEach(bottomExams) { exam in
-                            row(exam)
+                        ForEach(laterGroups, id: \.key) { group in
+                            dateGroup(group.key, exams: group.items)
                         }
                     } header: {
-                        Text("已结束 / 待定")
+                        sectionHeading("后续考试", count: laterGroups.reduce(0) { $0 + $1.items.count })
+                    }
+                }
+                if !pendingExams.isEmpty {
+                    Section {
+                        ForEach(pendingExams) { exam in
+                            examDetails(exam, pending: true)
+                        }
+                    } header: {
+                        sectionHeading("时间待定", count: pendingExams.count)
+                    }
+                }
+                if !completedExams.isEmpty {
+                    Section {
+                        DisclosureGroup(isExpanded: $showsCompleted) {
+                            ForEach(completedExams) { exam in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(dateText(exam.dateKey, format: "M月d日 EEEE"))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    examDetails(exam)
+                                }
+                                .padding(.vertical, 5)
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("已结束").foregroundStyle(.primary)
+                                Text("\(completedExams.count) 场")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .tint(.secondary)
                     }
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("考试安排")
-        .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await app.refreshExams() }
+        .navigationBarTitleDisplayMode(.large)
+        .refreshable { await app.refreshExams(semesterID: effectiveSemesterID) }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Menu("学年") {
-                        ForEach(years, id: \.self) { year in
-                            Toggle("\(year)学年", isOn: isYearOn(year))
-                        }
-                    }
-
-                    Menu("学期") {
-                        ForEach(terms, id: \.self) { term in
-                            Toggle(term, isOn: isTermOn(term))
-                        }
-                    }
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                }
-                .disabled(app.semesters.isEmpty)
-            }
-
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await app.refreshExams() }
+                    Task { await app.refreshExams(semesterID: effectiveSemesterID) }
                 } label: {
-                    if app.examsLoading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
+                    if app.examsLoading { ProgressView() }
+                    else { Image(systemName: "arrow.clockwise") }
                 }
+                .accessibilityLabel("刷新考试安排")
                 .disabled(app.examsLoading)
             }
         }
@@ -156,6 +171,120 @@ struct ExamView: View {
         .sheet(isPresented: $showNotificationSetup) {
             ExamNotificationSetupSheet()
         }
+    }
+
+    private var semesterMenu: some View {
+        Menu {
+            Menu("学年") {
+                ForEach(years, id: \.self) { year in
+                    Toggle("\(year)学年", isOn: isYearOn(year))
+                }
+            }
+            Menu("学期") {
+                ForEach(terms, id: \.self) { term in
+                    Toggle(term, isOn: isTermOn(term))
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedSemester?.name ?? "当前学期")
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+            }
+            .font(.subheadline).foregroundStyle(.secondary)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .disabled(app.semesters.isEmpty || app.examsLoading)
+    }
+
+    private func sectionHeading(_ title: String, count: Int) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text("\(count) 场").monospacedDigit()
+        }
+        .textCase(nil)
+    }
+
+    private func nextExamCard(_ exam: ExamRecord) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("下一场考试", systemImage: "calendar.badge.clock")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text(remainingText(for: exam))
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Color.yellow.opacity(0.2), in: RoundedRectangle(cornerRadius: 7))
+            }
+            .foregroundStyle(Color.primary.opacity(0.75))
+            VStack(alignment: .leading, spacing: 7) {
+                Text(courseTitle(exam)).font(.title3.weight(.semibold))
+                if !subtitle(for: exam).isEmpty {
+                    Text(subtitle(for: exam)).font(.caption).foregroundStyle(.secondary)
+                }
+                Text([dateText(exam.dateKey, format: "M月d日 EEEE"), exam.timeWithoutDate]
+                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.subheadline).monospacedDigit()
+            }
+            Divider()
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom, spacing: 24) {
+                    locationField("考场", value: exam.room.isEmpty ? "待公布" : exam.room)
+                    Spacer(minLength: 12)
+                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat, prominent: true)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    locationField("考场", value: exam.room.isEmpty ? "待公布" : exam.room)
+                    locationField("座位号", value: exam.seat.isEmpty ? "待公布" : exam.seat, prominent: true)
+                }
+            }
+            if !exam.note.isEmpty {
+                Text(exam.note).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func locationField(_ title: String, value: String, prominent: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value)
+                .font(prominent ? .title2.weight(.semibold) : .body.weight(.medium))
+                .monospacedDigit().fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func dateGroup(_ key: String, exams: [ExamRecord]) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(dateText(key, format: "M.dd")).font(.headline).monospacedDigit()
+                Text(dateText(key, format: "EEE")).font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(minWidth: 48, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(exams.enumerated()), id: \.element.id) { index, exam in
+                    if index > 0 { Divider() }
+                    examDetails(exam, countdown: index == 0)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func courseTitle(_ exam: ExamRecord) -> String {
+        exam.course.isEmpty ? (exam.name.isEmpty ? "考试" : exam.name) : exam.course
+    }
+
+    private func dateText(_ key: String, format: String) -> String {
+        guard let date = Self.parser.date(from: key) else { return key }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = format
+        return formatter.string(from: date)
     }
 
     /// 空列表时给一点现场信息，方便判断是"真没考试"还是"没解析出来"
@@ -201,49 +330,47 @@ struct ExamView: View {
         return parts.isEmpty ? "没看出明显特征" : parts.joined(separator: "、")
     }
 
-    private func row(_ exam: ExamRecord) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(exam.course.isEmpty ? (exam.name.isEmpty ? "考试" : exam.name) : exam.course)
-                    .font(.body.weight(.medium))
-
-                if !subtitle(for: exam).isEmpty {
-                    Text(subtitle(for: exam))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 10) {
-                    if !exam.time.isEmpty {
-                        meta("clock", exam.time)
-                    }
-                    if !exam.room.isEmpty {
-                        meta("mappin.and.ellipse", exam.room)
-                    }
-                    if !exam.seat.isEmpty {
-                        Text("座位 \(exam.seat)")
+    private func examDetails(_ exam: ExamRecord, pending: Bool = false, countdown: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(courseTitle(exam)).font(.body.weight(.medium))
+                    Spacer(minLength: 0)
+                    if countdown {
+                        Text(remainingText(for: exam)).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                if !exam.note.isEmpty {
-                    Text(exam.note)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(courseTitle(exam)).font(.body.weight(.medium))
+                    if countdown {
+                        Text(remainingText(for: exam)).font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
-
-            Spacer(minLength: 8)
-
-            if !remainingText(for: exam).isEmpty {
-                Text(remainingText(for: exam))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
+            if !subtitle(for: exam).isEmpty {
+                Text(subtitle(for: exam)).font(.caption).foregroundStyle(.secondary)
+            }
+            if !exam.timeWithoutDate.isEmpty {
+                Text(exam.timeWithoutDate).font(.subheadline).monospacedDigit()
+            } else if pending {
+                Text("考试时间待公布").font(.caption).foregroundStyle(.secondary)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(exam.room.isEmpty ? "考场待公布" : exam.room)
+                    Spacer(minLength: 0)
+                    Text(exam.seat.isEmpty ? "座位待公布" : "座位 \(exam.seat)")
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(exam.room.isEmpty ? "考场待公布" : exam.room)
+                    Text(exam.seat.isEmpty ? "座位待公布" : "座位 \(exam.seat)")
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            if !exam.note.isEmpty {
+                Text(exam.note).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
     }
 
     /// 课程序号在前、考试名称在后
@@ -251,15 +378,6 @@ struct ExamView: View {
         [exam.code, exam.name]
             .filter { !$0.isEmpty && $0 != exam.course }
             .joined(separator: " · ")
-    }
-
-    /// 图标和文字的间距，系统的 Label 默认留得太宽
-    private func meta(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .regular))
-            Text(text)
-        }
     }
 
     /// 课程名右边的「还有几天」
@@ -271,7 +389,8 @@ struct ExamView: View {
             return ""
         }
         let days = Calendar.current.dateComponents([.day], from: today, to: date).day ?? 0
-        if days > 0 { return "还有 \(days) 天" }
+        if days == 1 { return "明天" }
+        if days > 1 { return "\(days)天后" }
         if days == 0 { return "今天" }
         return ""
     }
@@ -317,17 +436,9 @@ struct ExamView: View {
     private func select(_ id: String) {
         guard id != effectiveSemesterID else { return }
         semesterID = id
+        showsCompleted = false
         app.exams = []
         Task { await app.refreshExams(semesterID: id) }
-    }
-
-    private func headerText(for key: String, count: Int) -> String {
-        guard !key.isEmpty else { return "待定（\(count)）" }
-        guard let date = ExamView.parser.date(from: key) else { return key }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 EEEE"
-        return formatter.string(from: date)
     }
 
     private static let dayFormatter: DateFormatter = {
