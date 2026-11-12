@@ -11,7 +11,6 @@ struct ElectricityView: View {
     @State private var chargeURL: String?
     @State private var chargeTarget: String?
     @State private var preparingCharge = false
-    @State private var trendDays = 15
     @GestureState private var inspectingUsage = false
     @State private var selectedUsageDate: Date?
 
@@ -29,12 +28,6 @@ struct ElectricityView: View {
                 }
 
                 Section {
-                    Picker("用量范围", selection: $trendDays) {
-                        Text("15 天").tag(15)
-                        Text("30 天").tag(30)
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: trendDays) { _, _ in selectedUsageDate = nil }
                     trendChart
                     NavigationLink {
                         ElectricityHistoryView()
@@ -259,9 +252,9 @@ struct ElectricityView: View {
                             y: .value("用量", point.usage)
                         )
                         .foregroundStyle(.orange)
-                        .symbolSize(trendDays == 30 ? 14 : 26)
+                        .symbolSize(14)
                         .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
-                        .accessibilityValue(String(format: "%.2f 度", point.usage))
+                        .accessibilityValue(String(format: "%.2f 度", point.usage) + (point.hasRecharge ? "，有电费充值" : ""))
                     }
                     if let selected {
                         RuleMark(x: .value("日期", selected.date, unit: .day))
@@ -277,7 +270,7 @@ struct ElectricityView: View {
                 }
                 .chartXScale(domain: trendStart...trendPlotEnd)
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: trendDays == 30 ? 7 : 3)) {
+                    AxisMarks(values: .stride(by: .day, count: 7)) {
                         AxisValueLabel(format: .dateTime.month().day())
                     }
                 }
@@ -301,6 +294,14 @@ struct ElectricityView: View {
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
                                 .foregroundStyle(.orange)
+                            if selected.hasRecharge {
+                                Text("有电费充值")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange.opacity(0.12), in: Capsule())
+                            }
                         }
                         .font(.subheadline)
                         .padding(8)
@@ -350,6 +351,7 @@ struct ElectricityView: View {
     private struct UsagePoint: Identifiable {
         let date: Date
         let usage: Double
+        let hasRecharge: Bool
         var id: Date { date }
     }
 
@@ -360,7 +362,7 @@ struct ElectricityView: View {
     }
 
     private var trendStart: Date {
-        Calendar.current.date(byAdding: .day, value: 1 - trendDays, to: trendEnd) ?? trendEnd
+        Calendar.current.date(byAdding: .day, value: -29, to: trendEnd) ?? trendEnd
     }
 
     /// 仅用连续两天的余额计算当天用量，避免把多天的差额显示成一天。
@@ -373,7 +375,11 @@ struct ElectricityView: View {
             let current = trend[index]
             guard current.date >= trendStart, current.date <= trendEnd,
                   Calendar.current.dateComponents([.day], from: previous.date, to: current.date).day == 1 else { continue }
-            points.append(UsagePoint(date: current.date, usage: max(0, previous.balance - current.balance)))
+            points.append(UsagePoint(
+                date: current.date,
+                usage: max(0, previous.balance - current.balance),
+                hasRecharge: current.balance > previous.balance
+            ))
         }
         return points
     }
