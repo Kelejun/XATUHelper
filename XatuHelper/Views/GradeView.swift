@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 成绩页。左边课名，右边「成绩 / 绩点」，点开看分项。
+/// 成绩概览与课程分项。
 struct GradeView: View {
     @EnvironmentObject var app: AppState
     @AppStorage("showDiagnostics") private var showDiagnostics = false
@@ -10,6 +10,14 @@ struct GradeView: View {
     @State private var semesterID = ""
     @State private var expanded: Set<String> = []
     @State private var searchText = ""
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var overviewTitle: String {
+        app.gradeScope == .all ? "全部学期" : (selectedSemester?.name ?? "学期成绩")
+    }
 
     private var filteredGrades: [GradeRecord] {
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -49,32 +57,26 @@ struct GradeView: View {
                 Picker("范围", selection: Binding(
                     get: { app.gradeScope },
                     set: { scope in
-                        guard scope != app.gradeScope else { return }
+                        guard scope != app.gradeScope, !app.gradesLoading else { return }
                         expanded = []
+                        app.gradeScope = scope
+                        guard !app.isDemoMode else { return }
                         app.grades = []
                         Task { await app.refreshGrades(semesterID: effectiveSemesterID, scope: scope) }
                     }
                 )) {
                     ForEach(GradeScope.allCases) { scope in
-                        Text(scope.rawValue).tag(scope)
+                        Text(scope == .current ? "学期成绩" : "全部成绩").tag(scope)
                     }
                 }
                 .pickerStyle(.segmented)
+                .disabled(app.gradesLoading)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                .listRowBackground(Color.clear)
+            }
 
-                if !app.grades.isEmpty {
-                    HStack(alignment: .center, spacing: 0) {
-                        statCell(title: "门数", value: displayCount)
-                        Divider().frame(height: 30)
-                        statCell(title: "总学分", value: displayCredits)
-                        Divider().frame(height: 30)
-                        statCell(title: "平均绩点", value: displayGPA)
-                    }
-                    .padding(.top, 6)
-                }
-            } footer: {
-                if !app.grades.isEmpty {
-                    Text(hasPageSummary ? "数据取自教务页面" : "平均绩点按学分加权")
-                }
+            if !app.grades.isEmpty && !isSearching {
+                overview
             }
 
             if let error = app.gradesError {
@@ -106,17 +108,29 @@ struct GradeView: View {
                 }
             } else {
                 Section {
-                    ForEach(filteredGrades) { grade in
-                        gradeRow(grade)
+                    if filteredGrades.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                    } else {
+                        ForEach(filteredGrades) { grade in
+                            gradeRow(grade)
+                        }
                     }
-                } footer: {
-                    Text(filteredGrades.isEmpty ? "没搜到这门课" : "点开一门课可以看各分项得分")
+                } header: {
+                    HStack {
+                        Text(isSearching ? "搜索结果" : "课程成绩")
+                        Spacer()
+                        Text("\(filteredGrades.count) 门").monospacedDigit()
+                    }
+                    .textCase(nil)
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("成绩")
-        .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索课程名称")
+        .navigationBarTitleDisplayMode(.large)
+        .modifier(CourseNativeSearch(text: $searchText))
+        .modifier(CourseSearchToolbarBehavior())
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await app.refreshGrades(semesterID: effectiveSemesterID, scope: app.gradeScope) }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -135,7 +149,8 @@ struct GradeView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal")
                 }
-                .disabled(app.semesters.isEmpty || app.gradeScope == .all)
+                .accessibilityLabel("切换学期")
+                .disabled(app.semesters.isEmpty || app.gradeScope == .all || app.gradesLoading)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -148,6 +163,7 @@ struct GradeView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
+                .accessibilityLabel("刷新成绩")
                 .disabled(app.gradesLoading)
             }
         }
@@ -228,65 +244,117 @@ struct GradeView: View {
         }
     }
 
-    private func statCell(title: String, value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func gradeRow(_ grade: GradeRecord) -> some View {
-        let isOpen = expanded.contains(grade.id)
-
-        let label = HStack(alignment: .firstTextBaseline, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(grade.course.isEmpty ? "课程" : grade.course)
-                    .font(.body.weight(.medium))
-                if !grade.subtitle.isEmpty {
-                    Text(grade.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+    private var overview: some View {
+        let tint: Color = .purple
+        return Section {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(overviewTitle)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 48, height: 48)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("平均绩点")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(tint)
+                    Text(displayGPA)
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(tint)
+                }
+                .accessibilityElement(children: .combine)
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    overviewMetric("课程", value: "\(displayCount) 门")
+                    Spacer(minLength: 0)
+                    overviewMetric("总学分", value: displayCredits)
                 }
             }
-
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(grade.headline)
-                    .font(.callout.weight(.semibold))
-                Text("成绩 / 绩点")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            .padding(.vertical, 8)
+            .listRowBackground(
+                LinearGradient(colors: [tint.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+        } footer: {
+            Text(hasPageSummary ? "数据取自教务页面" : "平均绩点按学分加权")
         }
+    }
 
-        // 没有分项就老老实实一行，别给人一个点开是空的箭头
-        guard !grade.components.isEmpty else { return AnyView(label) }
+    private func overviewMetric(_ title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(title).foregroundStyle(.secondary)
+            Text(value).fontWeight(.medium).monospacedDigit()
+        }
+        .font(.subheadline)
+        .accessibilityElement(children: .combine)
+    }
 
-        return AnyView(
+    @ViewBuilder
+    private func gradeRow(_ grade: GradeRecord) -> some View {
+        if grade.components.isEmpty {
+            gradeLabel(grade)
+        } else {
             DisclosureGroup(isExpanded: Binding(
-                get: { isOpen },
+                get: { expanded.contains(grade.id) },
                 set: { open in
                     if open { expanded.insert(grade.id) } else { expanded.remove(grade.id) }
                 }
             )) {
+                if !grade.code.isEmpty {
+                    gradeDetail("课程序号", value: grade.code)
+                }
                 ForEach(grade.components) { component in
-                    HStack {
-                        Text(component.name)
-                        Spacer(minLength: 8)
-                        Text(component.score)
-                    }
-                    .font(.callout)
+                    gradeDetail(component.name, value: component.score)
                 }
             } label: {
-                label
+                gradeLabel(grade)
             }
-        )
+            .tint(.purple)
+        }
+    }
+
+    private func gradeLabel(_ grade: GradeRecord) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(grade.course.isEmpty ? "课程" : grade.course)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                let subtitle = [grade.term, grade.credit.isEmpty ? "" : "\(grade.credit) 学分"]
+                    .filter { !$0.isEmpty }.joined(separator: " · ")
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(grade.score.isEmpty ? "—" : grade.score)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("绩点 \(grade.gpa.isEmpty ? "—" : grade.gpa)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func gradeDetail(_ title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value).monospacedDigit()
+        }
+        .font(.callout)
+        .accessibilityElement(children: .combine)
     }
 
     /// 空列表时给现场信息，方便判断是没出分还是没解析出来
@@ -352,6 +420,7 @@ struct GradeView: View {
         guard id != effectiveSemesterID else { return }
         semesterID = id
         expanded = []
+        guard !app.isDemoMode else { return }
         app.grades = []
         Task { await app.refreshGrades(semesterID: id, scope: .current) }
     }
