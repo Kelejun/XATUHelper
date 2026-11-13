@@ -432,9 +432,17 @@ struct SchoolCalendarView: View {
     }
 
     private func load(force: Bool) async {
+        if !force && !AcademicRefreshSettings.reduced {
+            info = CalendarCache.load()
+            isLoading = info == nil
+            await app.refreshCalendarIfNeeded()
+            info = CalendarCache.load()
+            errorText = app.calendarRefreshError
+            isLoading = false
+            return
+        }
         if !force, let cached = CalendarCache.load() {
             info = cached
-            // 后台顺手看看有没有新校历，图片没变就直接用缓存
             Task { await refreshIfNeeded() }
             return
         }
@@ -446,40 +454,17 @@ struct SchoolCalendarView: View {
         errorText = nil
         defer { isLoading = false }
 
-        let page: CalendarService.CalendarPage
-        switch await CalendarService.loadPage() {
-        case .success(let value):
-            page = value
+        switch await CalendarCache.refresh(force: force) {
         case .failure(let error):
             fallbackToCache(friendly(error.localizedDescription))
             return
-        }
-        if !force, let cached = CalendarCache.load(imageURL: page.imageURL.absoluteString) {
-            info = cached
-            return
-        }
-        let data: Data
-        switch await CalendarService.downloadImage(page.imageURL) {
-        case .success(let value):
-            data = value
-            CalendarCache.saveImage(value, for: page.imageURL.absoluteString)
-        case .failure(let error):
-            fallbackToCache(friendly(error.localizedDescription))
-            return
-        }
-        let text = await Task.detached(priority: .userInitiated) {
-            CalendarService.recognizeText(from: data)
-        }.value
-
-        let parsed = CalendarService.parse(text, title: page.title, pageURL: page.pageURL, imageURL: page.imageURL)
-        CalendarCache.save(parsed)
-        let effective = CalendarCache.applyingCorrection(to: parsed)
-        guard !effective.semesters.isEmpty else {
-            errorText = "校历上的日期没认出来，可以先看原图。"
+        case .success(let effective):
             info = effective
-            return
+            if effective.semesters.isEmpty {
+                errorText = "校历上的日期没认出来，可以先看原图。"
+            }
         }
-        info = effective
+        app.publishWidgetSnapshot()
         PhoneWatchBridge.shared.publish()
     }
 }

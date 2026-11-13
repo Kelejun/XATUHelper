@@ -99,7 +99,7 @@ struct PlanView: View {
         }
         .task {
             if app.isStale(.plan) { await app.refreshPlan() }
-            await app.refreshPlanCatalogIfNeeded()
+            if AcademicRefreshSettings.reduced { await app.refreshPlanCatalogIfNeeded() }
         }
     }
 

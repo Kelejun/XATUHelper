@@ -188,6 +188,21 @@ final class AppState: ObservableObject {
     /// 某类数据是否已经过期（没数据也算过期）
     func isStale(_ kind: CacheKind) -> Bool {
         guard !isDemoMode else { return false }
+        if !AcademicRefreshSettings.reduced {
+            let now = Date()
+            switch kind {
+            case .timetable:
+                return AcademicRefreshPolicy.needsDailyRefresh(fetchedAt, now: now)
+            case .plan:
+                return false
+            case .grades:
+                return AcademicRefreshPolicy.gradesEnabled(terms: refreshTerms, now: now) &&
+                    AcademicRefreshPolicy.needsDailyRefresh(gradesFetchedAt, now: now)
+            case .exams:
+                return !AcademicRefreshPolicy.isVacation(terms: refreshTerms, now: now) &&
+                    AcademicRefreshPolicy.needsDailyRefresh(examsFetchedAt, now: now)
+            }
+        }
         switch kind {
         case .timetable:
             guard let fetched = fetchedAt else { return true }
@@ -202,6 +217,28 @@ final class AppState: ObservableObject {
             guard let fetched = examsFetchedAt else { return true }
             return Date().timeIntervalSince(fetched) >= kind.lifetime
         }
+    }
+
+    private var refreshTerms: [AcademicRefreshPolicy.Term] {
+        let spans = CalendarCache.scheduleSpans
+        var terms = spans.compactMap { span -> AcademicRefreshPolicy.Term? in
+            guard let start = Self.parseDate(span.start), let end = Self.parseDate(span.end), end >= start else { return nil }
+            return .init(start: start, end: end)
+        }
+        // School metadata supplies dates when no calendar is cached, including a newly started term.
+        for semester in semesters {
+            guard let raw = semester.startDate, let start = Self.parseDate(raw),
+                  !terms.contains(where: { abs($0.start.timeIntervalSince(start)) < 30 * 86400 }) else { continue }
+            terms.append(.init(start: start, end: nil))
+        }
+        if let first = CalendarCache.load()?.semesters.sorted(by: { $0.start < $1.start }).first,
+           let start = Self.parseDate(first.start),
+           let nextStart = Calendar.current.date(byAdding: .day, value: 364, to: start),
+           !terms.contains(where: { abs($0.start.timeIntervalSince(nextStart)) < 30 * 86400 }) {
+            terms.append(.init(start: nextStart, end: nil))
+        }
+        if terms.isEmpty { terms = [.init(start: weekOneMonday, end: nil)] }
+        return terms
     }
 
     /// 按类型刷新一份数据
@@ -649,6 +686,17 @@ final class AppState: ObservableObject {
             gradeSummary = EamsService.lastGradeSummary
             gradesFetchedAt = Date()
             gradeStore.save(grades, at: gradesFetchedAt ?? Date())
+            if !AcademicRefreshSettings.reduced {
+                let scopeKey = gradeScope == .all ? "all" : (semesterID ?? (selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID))
+                let key = "academic.gradeFingerprint.\(studentID).\(scopeKey)"
+                let fingerprint = try GradeRecord.refreshFingerprint(grades)
+                let previousFingerprint = UserDefaults.standard.data(forKey: key)
+                if previousFingerprint != fingerprint && (!grades.isEmpty || previousFingerprint != nil) {
+                    UserDefaults.standard.set(true, forKey: pendingPlanRefreshKey)
+                }
+                UserDefaults.standard.set(fingerprint, forKey: key)
+                await refreshPlanAfterGradeChangeIfNeeded()
+            }
         } catch {
             gradesError = contentErrorDescription(error)
         }
@@ -707,6 +755,7 @@ final class AppState: ObservableObject {
             planFetchedAt = Date()
             planStore.save(plan, at: planFetchedAt ?? Date())
             await refreshPlanCatalogIfNeeded()
+            if !plan.sections.isEmpty { UserDefaults.standard.removeObject(forKey: pendingPlanRefreshKey) }
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
             }
@@ -746,9 +795,7 @@ final class AppState: ObservableObject {
 
     // MARK: - 电费
 
-    /// 启动时最多做两件事：电费过期先查电费；课表超过 168 小时，隔 60 秒再查
-    /// 其他数据（考试、成绩）只在进入对应页面时刷新，首页考试卡片只读缓存
-    /// 按当前开关重排本地通知（内容在排期那一刻固定，所以每次数据变了都要重来一遍）
+    /// Data changes rebuild the scheduled local reminders.
     func rescheduleNotifications() async {
         guard !isDemoMode else { return }
         let previous = notificationRefresh
@@ -783,15 +830,84 @@ final class AppState: ObservableObject {
 
         await refreshElectricityIfNeeded()
 
-        // 错峰过期，启动时最多补一份最该补的，避免一窝蜂联网。
-        // 学业完成情况不参与启动补拉，只在进页面且过期时才拉。
-        let launchKinds: [CacheKind] = [.timetable, .grades, .exams]
-        let overdue: [CacheKind] = launchKinds.filter { isStale($0) }
-        guard let target = overdue.max(by: { overdueRatio($0) < overdueRatio($1) }) else { return }
+        if AcademicRefreshSettings.reduced {
+            let overdue = [CacheKind.timetable, .grades, .exams].filter { isStale($0) }
+            guard let target = overdue.max(by: { overdueRatio($0) < overdueRatio($1) }) else { return }
+            guard await waitForRefreshSlot() else { return }
+            if isStale(target) { await refresh(target) }
+            return
+        }
 
-        try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
-        guard !Task.isCancelled else { return }
-        await refresh(target)
+        var attemptedGrades = false
+        for kind in [CacheKind.timetable, .grades, .exams] {
+            guard isLoggedIn, !Task.isCancelled, !AcademicRefreshSettings.reduced else { return }
+            guard isStale(kind) else { continue }
+            guard await waitForRefreshSlot() else { return }
+            guard !AcademicRefreshSettings.reduced else { return }
+            if isStale(kind) {
+                if kind == .grades { attemptedGrades = true }
+                await refresh(kind)
+            }
+        }
+        if !attemptedGrades { await refreshPlanAfterGradeChangeIfNeeded() }
+        await refreshCalendarIfNeeded()
+    }
+
+    private func waitForRefreshSlot() async -> Bool {
+        do { try await Task.sleep(for: .seconds(3)) } catch { return false }
+        return isLoggedIn && !Task.isCancelled
+    }
+
+    private var pendingPlanRefreshKey: String { "academic.pendingPlanRefresh.\(studentID)" }
+
+    private func refreshPlanAfterGradeChangeIfNeeded() async {
+        guard !AcademicRefreshSettings.reduced,
+              UserDefaults.standard.bool(forKey: pendingPlanRefreshKey), !planLoading,
+              await waitForRefreshSlot() else { return }
+        guard !AcademicRefreshSettings.reduced else { return }
+        await refreshPlan()
+    }
+
+    @Published var calendarRefreshError: String?
+    private var calendarRefreshing = false
+
+    func refreshCalendarIfNeeded() async {
+        guard !isDemoMode, isLoggedIn, !AcademicRefreshSettings.reduced, !calendarRefreshing else { return }
+        let defaults = UserDefaults.standard
+        let now = Date()
+        let cached = CalendarCache.load()
+        let spans = (cached?.semesters ?? []).sorted { $0.start < $1.start }
+        let starts = spans.compactMap { Self.parseDate($0.start) }
+        let pendingKey = "academic.calendar.targetYear"
+        let pendingYear = defaults.integer(forKey: pendingKey)
+        let target: Int
+        switch AcademicRefreshPolicy.calendarDecision(starts: starts, pendingYear: pendingYear > 0 ? pendingYear : nil, now: now) {
+        case .wait:
+            defaults.removeObject(forKey: pendingKey)
+            return
+        case .bootstrap:
+            target = pendingYear
+        case .update(let year):
+            target = year
+            defaults.set(year, forKey: pendingKey)
+        }
+        let attemptKey = "academic.calendar.lastAttempt"
+        guard AcademicRefreshPolicy.needsDailyRefresh(defaults.object(forKey: attemptKey) as? Date, now: now) else { return }
+        calendarRefreshing = true
+        defer { calendarRefreshing = false }
+        guard await waitForRefreshSlot(), !AcademicRefreshSettings.reduced else { return }
+        defaults.set(Date(), forKey: attemptKey)
+        calendarRefreshError = nil
+        switch await CalendarCache.refresh() {
+        case .failure(let error): calendarRefreshError = error.localizedDescription
+        case .success(let info):
+            if let first = info.semesters.sorted(by: { $0.start < $1.start }).first,
+               let date = Self.parseDate(first.start), info.semesters.count >= 2,
+               target > 0, Calendar.current.component(.year, from: date) >= target {
+                defaults.removeObject(forKey: pendingKey)
+            }
+        }
+        publishWidgetSnapshot()
     }
 
     /// 过期了多少（按各自有效期归一化），用来挑最该更新的那一份

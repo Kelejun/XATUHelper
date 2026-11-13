@@ -21,6 +21,7 @@ struct SettingsContent: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage(CheckinLocationSettings.revealedKey) private var showCheckinLocation = false
+    @AppStorage(AcademicRefreshSettings.reducedKey) private var reducedAcademicRefresh = false
     @State private var versionTapCount = 0
     @EnvironmentObject private var announcements: AnnouncementCenter
     @State private var selectedAnnouncement: ReceivedAnnouncement?
@@ -72,12 +73,15 @@ struct SettingsContent: View {
                     NavigationLink {
                         Form {
                             ElectricityRefreshSettingsSection()
+                            Section("教务信息") {
+                                Toggle("降低教务信息更新频率", isOn: $reducedAcademicRefresh)
+                            }
                         }
                         .formStyle(.grouped)
-                        .navigationTitle("电费更新")
+                        .navigationTitle("信息更新")
                         .navigationBarTitleDisplayMode(.inline)
                     } label: {
-                        Text("电费更新")
+                        Text("信息更新")
                     }
                     NavigationLink {
                         ReminderSettingsContent()
@@ -134,7 +138,7 @@ struct SettingsContent: View {
         }
         .task {
             if app.plan.studentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               app.isLoggedIn, !app.isDemoMode {
+               app.isLoggedIn, !app.isDemoMode, AcademicRefreshSettings.reduced {
                 await app.refreshPlan()
             }
         }

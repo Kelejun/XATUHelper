@@ -26,6 +26,12 @@ struct GradeRecord: Identifiable, Hashable, Codable {
     var term: String = ""   // 学年学期，只有「所有学期成绩」那一页才有
     var components: [GradeComponent]
 
+    static func refreshFingerprint(_ grades: [GradeRecord]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try encoder.encode(grades.sorted { $0.id < $1.id })
+    }
+
     /// 右边那行大字：「成绩 / 绩点」
     var headline: String {
         let left = score.isEmpty ? "-" : score

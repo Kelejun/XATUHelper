@@ -99,9 +99,62 @@ enum CalendarCache {
     }
 
     static func save(_ info: CalendarService.Info) {
+        var history = scheduleHistory
+        if let previous = original() { history[previous.imageURL] = previous }
+        if let data = try? JSONEncoder().encode(history) {
+            UserDefaults.standard.set(data, forKey: "academic.calendar.scheduleHistory")
+        }
         guard let data = try? JSONEncoder().encode(info) else { return }
         UserDefaults.standard.set(data, forKey: key)
         NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    private static var scheduleHistory: [String: CalendarService.Info] {
+        guard let data = UserDefaults.standard.data(forKey: "academic.calendar.scheduleHistory") else { return [:] }
+        return (try? JSONDecoder().decode([String: CalendarService.Info].self, from: data)) ?? [:]
+    }
+
+    static var scheduleSpans: [CalendarService.SemesterSpan] {
+        var history = scheduleHistory
+        if let current = original() { history[current.imageURL] = current }
+        var spans: [String: CalendarService.SemesterSpan] = [:]
+        for info in history.values.sorted(by: { $0.fetchedAt < $1.fetchedAt }) {
+            for span in applyingCorrection(to: info).semesters { spans[span.start] = span }
+        }
+        return spans.values.sorted { $0.start < $1.start }
+    }
+
+    @MainActor private static var refreshing = false
+
+    @MainActor
+    static func refresh(force: Bool = false) async -> Result<CalendarService.Info, CalendarService.LoadError> {
+        guard !refreshing else {
+            if let cached = load() { return .success(cached) }
+            return .failure(.image)
+        }
+        refreshing = true
+        defer { refreshing = false }
+        let page: CalendarService.CalendarPage
+        switch await CalendarService.loadPage() {
+        case .success(let value): page = value
+        case .failure(let error): return .failure(error)
+        }
+        if !force, let cached = load(imageURL: page.imageURL.absoluteString), !cached.semesters.isEmpty {
+            return .success(cached)
+        }
+        let data: Data
+        switch await CalendarService.downloadImage(page.imageURL) {
+        case .success(let value): data = value
+        case .failure(let error): return .failure(error)
+        }
+        saveImage(data, for: page.imageURL.absoluteString)
+        let text = await Task.detached(priority: .userInitiated) {
+            CalendarService.recognizeText(from: data)
+        }.value
+        guard !Task.isCancelled else { return .failure(.download("查询已取消")) }
+        let parsed = CalendarService.parse(text, title: page.title, pageURL: page.pageURL, imageURL: page.imageURL)
+        save(parsed)
+        return .success(applyingCorrection(to: parsed))
     }
 
     // MARK: - 校历原图缓存（离线时也能看）
