@@ -115,6 +115,7 @@ private struct NotificationWindowContent: View {
     var body: some View {
         VStack(spacing: 0) {
             InAppNotificationLayer(notice: notice, onTap: onTap, onClose: onClose)
+                .id(notice.id)
                 .background {
                     GeometryReader { geometry in
                         Color.clear.preference(key: NotificationBannerFrameKey.self,
