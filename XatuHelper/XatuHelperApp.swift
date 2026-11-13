@@ -74,7 +74,7 @@ struct ContentView: View {
                     switch notice.kind {
                     case .exam: app.deepLink = .exam
                     case .grade: app.deepLink = .grade
-                    case .loginFailure: break
+                    case .loginFailure, .sessionExpired: break
                     }
                     app.dismissNotice()
                 },

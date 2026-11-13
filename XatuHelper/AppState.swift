@@ -9,6 +9,7 @@ enum InAppNoticeKind: String, Identifiable {
     case exam
     case grade
     case loginFailure
+    case sessionExpired
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum InAppNoticeKind: String, Identifiable {
         case .exam: return "有新的考试安排"
         case .grade: return "有新的成绩公布"
         case .loginFailure: return "登录失败"
+        case .sessionExpired: return "登录已过期"
         }
     }
 }
@@ -582,13 +584,19 @@ final class AppState: ObservableObject {
         if let appError = error as? AppError {
             switch appError {
             case .sessionExpired, .reloginFailed:
+                let wasLoggedIn = isLoggedIn
                 errorMessage = nil
                 planError = nil
                 examsError = nil
                 gradesError = nil
                 electricityError = nil
                 showsWebLogin = false
+                deepLink = nil
                 isLoggedIn = false
+                if wasLoggedIn {
+                    showNotice(InAppNotice(kind: .sessionExpired,
+                                           message: "自动重新登录未成功，请手动重新登录"))
+                }
                 return nil
             default:
                 return appError.errorDescription
