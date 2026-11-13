@@ -44,69 +44,53 @@ struct InAppNotificationBanner: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                onTap()
-            } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: notice.kind.symbol)
-                        .font(.system(size: 22, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(notice.kind.accent)
-                        .frame(width: iconSize, height: iconSize)
-                        .background {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .fill(notice.kind.accent.opacity(colorScheme == .dark ? 0.20 : 0.10).gradient)
-                        }
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(notice.kind.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if notice.kind.opensDetail {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        Text(notice.message)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                            .fixedSize(horizontal: false, vertical: true)
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            onTap()
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: notice.kind.symbol)
+                    .font(.system(size: 22, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(notice.kind.accent)
+                    .frame(width: iconSize, height: iconSize)
+                    .background {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(notice.kind.accent.opacity(colorScheme == .dark ? 0.20 : 0.10).gradient)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 3)
-                }
-                .multilineTextAlignment(.leading)
-                .padding(.leading, 16)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityHint(notice.kind.opensDetail ? "查看详情" : "关闭通知")
+                    .accessibilityHidden(true)
 
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
-                    .background(.quaternary, in: Circle())
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(notice.kind.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if notice.kind.opensDetail {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    Text(notice.message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 3)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 7)
-            .padding(.trailing, 5)
-            .accessibilityLabel("关闭通知")
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(notice.kind.opensDetail ? "查看详情" : "关闭通知")
         .background(.regularMaterial, in: shape)
         .overlay {
             shape.strokeBorder(
