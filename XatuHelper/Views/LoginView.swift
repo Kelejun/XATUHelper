@@ -62,11 +62,19 @@ struct LoginView: View {
 
                 Section {
                     Button(action: submit) {
-                        HStack(spacing: 8) {
-                            if app.isLoading { ProgressView() }
-                            Text(app.isLoading ? "登录中…" : "登录")
+                        ZStack {
+                            Text("登录")
+                                .opacity(app.isLoading ? 0 : 1)
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text("登录中…")
+                            }
+                            .opacity(app.isLoading ? 1 : 0)
                         }
                         .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(app.isLoading ? "登录中…" : "登录")
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
