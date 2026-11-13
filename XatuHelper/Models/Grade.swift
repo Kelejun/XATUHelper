@@ -29,7 +29,17 @@ struct GradeRecord: Identifiable, Hashable, Codable {
     static func refreshFingerprint(_ grades: [GradeRecord]) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        return try encoder.encode(grades.sorted { $0.id < $1.id })
+        let rows = try grades.map { grade -> Data in
+            var value = grade
+            value.id = ""
+            value.components = value.components.map { component in
+                var item = component
+                item.id = ""
+                return item
+            }.sorted { ($0.name, $0.score) < ($1.name, $1.score) }
+            return try encoder.encode(value)
+        }.sorted { $0.lexicographicallyPrecedes($1) }
+        return try encoder.encode(rows)
     }
 
     /// 右边那行大字：「成绩 / 绩点」

@@ -114,11 +114,40 @@ final class AppState: ObservableObject {
 
     private var studentTableID: String?
     private var classTableID: String?
-    private var semesterTagID = "semesterCalendar_target"
     private var projectID = ""
     /// 登录页填的账号密码，网页兜底登录成功后存进 Keychain
     private var pendingCredentials: (student: String, password: String)?
     private var pendingPasswordVerified = false
+
+    private var sessionGeneration = UUID()
+    private let currentTableStore = TimetableStore(fileName: "current-timetable.json")
+    private var currentTable: TimetableSnapshot?
+    private let currentExamStore = ExamStore(fileName: "current-exams.json")
+    @Published private(set) var currentExams: [ExamRecord] = []
+    private var currentExamsFetchedAt: Date?
+    private var examContext = ""
+    private var gradeContext = ""
+
+    func hasExamContext(_ semester: String) -> Bool { examContext == semester }
+    func hasGradeContext(_ semester: String) -> Bool {
+        gradeContext == (gradeScope == .all ? "all" : semester)
+    }
+
+    var reminderMonday: Date {
+        if isCurrentSemester && kind == .student { return semesterStartMonday }
+        guard let table = currentTable else { return semesterStartMonday }
+        if let anchor = table.manualWeekAnchor, anchor.semesterID == currentSemesterID { return anchor.monday }
+        if let raw = table.semesters?.first(where: { $0.id == currentSemesterID })?.startDate,
+           let date = Self.parseDate(raw), let monday = Self.mondayOfWeek(containing: date) { return monday }
+        return table.weekOneMonday
+    }
+    var reminderOccurrences: [CourseOccurrence] {
+        if isCurrentSemester && kind == .student { return occurrences }
+        guard let table = currentTable else { return [] }
+        let edits = (try? editStore.load())?[studentID]?[currentSemesterID] ?? []
+        return EditedTimetable(base: table.occurrences, edits: edits,
+                               monday: reminderMonday, unitCount: table.unitCount).occurrences
+    }
 
     private let store = TimetableStore()
     private let editStore = TimetableEditStore()
@@ -144,25 +173,33 @@ final class AppState: ObservableObject {
             configureDemoAccount()
             return
         }
+        if let table = currentTableStore.load(), table.studentID == Preferences.studentID { currentTable = table }
         // 先把上次存的登录 cookie 塞回来，再读缓存
         CookieVault.restore()
-        planCatalog = PlanCatalogStore.load()
         studentID = Preferences.studentID ?? ""
         dorm = Preferences.dorm
         electricityBalance = Preferences.electricityBalance
         electricityCheckedAt = Preferences.electricityCheckedAt
         electricityHistory = ElectricityHistoryStore.load()
-        if let payload = examStore.load() {
+        if let payload = currentExamStore.load(), payload.account == studentID {
+            currentExams = payload.exams
+            currentExamsFetchedAt = payload.fetchedAt
+        }
+        if let payload = examStore.load(), payload.account == studentID {
+            examContext = payload.context ?? ""
             exams = payload.exams
             examsFetchedAt = payload.fetchedAt
         }
-        if let payload = gradeStore.load() {
+        if let payload = gradeStore.load(), payload.account == studentID {
+            gradeContext = payload.context ?? ""
+            gradeScope = gradeContext == "all" ? .all : .current
             grades = payload.grades
             gradesFetchedAt = payload.fetchedAt
         }
-        if let payload = planStore.load() {
+        if let payload = planStore.load(), payload.account == studentID {
             plan = payload.plan
             planFetchedAt = payload.fetchedAt
+            planCatalog = PlanCatalogStore.load()
         }
         if let snapshot = store.load(),
            studentID.isEmpty || snapshot.studentID.isEmpty || snapshot.studentID == studentID {
@@ -179,7 +216,12 @@ final class AppState: ObservableObject {
                 kind = parsed
             }
             rebuildTimetable()
+            if isCurrentSemester && kind == .student { currentTable = snapshot }
             isLoggedIn = true
+        }
+        if currentExamStore.load()?.context != currentSemesterID {
+            currentExams = []
+            currentExamsFetchedAt = nil
         }
     }
 
@@ -194,13 +236,13 @@ final class AppState: ObservableObject {
             case .timetable:
                 return AcademicRefreshPolicy.needsDailyRefresh(fetchedAt, now: now)
             case .plan:
-                return false
+                return plan.sections.isEmpty || planFetchedAt == nil
             case .grades:
                 return AcademicRefreshPolicy.gradesEnabled(terms: refreshTerms, now: now) &&
                     AcademicRefreshPolicy.needsDailyRefresh(gradesFetchedAt, now: now)
             case .exams:
                 return !AcademicRefreshPolicy.isVacation(terms: refreshTerms, now: now) &&
-                    AcademicRefreshPolicy.needsDailyRefresh(examsFetchedAt, now: now)
+                    AcademicRefreshPolicy.needsDailyRefresh(currentExamsFetchedAt, now: now)
             }
         }
         switch kind {
@@ -214,7 +256,7 @@ final class AppState: ObservableObject {
             guard !grades.isEmpty, let fetched = gradesFetchedAt else { return true }
             return Date().timeIntervalSince(fetched) >= kind.lifetime
         case .exams:
-            guard let fetched = examsFetchedAt else { return true }
+            guard let fetched = currentExamsFetchedAt else { return true }
             return Date().timeIntervalSince(fetched) >= kind.lifetime
         }
     }
@@ -251,7 +293,7 @@ final class AppState: ObservableObject {
         case .grades:
             await refreshGrades()
         case .exams:
-            await refreshExams(semesterID: isCurrentSemester ? nil : selectedSemesterID)
+            await refreshExams(semesterID: currentSemesterID)
         }
     }
 
@@ -333,7 +375,8 @@ final class AppState: ObservableObject {
     /// 登录后先问一次教务首页，别按自己猜的校历算
     func calibrateFromServer() async {
         guard !isDemoMode else { return }
-        guard let week = await eams.fetchOfficialWeek() else { return }
+        let generation = sessionGeneration
+        guard let week = await eams.fetchOfficialWeek(), generation == sessionGeneration, !Task.isCancelled else { return }
         applyOfficialWeek(week)
         persist()
     }
@@ -342,14 +385,18 @@ final class AppState: ObservableObject {
 
     func login(student: String, password: String) async {
         guard !isLoading, !isDemoMode else { return }
+        sessionGeneration = UUID()
+        reloginTask?.cancel()
+        let generation = sessionGeneration
         pendingPasswordVerified = false
         isLoading = true
         errorMessage = nil
         pendingCredentials = (student, password)
         do {
             try await cas.login(username: student, password: password)
+            guard generation == sessionGeneration else { throw CancellationError() }
             pendingPasswordVerified = true
-            Keychain.savePassword(password, account: student)
+            try Keychain.savePassword(password, account: student)
             Preferences.studentID = student
             setTimetableAccount(student)
             try await bootstrap()
@@ -362,7 +409,11 @@ final class AppState: ObservableObject {
             isLoggedIn = true
             pendingCredentials = nil
         } catch {
-            presentLoginFailure()
+            if generation == sessionGeneration, !Task.isCancelled {
+                if (error as NSError).domain == NSOSStatusErrorDomain {
+                    errorMessage = "无法保存登录凭证，请稍后重试。"
+                } else { presentLoginFailure() }
+            }
         }
         isLoading = false
     }
@@ -375,14 +426,12 @@ final class AppState: ObservableObject {
         defer { isLoading = false }
         errorMessage = nil
         do {
+            if let credentials = pendingCredentials { setTimetableAccount(credentials.student) }
             try await bootstrap()
             try Task.checkCancellation()
             guard session == webLoginSessionID else { return }
             if selectedSemesterID.isEmpty {
                 selectedSemesterID = currentSemesterID
-            }
-            if let credentials = pendingCredentials {
-                setTimetableAccount(credentials.student)
             }
             await calibrateFromServer()
             try await loadTable()
@@ -392,7 +441,7 @@ final class AppState: ObservableObject {
             CookieVault.pinAndSave()
             if let credentials = pendingCredentials {
                 if pendingPasswordVerified {
-                    Keychain.savePassword(credentials.password, account: credentials.student)
+                    try Keychain.savePassword(credentials.password, account: credentials.student)
                 }
                 Preferences.studentID = credentials.student
                 pendingCredentials = nil
@@ -467,6 +516,10 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
+        sessionGeneration = UUID()
+        reloginTask?.cancel()
+        reloginTask = nil
+        webLoginSessionID = UUID()
         if isDemoMode {
             isLoggedIn = false
             return
@@ -484,6 +537,15 @@ final class AppState: ObservableObject {
         CookieVault.clear()
         HTTPCookieStorage.shared.cookies?.forEach { HTTPCookieStorage.shared.deleteCookie($0) }
         store.clear()
+        currentTableStore.clear()
+        currentExamStore.clear()
+        currentTable = nil
+        currentExams = []
+        currentExamsFetchedAt = nil
+        examContext = ""
+        gradeContext = ""
+        gradeSummary = nil
+        electricProject = nil
         examStore.clear()
         gradeStore.clear()
         planStore.clear()
@@ -510,6 +572,7 @@ final class AppState: ObservableObject {
         fetchedAt = nil
         weekOneMonday = AppState.fallStart
         isLoggedIn = false
+        publishWidgetSnapshot()
         Task { await rescheduleNotifications() }
         PhoneWatchBridge.shared.start(app: self)
         PhoneWatchBridge.shared.publish(force: true)
@@ -573,13 +636,15 @@ final class AppState: ObservableObject {
 
         let task = Task<Void, Error> {
             if await CASService.silentRenew() {
+                try Task.checkCancellation()
                 CookieVault.pinAndSave()
                 return
             }
             try await self.rawRelogin()
         }
         reloginTask = task
-        defer { reloginTask = nil }
+        let generation = sessionGeneration
+        defer { if generation == sessionGeneration { reloginTask = nil } }
         try await task.value
     }
 
@@ -591,6 +656,7 @@ final class AppState: ObservableObject {
         }
         do {
             try await cas.login(username: saved, password: password)
+            try Task.checkCancellation()
             CookieVault.pinAndSave()
         } catch {
             EamsService.lastError = "自动重登失败：\(error.localizedDescription)"
@@ -600,17 +666,28 @@ final class AppState: ObservableObject {
 
     /// 带返回值版本的 withRelogin
     private func withReloginValue<T>(_ operation: () async throws -> T) async throws -> T {
+        let generation = sessionGeneration
+        func checkedOperation() async throws -> T {
+            try Task.checkCancellation()
+            guard generation == sessionGeneration else { throw CancellationError() }
+            let result = try await operation()
+            try Task.checkCancellation()
+            guard generation == sessionGeneration else { throw CancellationError() }
+            return result
+        }
         do {
             do {
-                return try await operation()
+                return try await checkedOperation()
             } catch let error as AppError {
                 guard isRecoverable(error) else { throw error }
             } catch {
                 guard Net.isTransportProblem(error) else { throw error }
             }
+            guard generation == sessionGeneration else { throw CancellationError() }
             try await performRelogin()
-            return try await operation()
+            return try await checkedOperation()
         } catch {
+            guard generation == sessionGeneration else { throw CancellationError() }
             _ = contentErrorDescription(error)
             throw error
         }
@@ -618,6 +695,7 @@ final class AppState: ObservableObject {
 
     /// 重登失败或重试后仍过期时返回登录页，保留本地数据和已保存的账号。
     private func contentErrorDescription(_ error: Error) -> String? {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return nil }
         if let appError = error as? AppError {
             switch appError {
             case .sessionExpired, .reloginFailed:
@@ -652,10 +730,17 @@ final class AppState: ObservableObject {
         do {
             let fallback = selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID
             let target = semesterID ?? fallback
-            let previous = exams
+            let previous = examContext == target ? exams : []
             exams = try await withReloginValue { try await self.eams.fetchExams(semesterID: target) }
             examsFetchedAt = Date()
-            examStore.save(exams, at: examsFetchedAt ?? Date())
+            examContext = target
+            examStore.save(exams, at: examsFetchedAt ?? Date(), account: studentID, context: target)
+            if target == currentSemesterID {
+                currentExams = exams
+                currentExamsFetchedAt = examsFetchedAt
+                currentExamStore.save(exams, at: examsFetchedAt ?? Date(), account: studentID, context: target)
+                publishWidgetSnapshot()
+            }
             notifyIfNewExams(previous: previous, current: exams, semesterID: target)
             await rescheduleNotifications()
         } catch {
@@ -674,7 +759,8 @@ final class AppState: ObservableObject {
         gradeSummary = nil
         if let scope { gradeScope = scope }
         do {
-            let previous = grades
+            let targetContext = gradeScope == .all ? "all" : (semesterID ?? (selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID))
+            let previous = gradeContext == targetContext ? grades : []
             if gradeScope == .all {
                 grades = try await withReloginValue { try await self.eams.fetchAllGrades() }
             } else {
@@ -685,7 +771,8 @@ final class AppState: ObservableObject {
             notifyIfNewGrades(previous: previous, current: grades)
             gradeSummary = EamsService.lastGradeSummary
             gradesFetchedAt = Date()
-            gradeStore.save(grades, at: gradesFetchedAt ?? Date())
+            gradeContext = gradeScope == .all ? "all" : (semesterID ?? (selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID))
+            gradeStore.save(grades, at: gradesFetchedAt ?? Date(), account: studentID, context: gradeContext)
             if !AcademicRefreshSettings.reduced {
                 let scopeKey = gradeScope == .all ? "all" : (semesterID ?? (selectedSemesterID.isEmpty ? currentSemesterID : selectedSemesterID))
                 let key = "academic.gradeFingerprint.\(studentID).\(scopeKey)"
@@ -750,11 +837,13 @@ final class AppState: ObservableObject {
         guard !planLoading else { return }
         planLoading = true
         planError = nil
+        let generation = sessionGeneration
         do {
             plan = try await withReloginValue { try await self.eams.fetchPlan() }
             planFetchedAt = Date()
-            planStore.save(plan, at: planFetchedAt ?? Date())
+            planStore.save(plan, at: planFetchedAt ?? Date(), account: studentID, context: "plan")
             await refreshPlanCatalogIfNeeded()
+            guard generation == sessionGeneration else { throw CancellationError() }
             if !plan.sections.isEmpty { UserDefaults.standard.removeObject(forKey: pendingPlanRefreshKey) }
             if plan.sections.isEmpty {
                 planError = "没从页面里认出学分要求，可能是页面改了"
@@ -815,9 +904,9 @@ final class AppState: ObservableObject {
             return
         }
         await NotificationService.reschedule(
-            occurrences: classOn ? occurrences : [],
-            weekOneMonday: semesterStartMonday,
-            exams: examOn ? exams : [],
+            occurrences: classOn ? reminderOccurrences : [],
+            weekOneMonday: reminderMonday,
+            exams: examOn ? currentExams : [],
             classLeadMinutes: NotificationSettings.classLeadMinutes,
             examLeadMinutes: NotificationSettings.examLeadMinutes
         )
@@ -839,6 +928,7 @@ final class AppState: ObservableObject {
         }
 
         var attemptedGrades = false
+        if isStale(.plan) { await refreshPlan() }
         for kind in [CacheKind.timetable, .grades, .exams] {
             guard isLoggedIn, !Task.isCancelled, !AcademicRefreshSettings.reduced else { return }
             guard isStale(kind) else { continue }
@@ -1019,16 +1109,15 @@ final class AppState: ObservableObject {
         ElectricityHistoryStore.save(electricityHistory)
     }
 
-    /// 最近几天的记录，够画曲线用
-    func electricityTrend(days: Int = 7) -> [ElectricityRecord] {
-        Array(electricityHistory.suffix(days))
-    }
-
     /// 某天的用量 = 前一天的余额 - 当天的余额（前一天没记录就是 nil）
     func electricityUsage(on record: ElectricityRecord) -> Double? {
         guard let index = electricityHistory.firstIndex(of: record), index > 0 else { return nil }
         let previous = electricityHistory[index - 1]
-        guard previous.day != record.day else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        guard let first = formatter.date(from: previous.day), let last = formatter.date(from: record.day),
+              Calendar.current.dateComponents([.day], from: first, to: last).day == 1 else { return nil }
         return previous.balance - record.balance
     }
 
@@ -1044,10 +1133,12 @@ final class AppState: ObservableObject {
         ElectricityRefreshSettings.resetAttempts()
         dorm = selection
         Preferences.dorm = selection
+        electricityHistory = ElectricityHistoryStore.load()
         electricityBalance = nil
         electricityCheckedAt = nil
         Preferences.electricityBalance = nil
         Preferences.electricityCheckedAt = nil
+        publishWidgetSnapshot()
         await refreshElectricity()
     }
 
@@ -1057,11 +1148,13 @@ final class AppState: ObservableObject {
         BackgroundElectricityRefresh.clearExitReminder()
         dorm = nil
         Preferences.dorm = nil
+        electricityHistory = []
         electricityBalance = nil
         electricityCheckedAt = nil
         Preferences.electricityBalance = nil
         Preferences.electricityCheckedAt = nil
         electricityError = nil
+        publishWidgetSnapshot()
         scheduleBackgroundElectricityRefresh()
     }
 
@@ -1089,20 +1182,18 @@ final class AppState: ObservableObject {
 
     /// 借统一认证的登录态进 jfpay，顺手找到电费项目；会话过期会走一次自动重登
     private func withPay<T>(_ operation: (PayProject) async throws -> T) async throws -> T {
-        var value: T?
-        try await withRelogin {
+        try await withReloginValue {
             let project = try await self.electricProjectOrLoad()
-            value = try await operation(project)
+            return try await operation(project)
         }
-        guard let result = value else {
-            throw AppError.loginFailed(PayService.lastError ?? "缴费平台没返回数据")
-        }
-        return result
     }
 
     private func electricProjectOrLoad() async throws -> PayProject {
         if let project = electricProject { return project }
+        let generation = sessionGeneration
         let list = try await pay.electricProjects()
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
         guard let first = list.first else {
             throw AppError.loginFailed("缴费平台里没找到电费项目，可能学校还没开这个入口")
         }
@@ -1127,14 +1218,23 @@ final class AppState: ObservableObject {
     }
 
     private func bootstrap() async throws {
+        let generation = sessionGeneration
         let shell = try await eams.loadShell()
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
         studentTableID = shell.studentTableID
         classTableID = shell.classTableID
+        if currentSemesterID != shell.currentSemesterID {
+            currentExams = []
+            currentExamsFetchedAt = nil
+            if currentTable?.semesterID != shell.currentSemesterID { currentTable = nil }
+        }
         currentSemesterID = shell.currentSemesterID
-        semesterTagID = shell.semesterTagID
         projectID = shell.projectID
 
         let list = await eams.fetchSemesters(tagID: shell.semesterTagID, current: shell.currentSemesterID)
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
         semesters = list.isEmpty ? [Semester(id: shell.currentSemesterID, name: "当前学期")] : list
         if selectedSemesterID.isEmpty {
             selectedSemesterID = shell.currentSemesterID
@@ -1153,12 +1253,13 @@ final class AppState: ObservableObject {
             ids = value
         }
 
+        let generation = sessionGeneration
         let account = studentID
         let requestedKind = kind
         let parsed = try await eams.fetchTable(kind: requestedKind, ids: ids,
                                                semesterID: semester, projectID: projectID)
         try Task.checkCancellation()
-        guard account == studentID, requestedKind == kind,
+        guard generation == sessionGeneration, account == studentID, requestedKind == kind,
               semester == timetableSemesterID else { throw CancellationError() }
         officialOccurrences = parsed.occurrences
         unitCount = parsed.unitCount
@@ -1184,6 +1285,10 @@ final class AppState: ObservableObject {
             manualWeekAnchor: manualWeekAnchor
         )
         store.save(snapshot)
+        if isCurrentSemester && kind == .student {
+            currentTable = snapshot
+            currentTableStore.save(snapshot)
+        }
     }
 
     private var timetableSemesterID: String {
@@ -1201,6 +1306,16 @@ final class AppState: ObservableObject {
 
     private func setTimetableAccount(_ account: String) {
         guard account != studentID else { return }
+        exams = []; currentExams = []; grades = []; gradeSummary = nil
+        plan = .empty; planCatalog = PlanCatalog(updatedAt: .distantPast, courses: [])
+        examsFetchedAt = nil; gradesFetchedAt = nil; planFetchedAt = nil
+        currentExamsFetchedAt = nil
+        examContext = ""; gradeContext = ""; currentTable = nil
+        electricProject = nil
+        studentTableID = nil; classTableID = nil
+        semesters = []; currentSemesterID = ""
+        examStore.clear(); gradeStore.clear(); planStore.clear(); PlanCatalogStore.clear()
+        currentTableStore.clear(); currentExamStore.clear()
         studentID = account
         selectedSemesterID = currentSemesterID
         kind = .student
@@ -1238,6 +1353,7 @@ final class AppState: ObservableObject {
         try editStore.save(accounts)
         timetableEdits = edits
         applyTimetable(editedTimetable(edits))
+        persist()
         publishWidgetSnapshot()
         if isCurrentSemester { Task { await rescheduleNotifications() } }
     }
@@ -1252,7 +1368,7 @@ final class AppState: ObservableObject {
             }
             errorMessage = contentErrorDescription(appError)
         } else {
-            errorMessage = error.localizedDescription
+            errorMessage = contentErrorDescription(error)
         }
     }
 }

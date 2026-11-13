@@ -49,6 +49,7 @@ struct PayService {
         config.httpShouldSetCookies = true
         config.timeoutIntervalForRequest = 20
         let session = URLSession(configuration: config, delegate: tracer, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(from: url)
         let host = response.url?.host ?? ""
         let html = String(data: data, encoding: .utf8) ?? ""

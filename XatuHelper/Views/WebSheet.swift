@@ -7,8 +7,6 @@ struct WebSheet: View {
     let urlString: String
     /// 换票落地后要整页跳到的地址（用真正的 navigation，不是改 hash）
     var followUpURL: String? = nil
-    /// 进页面前用 document.cookie 写进去的键值（绕开 path 不匹配）
-    var cookies: [String: String] = [:]
     var showsCloseButton = true
     var showsSidebarToggle = false
     var onClose: (() -> Void)? = nil
@@ -169,6 +167,7 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.stopLocation()
         uiView.navigationDelegate = nil
         uiView.uiDelegate = nil
         uiView.stopLoading()
@@ -209,6 +208,11 @@ private struct WebPage: UIViewRepresentable {
             _hasRedirectLoop = hasRedirectLoop
             _diagnosticText = diagnosticText
             self.location = LocationBridge(allowsCustomLocation: allowsCustomLocation)
+        }
+
+        func stopLocation() {
+            location.stopAllWatching()
+            watchIDs.removeAll()
         }
 
         func userContentController(_ userContentController: WKUserContentController,
@@ -297,6 +301,7 @@ private struct WebPage: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            stopLocation()
             isLoading = true
         }
 

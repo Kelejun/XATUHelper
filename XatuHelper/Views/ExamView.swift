@@ -164,7 +164,7 @@ struct ExamView: View {
             }
         }
         .task {
-            if app.isStale(.exams) { await app.refreshExams(semesterID: effectiveSemesterID) }
+            if !app.hasExamContext(effectiveSemesterID) || app.isStale(.exams) { await app.refreshExams(semesterID: effectiveSemesterID) }
             if !app.isDemoMode && !NotificationSettings.hasPromptedExam {
                 showNotificationSetup = true
             }

@@ -27,11 +27,11 @@ struct SnapshotProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        completion(TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? preview))
+        completion(TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? (context.isPreview ? preview : .empty)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
-        let entry = TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? preview)
+        let entry = TodayEntry(date: Date(), snapshot: (WidgetStore.read() ?? .empty).resolved(at: Date()))
         let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(refresh)))
     }
@@ -86,19 +86,29 @@ struct CourseProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: CourseWidgetConfigIntent, in context: Context) async -> CourseEntry {
         CourseEntry(
             date: Date(),
-            snapshot: WidgetStore.read() ?? PreviewData.snapshot,
+            snapshot: (WidgetStore.read() ?? (context.isPreview ? PreviewData.snapshot : .empty)).resolved(at: Date()),
             showTomorrow: configuration.showTomorrow
         )
     }
 
     func timeline(for configuration: CourseWidgetConfigIntent, in context: Context) async -> Timeline<CourseEntry> {
-        let entry = CourseEntry(
-            date: Date(),
-            snapshot: WidgetStore.read() ?? PreviewData.snapshot,
-            showTomorrow: configuration.showTomorrow
-        )
-        let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
-        return Timeline(entries: [entry], policy: .after(refresh))
+        let now = Date()
+        let snapshot = WidgetStore.read() ?? .empty
+        var dates = (0...24).map { now.addingTimeInterval(Double($0) * 3600) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        for offset in 0...1 {
+            let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now))!
+            dates.append(day)
+            for course in snapshot.resolved(at: day).courses {
+                dates.append(day.addingTimeInterval(Double(course.startMinutes * 60)))
+                dates.append(day.addingTimeInterval(Double(course.endMinutes * 60)))
+            }
+        }
+        let entries = Set(dates.filter { $0 >= now }).sorted().map { date in
+            CourseEntry(date: date, snapshot: snapshot.resolved(at: date), showTomorrow: configuration.showTomorrow)
+        }
+        return Timeline(entries: entries, policy: .after(now.addingTimeInterval(12 * 3600)))
     }
 }
 
@@ -165,7 +175,7 @@ struct CourseWidgetView: View {
         let calendar = Calendar.current
         let minutes = calendar.component(.hour, from: entry.date) * 60
             + calendar.component(.minute, from: entry.date)
-        return entry.snapshot.courses.filter { $0.endMinutes >= minutes }
+        return entry.snapshot.courses.filter { $0.endMinutes > minutes }
     }
 
     /// 开关打开 && 今天已经没课了，才切到明天
@@ -343,13 +353,13 @@ struct CourseWidgetView: View {
 
     private static func color(for course: WidgetSnapshot.Course) -> Color {
         if let index = course.colorIndex {
-            return palette[index % palette.count]
+            return palette[abs(index % palette.count)]
         }
         var hash = 5381
         for scalar in course.name.unicodeScalars {
             hash = (hash &* 33) &+ Int(scalar.value)
         }
-        return palette[abs(hash) % palette.count]
+        return palette[abs(hash % palette.count)]
     }
 
     private var header: some View {

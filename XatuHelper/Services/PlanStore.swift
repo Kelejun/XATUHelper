@@ -5,26 +5,17 @@ struct PlanStore {
     struct Payload: Codable {
         var plan: PlanSnapshot
         var fetchedAt: Date
+        var account: String?
+        var context: String?
     }
 
-    private var fileURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return dir.appendingPathComponent("plan.json")
+    private let file = LocalJSONFile<Payload>(name: "plan.json")
+
+    func load() -> Payload? { file.load() }
+
+    func save(_ plan: PlanSnapshot, at date: Date = Date(), account: String, context: String) {
+        file.save(Payload(plan: plan, fetchedAt: date, account: account, context: context))
     }
 
-    func load() -> Payload? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(Payload.self, from: data)
-    }
-
-    func save(_ plan: PlanSnapshot, at date: Date = Date()) {
-        let dir = fileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(Payload(plan: plan, fetchedAt: date)) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
-
-    func clear() {
-        try? FileManager.default.removeItem(at: fileURL)
-    }
+    func clear() { file.clear() }
 }

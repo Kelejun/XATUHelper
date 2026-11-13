@@ -5,26 +5,17 @@ struct GradeStore {
     struct Payload: Codable {
         var grades: [GradeRecord]
         var fetchedAt: Date
+        var account: String?
+        var context: String?
     }
 
-    private var fileURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return dir.appendingPathComponent("grades.json")
+    private let file = LocalJSONFile<Payload>(name: "grades.json")
+
+    func load() -> Payload? { file.load() }
+
+    func save(_ grades: [GradeRecord], at date: Date = Date(), account: String, context: String) {
+        file.save(Payload(grades: grades, fetchedAt: date, account: account, context: context))
     }
 
-    func load() -> Payload? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(Payload.self, from: data)
-    }
-
-    func save(_ grades: [GradeRecord], at date: Date = Date()) {
-        let dir = fileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(Payload(grades: grades, fetchedAt: date)) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
-
-    func clear() {
-        try? FileManager.default.removeItem(at: fileURL)
-    }
+    func clear() { file.clear() }
 }

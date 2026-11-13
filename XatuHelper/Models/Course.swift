@@ -26,33 +26,8 @@ struct CourseOccurrence: Identifiable, Codable, Hashable {
         return labels[max(0, min(6, day - 1))]
     }
 
-    var weeksText: String {
-        guard !weeks.isEmpty else { return "" }
-        let sorted = weeks.sorted()
-        var parts: [String] = []
-        var start = sorted[0]
-        var previous = sorted[0]
-
-        for value in sorted.dropFirst() {
-            if value == previous + 1 {
-                previous = value
-                continue
-            }
-            parts.append(start == previous ? "\(start)" : "\(start)-\(previous)")
-            start = value
-            previous = value
-        }
-        parts.append(start == previous ? "\(start)" : "\(start)-\(previous)")
-        return "第" + parts.joined(separator: ",") + "周"
-    }
-
-    var shortRoom: String {
-        var s = room
-        if let r = s.range(of: #"\([^()]*\)$"#, options: .regularExpression) {
-            s = String(s[s.startIndex..<r.lowerBound])
-        }
-        return s
-    }
+    var weeksText: String { CourseText.weeks(weeks) }
+    var shortRoom: String { CourseText.room(room) }
 
     /// 第几节到第几节，单节就直接显示节次
     var periodText: String {
@@ -88,28 +63,30 @@ struct CourseBlock: Identifiable, Hashable {
         startPeriod == endPeriod ? "第 \(startPeriod) 节" : "第 \(startPeriod)-\(endPeriod) 节"
     }
 
-    var weeksText: String {
-        guard !weeks.isEmpty else { return "" }
-        let sorted = weeks.sorted()
+    var weeksText: String { CourseText.weeks(weeks) }
+    var shortRoom: String { CourseText.room(room) }
+}
+
+private enum CourseText {
+    static func weeks(_ weeks: [Int]) -> String {
+        let values = Set(weeks).sorted()
+        guard let first = values.first else { return "" }
+        var start = first
+        var end = first
         var parts: [String] = []
-        var start = sorted[0]
-        var previous = sorted[0]
-        for value in sorted.dropFirst() {
-            if value == previous + 1 { previous = value; continue }
-            parts.append(start == previous ? "\(start)" : "\(start)-\(previous)")
+        for value in values.dropFirst() {
+            if value == end + 1 { end = value; continue }
+            parts.append(start == end ? "\(start)" : "\(start)-\(end)")
             start = value
-            previous = value
+            end = value
         }
-        parts.append(start == previous ? "\(start)" : "\(start)-\(previous)")
+        parts.append(start == end ? "\(start)" : "\(start)-\(end)")
         return "第" + parts.joined(separator: ",") + "周"
     }
 
-    var shortRoom: String {
-        var s = room
-        if let r = s.range(of: #"\([^()]*\)$"#, options: .regularExpression) {
-            s = String(s[s.startIndex..<r.lowerBound])
-        }
-        return s
+    static func room(_ room: String) -> String {
+        guard let range = room.range(of: #"\([^()]*\)$"#, options: .regularExpression) else { return room }
+        return String(room[..<range.lowerBound])
     }
 }
 
@@ -212,11 +189,6 @@ struct TimetableSnapshot: Codable {
     var currentSemesterID: String?
     var kind: String?
     var manualWeekAnchor: WeekAnchor? = nil
-}
-
-/// 登录期信息，用于刷新时复用
-struct LoginProfile: Codable {
-    var studentID: String
 }
 
 extension String {

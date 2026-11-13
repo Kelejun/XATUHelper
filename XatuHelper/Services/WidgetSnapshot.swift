@@ -9,6 +9,7 @@ struct WidgetSnapshot: Codable {
         var startMinutes: Int
         var endMinutes: Int
         var colorIndex: Int? = nil
+        var day: Date? = nil
     }
 
     struct Break: Codable, Hashable {
@@ -29,6 +30,7 @@ struct WidgetSnapshot: Codable {
     var courses: [Course]
     var tomorrowCourses: [Course]? = nil
     var tomorrowWeekday: Int? = nil
+    var datedCourses: [Course]? = nil
     var balance: Double?
     var balanceUpdatedAt: Date?
     var roomName: String?
@@ -48,6 +50,30 @@ struct WidgetSnapshot: Codable {
         nextExam: nil,
         loggedIn: false
     )
+
+    func resolved(at date: Date) -> Self {
+        var value = self
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = calendar.startOfDay(for: date)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        let elapsed = calendar.dateComponents([.day], from: calendar.startOfDay(for: generatedAt), to: today).day ?? 0
+        if let datedCourses {
+            value.courses = datedCourses.filter { $0.day.map { calendar.isDate($0, inSameDayAs: today) } ?? false }
+            value.tomorrowCourses = datedCourses.filter { $0.day.map { calendar.isDate($0, inSameDayAs: tomorrow) } ?? false }
+        } else if elapsed != 0 {
+            value.courses = elapsed == 1 ? (tomorrowCourses ?? []) : []
+            value.tomorrowCourses = []
+        }
+        value.weekday = (calendar.component(.weekday, from: today) + 5) % 7 + 1
+        value.tomorrowWeekday = (calendar.component(.weekday, from: tomorrow) + 5) % 7 + 1
+        value.week += (elapsed + weekday - 1) / 7
+        if let item = upcomingBreak {
+            let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: item.date)).day ?? 0
+            value.upcomingBreak = days >= 0 ? Break(title: item.title, date: item.date, days: days) : nil
+        }
+        return value
+    }
 
     var weekdayLabel: String { Self.weekdayLabel(weekday) }
 

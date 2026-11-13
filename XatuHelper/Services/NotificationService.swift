@@ -100,7 +100,7 @@ enum NotificationService {
         now: Date = Date()
     ) async {
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: pendingIdentifiers())
+        center.removePendingNotificationRequests(withIdentifiers: await pendingIdentifiers())
 
         var planned: [(Date, UNNotificationRequest)] = []
         planned += classReminders(
@@ -118,7 +118,7 @@ enum NotificationService {
 
     /// 清掉本 App 排的所有课/考试提醒（退出登录时用）
     static func clearAll() async {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: pendingIdentifiers())
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: await pendingIdentifiers())
     }
 
     // MARK: - 上课提醒
@@ -255,17 +255,10 @@ enum NotificationService {
         return UNNotificationRequest(identifier: id, content: content, trigger: trigger)
     }
 
-    private static func pendingIdentifiers() -> [String] {
-        var result: [String] = []
-        let semaphore = DispatchSemaphore(value: 0)
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            result = requests
-                .map(\.identifier)
-                .filter { id in prefixes.contains { id.hasPrefix($0) } }
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return result
+    private static func pendingIdentifiers() async -> [String] {
+        await UNUserNotificationCenter.current().pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { id in prefixes.contains { id.hasPrefix($0) } }
     }
 
     private static func day(from key: String) -> Date? {

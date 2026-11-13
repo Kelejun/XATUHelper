@@ -134,6 +134,11 @@ struct CASService {
 
     /// 用学号密码登录，成功后 cookie 落在共享存储里，jwgl2018 那边就能用了。
     func login(username: String, password: String) async throws {
+        for cookie in HTTPCookieStorage.shared.cookies ?? []
+        where cookie.domain == "xatu.edu.cn" || cookie.domain.hasSuffix(".xatu.edu.cn") {
+            HTTPCookieStorage.shared.deleteCookie(cookie)
+        }
+        CookieVault.clear()
         guard var components = URLComponents(string: Self.loginPage) else { throw AppError.badURL }
         components.queryItems = [URLQueryItem(name: "service", value: Self.service)]
         guard let url = components.url else { throw AppError.badURL }

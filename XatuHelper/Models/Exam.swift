@@ -20,8 +20,7 @@ struct ExamRecord: Identifiable, Hashable, Codable {
     }
 
     var timeWithoutDate: String {
-        guard let date = ExamRecord.dateFormatter.firstMatch(in: time),
-              let range = time.range(of: date) else { return time }
+        guard let range = time.range(of: #"(?:\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}|(?:\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日)"#, options: .regularExpression) else { return time }
         return time[range.upperBound...].trimmingCharacters(in: .whitespaces)
     }
 

@@ -103,11 +103,11 @@ extension AppState {
             return empty
         }
         let calendar = WatchSnapshot.campusCalendar
-        let base = calendar.startOfDay(for: semesterStartMonday)
+        let base = calendar.startOfDay(for: reminderMonday)
         var lessons: [WatchSnapshot.Lesson] = []
-        let weeks = Set(occurrences.flatMap(\.weeks)).sorted()
+        let weeks = Set(reminderOccurrences.flatMap(\.weeks)).sorted()
         for week in weeks where week > 0 && week <= 60 {
-            for block in occurrences(in: week).courseBlocks() where !block.isPlaceholder && !block.isRemote {
+            for block in reminderOccurrences.filter({ $0.weeks.contains(week) }).courseBlocks() where !block.isPlaceholder && !block.isRemote {
                 guard (1...7).contains(block.day),
                       let day = calendar.date(byAdding: .day, value: (week - 1) * 7 + block.day - 1, to: base),
                       let start = calendar.date(byAdding: .minute, value: PeriodSchedule.startMinutes(of: block), to: day),
@@ -117,7 +117,7 @@ extension AppState {
                                      start: start, end: end, colorIndex: CoursePalette.index(forCourseKey: block.courseKey)))
             }
         }
-        let datedExams: [WatchSnapshot.Exam] = exams.compactMap { exam in
+        let datedExams: [WatchSnapshot.Exam] = currentExams.compactMap { exam in
             guard let day = WatchSnapshot.parseDay(exam.dateKey) else { return nil }
             let normalized = exam.timeWithoutDate.replacingOccurrences(of: "：", with: ":")
             let matches = normalized.regexGroups(#"(\d{1,2}):(\d{2})"#)

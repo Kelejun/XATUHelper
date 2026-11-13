@@ -58,7 +58,7 @@ struct HomeView: View {
 
     private var todayBlocks: [CourseBlock] {
         guard app.isCurrentSemester else { return [] }
-        return app.occurrences(in: app.week(of: baseDate))
+        return app.occurrences(in: TimetableDates.week(of: baseDate, monday: app.semesterStartMonday))
             .filter { $0.day == todayWeekday }
             .courseBlocks()
             .sorted { $0.startPeriod < $1.startPeriod }
@@ -90,7 +90,7 @@ struct HomeView: View {
     private var tomorrowBlocks: [CourseBlock] {
         guard app.isCurrentSemester, let nextDay else { return [] }
         let weekday = isoWeekday(of: nextDay)
-        let week = app.week(of: nextDay)
+        let week = TimetableDates.week(of: nextDay, monday: app.semesterStartMonday)
         return app.occurrences(in: week)
             .filter { $0.day == weekday }
             .courseBlocks()
@@ -473,7 +473,7 @@ struct HomeView: View {
     }
 
     private var nextExam: ExamRecord? {
-        Self.examCandidates(app.exams, from: now).first
+        Self.examCandidates(app.isDemoMode ? app.exams : app.currentExams, from: now).first
     }
 
     private func daysUntil(_ exam: ExamRecord) -> Int? {

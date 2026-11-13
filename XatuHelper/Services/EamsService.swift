@@ -248,6 +248,15 @@ struct EamsService {
         if finalHost.contains("authserver") || table.contains("id=\"pwdEncryptSalt\"") {
             throw AppError.sessionExpired
         }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.network("课表服务器返回异常状态")
+        }
+        if table.contains("loginExt.action") || table.contains("name=\"password\"") {
+            throw AppError.sessionExpired
+        }
+        guard table.range(of: #"var\s+unitCount\s*=\s*\d+"#, options: .regularExpression) != nil else {
+            throw AppError.parseFailed
+        }
         // 历史学期可能真的没课，别把"空"当成"掉登录"
         let parsed = TimetableParser.parse(table)
         // 线上教室和占位课会被剔掉，所以不能用 occurrences 判断有没有拿到数据
@@ -813,7 +822,7 @@ struct EamsService {
         guard courseColumn != nil || scoreColumn != nil else { return [] }
 
         var result: [GradeRecord] = []
-        for (offset, row) in table[(headerIndex + 1)...].enumerated() {
+        for row in table[(headerIndex + 1)...] {
             guard row.count > 1 else { continue }
             func cell(_ index: Int?) -> String {
                 guard let index, index < row.count else { return "" }
@@ -828,12 +837,12 @@ struct EamsService {
             let components = componentColumns.compactMap { item -> GradeComponent? in
                 let value = cell(item.index)
                 guard !value.isEmpty else { return nil }
-                return GradeComponent(id: "\(offset)-\(item.name)", name: item.name, score: value)
+                return GradeComponent(id: item.name, name: item.name, score: value)
             }
 
             result.append(
                 GradeRecord(
-                    id: "\(offset)-\(course)-\(score)",
+                    id: "\(cell(codeColumn))|\(cell(termColumn))|\(course)",
                     course: course,
                     code: cell(codeColumn),
                     credit: cell(creditColumn),

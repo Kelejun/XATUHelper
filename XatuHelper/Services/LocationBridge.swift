@@ -64,6 +64,15 @@ final class LocationBridge: NSObject, CLLocationManagerDelegate {
         watchTimers[id] = nil
     }
 
+    func stopAllWatching() {
+        watchTimers.values.forEach { $0.invalidate() }
+        watchTimers.removeAll()
+        pending.removeAll()
+        manager.stopUpdatingLocation()
+    }
+
+    deinit { watchTimers.values.forEach { $0.invalidate() } }
+
     enum BridgeError: LocalizedError {
         case denied
         case missingCustomLocation

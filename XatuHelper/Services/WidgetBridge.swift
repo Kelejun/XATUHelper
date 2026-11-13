@@ -6,17 +6,20 @@ extension AppState {
     func publishWidgetSnapshot() {
         guard !isDemoMode else { return }
         PhoneWatchBridge.shared.start(app: self)
-        let calendar = Calendar.current
+        let calendar = WatchSnapshot.campusCalendar
         let today = calendar.startOfDay(for: Date())
         // Calendar 里周日是 1，转成周一=1
         let weekdayIndex = (calendar.component(.weekday, from: today) + 5) % 7 + 1
-        let week = currentWeek
+        let week = TimetableDates.week(of: today, monday: reminderMonday)
+        func blocks(on date: Date) -> [CourseBlock] {
+            let week = TimetableDates.week(of: date, monday: reminderMonday)
+            let day = (calendar.component(.weekday, from: date) + 5) % 7 + 1
+            return reminderOccurrences.filter { $0.weeks.contains(week) && $0.day == day }.courseBlocks()
+        }
 
-        let blocks = occurrences(in: week)
-            .courseBlocks()
-            .filter { $0.day == weekdayIndex }
+        let todayBlocks = blocks(on: today)
 
-        let courses = blocks.map { block in
+        let courses = todayBlocks.map { block in
             WidgetSnapshot.Course(
                 id: block.id,
                 name: block.name,
@@ -29,9 +32,7 @@ extension AppState {
 
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
         let tomorrowWeekday = (calendar.component(.weekday, from: tomorrow) + 5) % 7 + 1
-        let tomorrowWeek = self.week(of: tomorrow)
-        let tomorrowCourses = occurrences(in: tomorrowWeek)
-            .courseBlocks()
+        let tomorrowCourses = blocks(on: tomorrow)
             .filter { $0.day == tomorrowWeekday && !$0.isPlaceholder && !$0.isRemote }
             .map { block in
                 WidgetSnapshot.Course(
@@ -45,7 +46,7 @@ extension AppState {
             }
             .sorted { $0.startMinutes < $1.startMinutes }
 
-        let snapshot = WidgetSnapshot(
+        var snapshot = WidgetSnapshot(
             generatedAt: Date(),
             week: week,
             weekday: weekdayIndex,
@@ -60,6 +61,15 @@ extension AppState {
             loggedIn: isLoggedIn
         )
 
+        snapshot.datedCourses = (0..<14).flatMap { offset -> [WidgetSnapshot.Course] in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { return [] }
+            return blocks(on: date).map { block in
+                WidgetSnapshot.Course(id: "\(offset)-\(block.id)", name: block.name, room: block.shortRoom,
+                    startMinutes: PeriodSchedule.startMinutes(of: block), endMinutes: PeriodSchedule.endMinutes(of: block),
+                    colorIndex: CoursePalette.index(forCourseKey: block.courseKey), day: date)
+            }.sorted { $0.startMinutes < $1.startMinutes }
+        }
+        if !isLoggedIn { snapshot = .empty }
         WidgetStore.write(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -74,8 +84,7 @@ extension AppState {
             if let start = formatter.date(from: span.start) {
                 candidates.append(("\(span.label)开学", start))
             }
-            if index < info.semesters.count - 1,
-               let end = formatter.date(from: span.end),
+            if let end = formatter.date(from: span.end),
                let dayAfter = Calendar.current.date(byAdding: .day, value: 1, to: end) {
                 candidates.append((index == 0 ? "放寒假" : "放暑假", dayAfter))
             }
@@ -93,7 +102,7 @@ extension AppState {
         let today = Calendar.current.startOfDay(for: Date())
         let formatter = Self.dayKeyFormatter
 
-        let upcoming = exams
+        let upcoming = currentExams
             .compactMap { exam -> (ExamRecord, Date)? in
                 guard let date = formatter.date(from: exam.dateKey), date >= today else { return nil }
                 return (exam, date)

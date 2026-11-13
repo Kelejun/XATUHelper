@@ -4,18 +4,23 @@ import Security
 enum Keychain {
     private static let service = "com.cell.XatuHelper.credential"
 
-    static func savePassword(_ password: String, account: String) {
+    static func savePassword(_ password: String, account: String) throws {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        SecItemDelete(base as CFDictionary)
-
-        var attributes = base
-        attributes[kSecValueData as String] = Data(password.utf8)
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(attributes as CFDictionary, nil)
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(password.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        var status = SecItemUpdate(base as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(base.merging(attributes) { _, new in new } as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
     }
 
     static func loadPassword(account: String) -> String? {
