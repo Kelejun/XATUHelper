@@ -126,7 +126,7 @@ struct CourseWidget: Widget {
         }
         .configurationDisplayName("课程")
         .description("查看下一节课与今日安排，可设置课后显示明天的课程。")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }
 
@@ -138,7 +138,7 @@ struct ElectricityWidget: Widget {
         }
         .configurationDisplayName("电费")
         .description("宿舍还剩多少电费。")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -150,7 +150,7 @@ struct BreakWidget: Widget {
         }
         .configurationDisplayName("放假倒计时")
         .description("离放假还有多少天。")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -163,6 +163,8 @@ struct CourseWidgetView: View {
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
+        } else if family == .accessoryRectangular {
+            lockScreenLayout
         } else if family == .systemSmall {
             smallLayout
         } else {
@@ -190,6 +192,35 @@ struct CourseWidgetView: View {
     private var emptyText: String {
         if showingTomorrow { return "明天没课" }
         return entry.snapshot.courses.isEmpty ? "今天没课" : "今天的课上完了"
+    }
+
+    private var lockScreenLayout: some View {
+        Group {
+            if let course = visibleCourses.first {
+                LockScreenRows(
+                    icon: "location.fill",
+                    heading: course.room.isEmpty ? "教室待定" : course.room,
+                    title: course.name,
+                    subtitle: lockScreenTime(course),
+                    allowsTwoLineTitle: true
+                )
+            } else {
+                LockScreenRows(icon: "book.closed.fill", heading: "课程",
+                               title: emptyText, subtitle: headerText)
+            }
+        }
+        .privacySensitive()
+    }
+
+    private func lockScreenTime(_ course: WidgetSnapshot.Course) -> String {
+        let calendar = Calendar.current
+        let minutes = calendar.component(.hour, from: entry.date) * 60
+            + calendar.component(.minute, from: entry.date)
+        if !showingTomorrow && minutes >= course.startMinutes {
+            return "\(WidgetSnapshot.clock(course.endMinutes)) 下课"
+        }
+        let prefix = showingTomorrow ? "明天 " : ""
+        return "\(prefix)\(WidgetSnapshot.clock(course.startMinutes))–\(WidgetSnapshot.clock(course.endMinutes))"
     }
 
     private var smallLayout: some View {
@@ -391,6 +422,7 @@ struct CourseWidgetView: View {
 }
 
 struct ElectricityWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: TodayEntry
 
     private var isLow: Bool { (entry.snapshot.balance ?? .infinity) < 10 }
@@ -399,6 +431,16 @@ struct ElectricityWidgetView: View {
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
+        } else if family == .accessoryRectangular {
+            LockScreenRows(icon: "bolt.fill", heading: isLow ? "宿舍电量偏低" : "宿舍电量",
+                           title: entry.snapshot.balance.map { String(format: "%.2f 度", $0) } ?? "待查询",
+                           subtitle: lockScreenDetail, titleFont: .system(size: 22, weight: .bold, design: .rounded))
+                .privacySensitive()
+        } else if family == .accessoryCircular {
+            LockScreenCompactValue(icon: "bolt.fill",
+                                   value: entry.snapshot.balance.map { String(format: "%.2f", $0) } ?? "—",
+                                   caption: entry.snapshot.balance == nil ? "待查询" : isLow ? "度 · 偏低" : "度")
+                .privacySensitive()
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
@@ -470,14 +512,34 @@ struct ElectricityWidgetView: View {
             ? "HH:mm 更新" : "M/d HH:mm 更新"
         return formatter.string(from: updated)
     }
+
+    private var lockScreenDetail: String {
+        guard let room = entry.snapshot.roomName, !room.isEmpty else { return updateText }
+        return "\(room) · \(updateText)"
+    }
 }
 
 struct BreakWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: TodayEntry
 
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
+        } else if family == .accessoryRectangular {
+            if let item = entry.snapshot.upcomingBreak {
+                LockScreenRows(icon: "sun.horizon.fill", heading: item.title,
+                               title: item.days <= 0 ? "今天" : "\(item.days) 天",
+                               subtitle: item.date.formatted(.dateTime.month().day().weekday(.abbreviated)),
+                               titleFont: .system(size: 22, weight: .bold, design: .rounded))
+            } else {
+                LockScreenRows(icon: "calendar", heading: "假期倒计时",
+                               title: "期待下一次放假", subtitle: "打开 App 更新校历")
+            }
+        } else if family == .accessoryCircular {
+            LockScreenCompactValue(icon: "sun.horizon.fill",
+                                   value: entry.snapshot.upcomingBreak.map { $0.days <= 0 ? "今天" : "\($0.days)天" } ?? "—",
+                                   caption: entry.snapshot.upcomingBreak?.title ?? "待更新")
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
@@ -533,39 +595,133 @@ struct BreakWidgetView: View {
 }
 
 struct EmptyHint: View {
+    @Environment(\.widgetFamily) private var family
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 5) {
-                Image(systemName: "square.grid.2x2.fill").foregroundStyle(.blue)
-                Text("XATune").foregroundStyle(.secondary)
-            }
-            .font(.system(size: 11, weight: .medium))
-            Spacer(minLength: 10)
-            Text("校园日常\n一眼掌握")
-                .font(.system(size: 21, weight: .semibold))
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 10)
-            Label("打开 App 登录", systemImage: "arrow.up.right")
+        if family == .accessoryRectangular {
+            LockScreenRows(icon: "lock.fill", heading: "XATune",
+                           title: "打开 App 登录", subtitle: "同步校园数据")
+        } else if family == .accessoryCircular {
+            LockScreenCompactValue(icon: "lock.fill", value: "登录", caption: "XATune")
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 5) {
+                    Image(systemName: "square.grid.2x2.fill").foregroundStyle(.blue)
+                    Text("XATune").foregroundStyle(.secondary)
+                }
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+                Spacer(minLength: 10)
+                Text("校园日常\n一眼掌握")
+                    .font(.system(size: 21, weight: .semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 10)
+                Label("打开 App 登录", systemImage: "arrow.up.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct LockScreenRows: View {
+    let icon: String
+    let heading: String
+    let title: String
+    let subtitle: String
+    var titleFont: Font = .headline
+    var allowsTwoLineTitle = false
+
+    var body: some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .frame(width: 5)
+                .widgetAccentable()
+                .accessibilityHidden(true)
+            ViewThatFits(in: .vertical) {
+                if allowsTwoLineTitle {
+                    rows(titleLines: 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                rows(titleLines: 1)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func rows(titleLines: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(heading, systemImage: icon)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .widgetAccentable()
+                .layoutPriority(1)
+            Text(title)
+                .font(titleFont)
+                .monospacedDigit()
+                .lineLimit(titleLines)
+                .minimumScaleFactor(0.7)
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .layoutPriority(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LockScreenCompactValue: View {
+    let icon: String
+    let value: String
+    let caption: String
+
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 1) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                    .widgetAccentable()
+                    .accessibilityHidden(true)
+                Text(value)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(caption)
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .padding(4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
 /// 使用系统语义底色，浅色与深色模式共享轻量的主题渐变。
 struct WidgetBackdrop: View {
+    @Environment(\.widgetFamily) private var family
     let tint: Color
 
     var body: some View {
-        ZStack {
-            Color(uiColor: .systemBackground)
-            LinearGradient(
-                colors: [tint.opacity(0.13), tint.opacity(0.02), .clear],
-                startPoint: .topTrailing,
-                endPoint: .bottomLeading
-            )
+        if family == .accessoryRectangular || family == .accessoryCircular {
+            Color.clear
+        } else {
+            ZStack {
+                Color(uiColor: .systemBackground)
+                LinearGradient(
+                    colors: [tint.opacity(0.13), tint.opacity(0.02), .clear],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
+                )
+            }
         }
     }
 }
