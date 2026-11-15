@@ -162,7 +162,7 @@ struct CourseWidgetView: View {
 
     var body: some View {
         if !entry.snapshot.loggedIn {
-            EmptyHint()
+            EmptyHint(showsLeadingRule: true)
         } else if family == .accessoryRectangular {
             lockScreenLayout
         } else if family == .systemSmall {
@@ -202,11 +202,12 @@ struct CourseWidgetView: View {
                     heading: course.room.isEmpty ? "教室待定" : course.room,
                     title: course.name,
                     subtitle: lockScreenTime(course),
+                    showsLeadingRule: true,
                     allowsTwoLineTitle: true
                 )
             } else {
                 LockScreenRows(icon: "book.closed.fill", heading: "课程",
-                               title: emptyText, subtitle: headerText)
+                               title: emptyText, subtitle: headerText, showsLeadingRule: true)
             }
         }
         .privacySensitive()
@@ -596,11 +597,12 @@ struct BreakWidgetView: View {
 
 struct EmptyHint: View {
     @Environment(\.widgetFamily) private var family
+    var showsLeadingRule = false
 
     var body: some View {
         if family == .accessoryRectangular {
             LockScreenRows(icon: "lock.fill", heading: "XATune",
-                           title: "打开 App 登录", subtitle: "同步校园数据")
+                           title: "打开 App 登录", subtitle: "同步校园数据", showsLeadingRule: showsLeadingRule)
         } else if family == .accessoryCircular {
             LockScreenCompactValue(icon: "lock.fill", value: "登录", caption: "XATune")
         } else {
@@ -631,14 +633,17 @@ private struct LockScreenRows: View {
     let title: String
     let subtitle: String
     var titleFont: Font = .headline
+    var showsLeadingRule = false
     var allowsTwoLineTitle = false
 
     var body: some View {
         HStack(spacing: 7) {
-            RoundedRectangle(cornerRadius: 2)
-                .frame(width: 5)
-                .widgetAccentable()
-                .accessibilityHidden(true)
+            if showsLeadingRule {
+                RoundedRectangle(cornerRadius: 2)
+                    .frame(width: 5)
+                    .widgetAccentable()
+                    .accessibilityHidden(true)
+            }
             ViewThatFits(in: .vertical) {
                 if allowsTwoLineTitle {
                     rows(titleLines: 2)
@@ -653,12 +658,16 @@ private struct LockScreenRows: View {
 
     private func rows(titleLines: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Label(heading, systemImage: icon)
-                .font(.caption.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .widgetAccentable()
-                .layoutPriority(1)
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .accessibilityHidden(true)
+                Text(heading)
+            }
+            .font(.caption.weight(.bold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .widgetAccentable()
+            .layoutPriority(1)
             Text(title)
                 .font(titleFont)
                 .monospacedDigit()
