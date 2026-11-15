@@ -12,6 +12,7 @@ struct WebSheet: View {
     var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var app: AppState
     @State private var isLoading = true
     @State private var errorText: String?
     @State private var paymentError: String?
@@ -48,7 +49,7 @@ struct WebSheet: View {
                         }
                     }
                 } else if let url = Self.makeURL(urlString) {
-                    WebPage(url: url, isLoading: $isLoading, errorText: $errorText,
+                    WebPage(app: app, url: url, isLoading: $isLoading, errorText: $errorText,
                             paymentError: $paymentError, followUpURL: followUpURL,
                             usesFreshSession: usesFreshSession, hasRedirectLoop: $hasRedirectLoop,
                             diagnosticText: $diagnosticText)
@@ -99,6 +100,7 @@ struct WebSheet: View {
 }
 
 private struct WebPage: UIViewRepresentable {
+    let app: AppState
     let url: URL
     @Binding var isLoading: Bool
     @Binding var errorText: String?
@@ -167,6 +169,7 @@ private struct WebPage: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.recoveryTask?.cancel()
         coordinator.stopLocation()
         uiView.navigationDelegate = nil
         uiView.uiDelegate = nil
@@ -175,7 +178,7 @@ private struct WebPage: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isLoading: $isLoading, errorText: $errorText, paymentError: $paymentError,
+        Coordinator(app: app, initialURL: url, isLoading: $isLoading, errorText: $errorText, paymentError: $paymentError,
                     followUpURL: followUpURL, usesFreshSession: usesFreshSession,
                     hasRedirectLoop: $hasRedirectLoop, diagnosticText: $diagnosticText,
                     allowsCustomLocation: url.host == "ehall.xatu.edu.cn"
@@ -183,6 +186,11 @@ private struct WebPage: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        private let app: AppState
+        private let sessionGeneration: UUID
+        private let initialURL: URL
+        private var attemptedRecovery = false
+        private(set) var recoveryTask: Task<Void, Never>?
         @Binding private var isLoading: Bool
         @Binding private var errorText: String?
         @Binding private var paymentError: String?
@@ -197,9 +205,13 @@ private struct WebPage: UIViewRepresentable {
         private var nextWatchID = 0
         private var watchIDs: [String: Int] = [:]
 
-        init(isLoading: Binding<Bool>, errorText: Binding<String?>, paymentError: Binding<String?>,
+        init(app: AppState, initialURL: URL,
+             isLoading: Binding<Bool>, errorText: Binding<String?>, paymentError: Binding<String?>,
              followUpURL: String?, usesFreshSession: Bool,
              hasRedirectLoop: Binding<Bool>, diagnosticText: Binding<String>, allowsCustomLocation: Bool) {
+            self.app = app
+            self.sessionGeneration = app.webSessionGeneration
+            self.initialURL = initialURL
             _isLoading = isLoading
             _errorText = errorText
             _paymentError = paymentError
@@ -272,8 +284,66 @@ private struct WebPage: UIViewRepresentable {
             if navigationResponse.isForMainFrame {
                 let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
                 trace("response \(status)", url: navigationResponse.response.url)
+                // 302 换票不会落到这里；仅拦截真正准备显示的认证页面。
+                if navigationResponse.response.url?.host?.lowercased() == "authserver.xatu.edu.cn",
+                   !usesFreshSession {
+                    decisionHandler(.cancel)
+                    recoverSession(in: webView)
+                    return
+                }
             }
             decisionHandler(.allow)
+        }
+
+        private func recoverSession(in webView: WKWebView) {
+            guard recoveryTask == nil else { return }
+            guard !attemptedRecovery else {
+                isLoading = false
+                hasRedirectLoop = true
+                errorText = "网页自动登录后仍未通过认证，请重新登录网页。"
+                return
+            }
+            attemptedRecovery = true
+            isLoading = true
+            trace("automatic session recovery", url: webView.url)
+            recoveryTask = Task { @MainActor [weak self, weak webView] in
+                guard let self, let webView else { return }
+                defer { self.recoveryTask = nil }
+                do {
+                    try await self.app.recoverWebSession(expectedGeneration: self.sessionGeneration)
+                    let store = webView.configuration.websiteDataStore.httpCookieStore
+                    let existing = await store.allCookies()
+                    for cookie in existing where Self.isCampusCookie(cookie) {
+                        try self.checkSession()
+                        await store.deleteCookie(cookie)
+                    }
+                    for cookie in HTTPCookieStorage.shared.cookies ?? [] where Self.isCampusCookie(cookie) {
+                        try self.checkSession()
+                        await store.setCookie(cookie)
+                    }
+                    try self.checkSession()
+                    self.appliedFollowUp = false
+                    webView.load(URLRequest(url: self.initialURL, cachePolicy: .reloadIgnoringLocalCacheData))
+                } catch {
+                    guard !Task.isCancelled,
+                          self.app.webSessionGeneration == self.sessionGeneration else { return }
+                    self.isLoading = false
+                    self.hasRedirectLoop = true
+                    self.errorText = error.localizedDescription
+                }
+            }
+        }
+
+        private func checkSession() throws {
+            try Task.checkCancellation()
+            guard app.webSessionGeneration == sessionGeneration, app.isLoggedIn else {
+                throw CancellationError()
+            }
+        }
+
+        private static func isCampusCookie(_ cookie: HTTPCookie) -> Bool {
+            let domain = cookie.domain.lowercased()
+            return domain == "xatu.edu.cn" || domain.hasSuffix(".xatu.edu.cn")
         }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -306,12 +376,14 @@ private struct WebPage: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard recoveryTask == nil else { return }
             isLoading = false
             applyFollowUpIfNeeded(webView)
             // 恢复会话保持隔离，避免登录过程中的 Cookie 改动影响 App 当前账号。
             guard !usesFreshSession else { return }
             // 网页里如果重新登过，把新 cookie 回写给 app，别让两边各登一次
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                guard self.app.webSessionGeneration == self.sessionGeneration, self.recoveryTask == nil else { return }
                 for cookie in cookies where cookie.domain.contains("xatu.edu.cn") {
                     HTTPCookieStorage.shared.setCookie(cookie)
                 }
@@ -319,6 +391,7 @@ private struct WebPage: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            guard (error as NSError).code != NSURLErrorCancelled else { return }
             isLoading = false
             record(error)
         }
@@ -326,6 +399,7 @@ private struct WebPage: UIViewRepresentable {
         func webView(_ webView: WKWebView,
                      didFailProvisionalNavigation navigation: WKNavigation!,
                      withError error: Error) {
+            guard (error as NSError).code != NSURLErrorCancelled else { return }
             isLoading = false
             record(error)
         }
@@ -340,7 +414,9 @@ private struct WebPage: UIViewRepresentable {
                   webView.url?.absoluteString != target else { return }
             appliedFollowUp = true
             // 等落地页把 token 写完，再整页重新加载目标地址，SPA 才会用新登录态启动
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak webView] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak webView] in
+                guard let self, self.recoveryTask == nil, self.appliedFollowUp,
+                      self.app.webSessionGeneration == self.sessionGeneration else { return }
                 var request = URLRequest(url: targetURL)
                 request.cachePolicy = .reloadIgnoringLocalCacheData
                 webView?.load(request)

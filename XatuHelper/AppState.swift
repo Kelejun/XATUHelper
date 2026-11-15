@@ -627,6 +627,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    var webSessionGeneration: UUID { sessionGeneration }
+
+    func recoverWebSession(expectedGeneration: UUID) async throws {
+        try Task.checkCancellation()
+        guard expectedGeneration == sessionGeneration, isLoggedIn else { throw CancellationError() }
+        do {
+            try await performRelogin()
+            try Task.checkCancellation()
+            guard expectedGeneration == sessionGeneration, isLoggedIn else { throw CancellationError() }
+        } catch {
+            try Task.checkCancellation()
+            guard expectedGeneration == sessionGeneration else { throw CancellationError() }
+            _ = contentErrorDescription(error)
+            throw error
+        }
+    }
+
     /// 并发请求共用完整的会话恢复过程，包括静默续期。
     private func performRelogin() async throws {
         if let existing = reloginTask {
