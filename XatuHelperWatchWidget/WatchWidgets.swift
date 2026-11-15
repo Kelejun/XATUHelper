@@ -106,28 +106,13 @@ private struct WatchComplicationView: View {
                 default:
                     HStack(spacing: 7) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(tint).frame(width: 3).widgetAccentable()
-                        VStack(alignment: .leading, spacing: 2) {
-                            if kind == .course {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "mappin")
-                                        .font(.caption.weight(.bold))
-                                        .accessibilityHidden(true)
-                                    Text(detail)
-                                        .font(.footnote.weight(.bold))
-                                }
-                                .foregroundStyle(tint).widgetAccentable()
-                                Text(title).font(.headline).lineLimit(2).minimumScaleFactor(0.75)
-                            } else {
-                                Label(kind == .electricity ? "剩余电量" : "假期倒计时", systemImage: icon)
-                                    .font(.caption).foregroundStyle(tint).widgetAccentable()
-                                Text(title).font(.headline).foregroundStyle(tint)
-                                    .widgetAccentable().lineLimit(2).minimumScaleFactor(0.75)
-                            }
-                            Text(time).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }.frame(maxWidth: .infinity, alignment: .leading)
+                            .fill(tint).frame(width: 5).widgetAccentable()
+                        ViewThatFits(in: .vertical) {
+                            rectangularDetails(titleLines: 2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            rectangularDetails(titleLines: 1)
+                        }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
             }
@@ -137,6 +122,36 @@ private struct WatchComplicationView: View {
         .containerBackground(.clear, for: .widget)
         .accessibilityElement(children: .combine)
     }
+
+    private func rectangularDetails(titleLines: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if kind == .course {
+                HStack(spacing: 3) {
+                    Image(systemName: "location.fill")
+                        .font(.caption.weight(.bold))
+                        .accessibilityHidden(true)
+                    Text(detail)
+                        .font(.footnote.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .foregroundStyle(tint).widgetAccentable()
+                .layoutPriority(1)
+                Text(title).font(.headline).lineLimit(titleLines).minimumScaleFactor(0.75)
+            } else {
+                Label(kind == .electricity ? "剩余电量" : "假期倒计时", systemImage: icon)
+                    .font(.caption).foregroundStyle(tint).widgetAccentable()
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(title).font(.headline).foregroundStyle(tint)
+                    .widgetAccentable().lineLimit(titleLines).minimumScaleFactor(0.75)
+            }
+            Text(time).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                .layoutPriority(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
 }
 
 struct WatchCourseWidget: Widget {
