@@ -396,7 +396,15 @@ private struct ElectricityChartTouchOverlay: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(onInspect: onInspect) }
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = TouchView()
+        let horizontalPan = UIPanGestureRecognizer(target: context.coordinator,
+                                                   action: #selector(Coordinator.pan(_:)))
+        horizontalPan.delegate = context.coordinator
+        horizontalPan.cancelsTouchesInView = false
+        horizontalPan.delaysTouchesBegan = false
+        horizontalPan.delaysTouchesEnded = false
+        view.horizontalPan = horizontalPan
+        view.addGestureRecognizer(horizontalPan)
         let press = UILongPressGestureRecognizer(target: context.coordinator,
                                                  action: #selector(Coordinator.inspect(_:)))
         press.minimumPressDuration = 0.3
@@ -413,16 +421,47 @@ private struct ElectricityChartTouchOverlay: UIViewRepresentable {
         context.coordinator.onInspect = onInspect
     }
 
+    final class TouchView: UIView {
+        var horizontalPan: UIPanGestureRecognizer?
+        private weak var configuredNavigationController: UINavigationController?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, let horizontalPan else { return }
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let controller = current as? UIViewController,
+                   let navigation = controller.navigationController ?? (controller as? UINavigationController) {
+                    guard configuredNavigationController !== navigation else { return }
+                    navigation.interactivePopGestureRecognizer?.require(toFail: horizontalPan)
+                    if #available(iOS 26.0, *) {
+                        navigation.interactiveContentPopGestureRecognizer?.require(toFail: horizontalPan)
+                    }
+                    configuredNavigationController = navigation
+                    return
+                }
+                responder = current.next
+            }
+        }
+    }
+
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onInspect: (CGPoint?) -> Void
         private var initialLocation: CGPoint?
 
         init(onInspect: @escaping (CGPoint?) -> Void) { self.onInspect = onInspect }
 
-        // Let the ancestor List's pan recognizer start even after a long press.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) > abs(velocity.y)
+        }
+
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {}
+
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-            true
+            otherGestureRecognizer.view === gestureRecognizer.view || otherGestureRecognizer.view is UIScrollView
         }
 
         @objc func inspect(_ gesture: UILongPressGestureRecognizer) {
@@ -432,16 +471,6 @@ private struct ElectricityChartTouchOverlay: UIViewRepresentable {
                 onInspect(initialLocation)
             case .changed:
                 let location = gesture.location(in: gesture.view)
-                var ancestor = gesture.view?.superview
-                while let view = ancestor {
-                    if let scroll = view as? UIScrollView, scroll.isDragging {
-                        gesture.isEnabled = false
-                        gesture.isEnabled = true
-                        onInspect(nil)
-                        return
-                    }
-                    ancestor = view.superview
-                }
                 if let initialLocation, abs(location.y - initialLocation.y) > 8 {
                     gesture.isEnabled = false
                     gesture.isEnabled = true
