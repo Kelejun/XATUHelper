@@ -211,6 +211,11 @@ struct ElectricityView: View {
     @ViewBuilder
     private var trendChart: some View {
         let points = usagePoints
+        let plotStart = points.first?.date ?? trendEnd
+        let lastDay = points.last?.date ?? plotStart
+        let plotEnd = Calendar.current.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
+        let dayCount = Calendar.current.dateComponents([.day], from: plotStart, to: plotEnd).day ?? 1
+        let axisStride = dayCount <= 7 ? 1 : (dayCount <= 14 ? 2 : 7)
         let selected = inspectingUsage ? points.first { $0.date == selectedUsageDate } : nil
 
         if points.isEmpty {
@@ -284,9 +289,9 @@ struct ElectricityView: View {
                         }
                     }
                 }
-                .chartXScale(domain: trendStart...trendPlotEnd)
+                .chartXScale(domain: plotStart...plotEnd)
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) {
+                    AxisMarks(values: .stride(by: .day, count: axisStride)) {
                         AxisValueLabel(format: .dateTime.month().day())
                     }
                 }
@@ -365,10 +370,6 @@ struct ElectricityView: View {
     }
 
     private var trendEnd: Date { Calendar.current.startOfDay(for: Date()) }
-
-    private var trendPlotEnd: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: trendEnd) ?? trendEnd
-    }
 
     private var trendStart: Date {
         Calendar.current.date(byAdding: .day, value: -29, to: trendEnd) ?? trendEnd
