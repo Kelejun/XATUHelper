@@ -228,46 +228,60 @@ struct ElectricityView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Chart {
                     ForEach(points) { point in
-                        AreaMark(
-                            x: .value("日期", point.date, unit: .day),
-                            y: .value("用量", point.usage)
-                        )
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(
-                            .linearGradient(
-                                colors: [.orange.opacity(0.30), .orange.opacity(0.02)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                        if let usage = point.usage {
+                            AreaMark(
+                                x: .value("日期", point.date, unit: .day),
+                                y: .value("用量", usage)
                             )
-                        )
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(
+                                .linearGradient(
+                                    colors: [.orange.opacity(0.30), .orange.opacity(0.02)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
 
-                        LineMark(
-                            x: .value("日期", point.date, unit: .day),
-                            y: .value("用量", point.usage)
-                        )
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(.orange)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
+                            LineMark(
+                                x: .value("日期", point.date, unit: .day),
+                                y: .value("用量", usage)
+                            )
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(.orange)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
 
-                        PointMark(
-                            x: .value("日期", point.date, unit: .day),
-                            y: .value("用量", point.usage)
-                        )
-                        .foregroundStyle(.orange)
-                        .symbolSize(14)
-                        .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
-                        .accessibilityValue(String(format: "%.2f 度", point.usage) + (point.hasRecharge ? "，有电费充值" : ""))
+                            PointMark(
+                                x: .value("日期", point.date, unit: .day),
+                                y: .value("用量", usage)
+                            )
+                            .foregroundStyle(.orange)
+                            .symbolSize(point.hasRecharge ? 40 : 14)
+                            .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
+                            .accessibilityValue(String(format: "%.2f 度", usage) + (point.hasRecharge ? "，充值日估算" : ""))
+                        }
+                        if point.hasRecharge {
+                            RuleMark(x: .value("充值日期", point.date, unit: .day))
+                                .foregroundStyle(.orange.opacity(0.35))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                .annotation(position: .top) {
+                                    Text(point.usage == nil ? "充值" : "充值·估算")
+                                        .font(.caption2)
+                                        .foregroundStyle(.orange)
+                                }
+                        }
                     }
                     if let selected {
                         RuleMark(x: .value("日期", selected.date, unit: .day))
                             .foregroundStyle(.orange.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                             .accessibilityHidden(true)
-                        PointMark(x: .value("日期", selected.date, unit: .day),
-                                  y: .value("用量", selected.usage))
-                            .foregroundStyle(.orange)
-                            .symbolSize(65)
-                            .accessibilityHidden(true)
+                        if let usage = selected.usage {
+                            PointMark(x: .value("日期", selected.date, unit: .day),
+                                      y: .value("用量", usage))
+                                .foregroundStyle(.orange)
+                                .symbolSize(65)
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
                 .chartXScale(domain: trendStart...trendPlotEnd)
@@ -292,12 +306,12 @@ struct ElectricityView: View {
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(selected.date.formatted(.dateTime.month().day()))
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.2f 度", selected.usage))
+                            Text(selected.usage.map { String(format: "%.2f 度", $0) } ?? "暂无用量估算")
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
                                 .foregroundStyle(.orange)
                             if selected.hasRecharge {
-                                Text("有电费充值")
+                                Text(selected.usage == nil ? "有电费充值" : "充值日·平均用量估算")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.orange)
                                     .padding(.horizontal, 8)
@@ -317,7 +331,7 @@ struct ElectricityView: View {
                         Rectangle()
                             .fill(.clear)
                             .contentShape(Rectangle())
-                            .gesture(
+                            .simultaneousGesture(
                                 LongPressGesture(minimumDuration: 0.25)
                                     .sequenced(before: DragGesture(minimumDistance: 0))
                                     .updating($inspectingUsage) { value, state, _ in
@@ -350,13 +364,6 @@ struct ElectricityView: View {
         }
     }
 
-    private struct UsagePoint: Identifiable {
-        let date: Date
-        let usage: Double
-        let hasRecharge: Bool
-        var id: Date { date }
-    }
-
     private var trendEnd: Date { Calendar.current.startOfDay(for: Date()) }
 
     private var trendPlotEnd: Date {
@@ -367,30 +374,15 @@ struct ElectricityView: View {
         Calendar.current.date(byAdding: .day, value: -29, to: trendEnd) ?? trendEnd
     }
 
-    /// 仅用连续两天的余额计算当天用量，避免把多天的差额显示成一天。
-    private var usagePoints: [UsagePoint] {
-        let trend = app.electricityHistory
-        guard trend.count >= 2 else { return [] }
-        var points: [UsagePoint] = []
-        for index in 1..<trend.count {
-            let previous = trend[index - 1]
-            let current = trend[index]
-            guard current.date >= trendStart, current.date <= trendEnd,
-                  Calendar.current.dateComponents([.day], from: previous.date, to: current.date).day == 1 else { continue }
-            points.append(UsagePoint(
-                date: current.date,
-                usage: max(0, previous.balance - current.balance),
-                hasRecharge: current.balance > previous.balance
-            ))
-        }
-        return points
+    private var usagePoints: [ElectricityUsagePoint] {
+        ElectricityUsagePoint.make(history: app.electricityHistory, from: trendStart, through: trendEnd)
     }
 
     private var averageUsageText: String? {
-        let points = usagePoints
-        guard !points.isEmpty else { return nil }
-        let used = points.reduce(0) { $0 + $1.usage }
-        return String(format: "有记录的 %d 天，平均每天用 %.2f 度", points.count, used / Double(points.count))
+        let values = usagePoints.compactMap(\.usage)
+        guard !values.isEmpty else { return nil }
+        return String(format: "有记录的 %d 天，平均每天用 %.2f 度", values.count,
+                      values.reduce(0, +) / Double(values.count))
     }
 
     @ViewBuilder
