@@ -62,13 +62,14 @@ struct AnnouncementDetailView: View {
                     .frame(maxWidth: .infinity)
                 }
                 Button(action: onAcknowledge) {
-                    Text("确认").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
+                    Text("确认")
+                        .font(.headline)
+                        .frame(minWidth: 100)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
                 .controlSize(.large)
                 .padding(.horizontal, 24).padding(.vertical, 12)
-                .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
             }
             .background(Color(.systemBackground))
