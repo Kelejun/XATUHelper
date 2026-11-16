@@ -146,6 +146,7 @@ struct AboutSheet: View {
                 Section("关于") {
                     LabeledContent("版本", value: version)
                     PrivacyPolicyLink()
+                    LabeledContent("备案号", value: "粤ICP备2026181989号-1A")
                 }
             }
             .navigationTitle("设置")
