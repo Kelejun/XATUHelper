@@ -57,7 +57,7 @@ struct AnnouncementClient {
               let host = parts.host, !host.isEmpty, parts.user == nil, parts.password == nil,
               parts.query == nil, parts.fragment == nil,
               parts.scheme == "https" ||
-                (parts.scheme == "http" && (allowHTTP || host == "47.109.84.89")) else { return nil }
+                (parts.scheme == "http" && allowHTTP) else { return nil }
         parts.path = parts.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         parts.path = (parts.path.isEmpty ? "" : "/" + parts.path) + "/v1/announcements"
         parts.queryItems = [URLQueryItem(name: "platform", value: "ios")]
