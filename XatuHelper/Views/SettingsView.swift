@@ -120,6 +120,7 @@ struct SettingsContent: View {
                 Link(destination: URL(string: "https://github.com/Kelejun/XATUHelper")!) {
                     LabeledContent("GitHub 仓库", value: "Kelejun/XATUHelper")
                 }
+                LabeledContent("备案号", value: "粤ICP备2026181989号-1A")
             } header: {
                 Text("App")
             } footer: {
