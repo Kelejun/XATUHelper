@@ -1,29 +1,34 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import UIKit
 
 struct DiagnosticExportButton: View {
     var filenamePrefix = "XATune-diagnostics"
     let content: () -> String
 
-    @State private var document = DiagnosticTextDocument(text: "")
-    @State private var showsExporter = false
-    @State private var filename = ""
+    @State private var sharedFile: DiagnosticSharedFile?
+    @State private var temporaryDirectory: URL?
     @State private var exportError: String?
 
     var body: some View {
         Button {
-            document = DiagnosticTextDocument(text: content())
-            let timestamp = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
-            filename = "\(filenamePrefix)-\(timestamp).txt"
-            showsExporter = true
+            do {
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("DiagnosticExport-\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                temporaryDirectory = directory
+                let timestamp = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
+                let url = directory.appendingPathComponent("\(filenamePrefix)-\(timestamp).txt")
+                try content().write(to: url, atomically: true, encoding: .utf8)
+                sharedFile = DiagnosticSharedFile(url: url)
+            } catch {
+                removeTemporaryFile()
+                exportError = error.localizedDescription
+            }
         } label: {
             Label("导出诊断文件", systemImage: "square.and.arrow.up")
         }
-        .fileExporter(isPresented: $showsExporter, document: document,
-                      contentType: .plainText, defaultFilename: filename) { result in
-            if case let .failure(error) = result {
-                let ns = error as NSError
-                guard !(ns.domain == NSCocoaErrorDomain && ns.code == NSUserCancelledError) else { return }
+        .sheet(item: $sharedFile, onDismiss: removeTemporaryFile) { file in
+            DiagnosticShareSheet(url: file.url) { error in
                 exportError = error.localizedDescription
             }
         }
@@ -36,23 +41,36 @@ struct DiagnosticExportButton: View {
             Text(exportError ?? "")
         }
     }
+
+    private func removeTemporaryFile() {
+        if let temporaryDirectory {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+        }
+        temporaryDirectory = nil
+    }
 }
 
-private struct DiagnosticTextDocument: FileDocument {
-    static let readableContentTypes: [UTType] = [.plainText]
-    var text: String
+private struct DiagnosticSharedFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
 
-    init(text: String) { self.text = text }
+private struct DiagnosticShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onError: (Error) -> Void
 
-    init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents,
-              let text = String(data: data, encoding: .utf8) else {
-            throw CocoaError(.fileReadCorruptFile)
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, error in
+            guard let error else { return }
+            let ns = error as NSError
+            guard !(ns.domain == NSCocoaErrorDomain && ns.code == NSUserCancelledError) else { return }
+            DispatchQueue.main.async {
+                onError(error)
+            }
         }
-        self.text = text
+        return controller
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
-    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
