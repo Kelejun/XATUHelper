@@ -306,7 +306,7 @@ struct CourseWidgetView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
             if !course.room.isEmpty {
-                Label(course.room, systemImage: "mappin")
+                Label(course.room, systemImage: "location.fill")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

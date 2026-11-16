@@ -186,7 +186,7 @@ private struct WatchHomeView: View {
                     .foregroundStyle(.primary).lineLimit(3).minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Label(lesson.room.isEmpty ? "教室待定" : lesson.room, systemImage: "mappin")
+                Label(lesson.room.isEmpty ? "教室待定" : lesson.room, systemImage: "location.fill")
                     .font(.system(size: compact ? 14 : 16, weight: .medium))
                     .foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
 
@@ -283,7 +283,7 @@ private struct WatchLessonDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(lesson.name).font(.title2.bold())
-                Label(lesson.fullRoom.isEmpty ? "教室待定" : lesson.fullRoom, systemImage: "mappin")
+                Label(lesson.fullRoom.isEmpty ? "教室待定" : lesson.fullRoom, systemImage: "location.fill")
                 Label("\(WatchSnapshot.format(lesson.start, "M月d日 EEEE"))\n\(WatchSnapshot.clock(lesson.start))–\(WatchSnapshot.clock(lesson.end))", systemImage: "clock")
                 Text(lesson.periods).foregroundStyle(.secondary)
                 if !lesson.teacher.isEmpty { Label(lesson.teacher, systemImage: "person") }
@@ -309,7 +309,7 @@ private struct WatchExamsView: View {
                         Text(exam.name).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
                         Text(WatchSnapshot.format(exam.start, "M月d日 EEEE")).font(.caption)
                         Text(exam.time.isEmpty ? "时间待定" : exam.time).font(.caption).foregroundStyle(.secondary)
-                        Label(exam.room.isEmpty ? "考场待定" : exam.room, systemImage: "mappin").font(.caption)
+                        Label(exam.room.isEmpty ? "考场待定" : exam.room, systemImage: "location.fill").font(.caption)
                         if !exam.seat.isEmpty { Text("座位 \(exam.seat)").font(.caption) }
                         if !exam.note.isEmpty { Text(exam.note).font(.caption2).foregroundStyle(.secondary) }
                     }

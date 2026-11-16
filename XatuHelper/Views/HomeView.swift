@@ -402,7 +402,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(block.name).font(.headline)
                     if !block.room.isEmpty {
-                        Label(block.shortRoom, systemImage: "mappin.and.ellipse")
+                        Label(block.shortRoom, systemImage: "location.fill")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     if !block.teacher.isEmpty {
