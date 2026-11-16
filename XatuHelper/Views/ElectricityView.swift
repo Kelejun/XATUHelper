@@ -11,7 +11,6 @@ struct ElectricityView: View {
     @State private var chargeURL: String?
     @State private var chargeTarget: String?
     @State private var preparingCharge = false
-    @GestureState private var inspectingUsage = false
     @State private var selectedUsageDate: Date?
 
     var body: some View {
@@ -216,7 +215,7 @@ struct ElectricityView: View {
         let plotEnd = Calendar.current.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
         let dayCount = Calendar.current.dateComponents([.day], from: plotStart, to: plotEnd).day ?? 1
         let axisStride = dayCount <= 7 ? 1 : (dayCount <= 14 ? 2 : 7)
-        let selected = inspectingUsage ? points.first { $0.date == selectedUsageDate } : nil
+        let selected = points.first { $0.date == selectedUsageDate }
 
         if points.isEmpty {
             VStack(spacing: 10) {
@@ -260,19 +259,9 @@ struct ElectricityView: View {
                                 y: .value("用量", usage)
                             )
                             .foregroundStyle(.orange)
-                            .symbolSize(point.hasRecharge ? 40 : 14)
+                            .symbolSize(14)
                             .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
                             .accessibilityValue(String(format: "%.2f 度", usage) + (point.hasRecharge ? "，充值日估算" : ""))
-                        }
-                        if point.hasRecharge {
-                            RuleMark(x: .value("充值日期", point.date, unit: .day))
-                                .foregroundStyle(.orange.opacity(0.35))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                                .annotation(position: .top) {
-                                    Text(point.usage == nil ? "充值" : "充值·估算")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
-                                }
                         }
                     }
                     if let selected {
@@ -333,29 +322,20 @@ struct ElectricityView: View {
                 }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
-                        Rectangle()
-                            .fill(.clear)
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(
-                                LongPressGesture(minimumDuration: 0.25)
-                                    .sequenced(before: DragGesture(minimumDistance: 0))
-                                    .updating($inspectingUsage) { value, state, _ in
-                                        if case .second(true, _) = value { state = true }
-                                    }
-                                    .onChanged { value in
-                                        guard case let .second(true, drag?) = value,
-                                              let plotFrame = proxy.plotFrame else { return }
-                                        let frame = geometry[plotFrame]
-                                        let x = min(max(drag.location.x - frame.minX, 0), frame.width)
-                                        guard let date = proxy.value(atX: x, as: Date.self) else { return }
-                                        let day = Calendar.current.startOfDay(for: date)
-                                        selectedUsageDate = points.min {
-                                            abs($0.date.timeIntervalSince(day)) < abs($1.date.timeIntervalSince(day))
-                                        }?.date
-                                    }
-                                    .onEnded { _ in selectedUsageDate = nil }
-                            )
-                            .accessibilityHidden(true)
+                        ElectricityChartTouchOverlay { location in
+                            guard let location, let plotFrame = proxy.plotFrame else {
+                                selectedUsageDate = nil
+                                return
+                            }
+                            let frame = geometry[plotFrame]
+                            let x = min(max(location.x - frame.minX, 0), frame.width)
+                            guard let date = proxy.value(atX: x, as: Date.self) else { return }
+                            let day = Calendar.current.startOfDay(for: date)
+                            selectedUsageDate = points.min {
+                                abs($0.date.timeIntervalSince(day)) < abs($1.date.timeIntervalSince(day))
+                            }?.date
+                        }
+                        .accessibilityHidden(true)
                     }
                 }
 
@@ -406,6 +386,73 @@ struct ElectricityView: View {
             Text("还没查到余额")
                 .font(.title3)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct ElectricityChartTouchOverlay: UIViewRepresentable {
+    let onInspect: (CGPoint?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onInspect: onInspect) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        let press = UILongPressGestureRecognizer(target: context.coordinator,
+                                                 action: #selector(Coordinator.inspect(_:)))
+        press.minimumPressDuration = 0.3
+        press.allowableMovement = 8
+        press.cancelsTouchesInView = false
+        press.delaysTouchesBegan = false
+        press.delaysTouchesEnded = false
+        press.delegate = context.coordinator
+        view.addGestureRecognizer(press)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onInspect = onInspect
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onInspect: (CGPoint?) -> Void
+        private var initialLocation: CGPoint?
+
+        init(onInspect: @escaping (CGPoint?) -> Void) { self.onInspect = onInspect }
+
+        // Let the ancestor List's pan recognizer start even after a long press.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+
+        @objc func inspect(_ gesture: UILongPressGestureRecognizer) {
+            switch gesture.state {
+            case .began:
+                initialLocation = gesture.location(in: gesture.view)
+                onInspect(initialLocation)
+            case .changed:
+                let location = gesture.location(in: gesture.view)
+                var ancestor = gesture.view?.superview
+                while let view = ancestor {
+                    if let scroll = view as? UIScrollView, scroll.isDragging {
+                        gesture.isEnabled = false
+                        gesture.isEnabled = true
+                        onInspect(nil)
+                        return
+                    }
+                    ancestor = view.superview
+                }
+                if let initialLocation, abs(location.y - initialLocation.y) > 8 {
+                    gesture.isEnabled = false
+                    gesture.isEnabled = true
+                    onInspect(nil)
+                } else {
+                    onInspect(location)
+                }
+            default:
+                initialLocation = nil
+                onInspect(nil)
+            }
         }
     }
 }
