@@ -9,8 +9,6 @@
 <a href="https://apps.apple.com/us/app/xatune/id6831484863"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="40"></a>
 <a href="https://github.com/Kelejun/XATUHelper-Android/releases/latest"><img src="./github-android-badge.png" alt="Download on GitHub" height="40"></a>
 
-**App Store 下载不适用于中国大陆区，中国大陆用户请使用下方 TestFlight 下载。**
-
 [TestFlight 下载](https://testflight.apple.com/join/PbKpCUU6) · [隐私政策](PRIVACY.md) · [QQ交流群](https://qm.qq.com/q/k1mGynJlrW)
 
 ## 编译
