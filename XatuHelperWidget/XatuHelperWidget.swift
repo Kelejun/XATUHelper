@@ -388,7 +388,7 @@ struct CourseWidgetView: View {
 
     private var emptyCourses: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: "sun.max")
+            Image(systemName: "sun.max.fill")
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(.blue)
             Text(emptyText)
@@ -482,19 +482,6 @@ struct ElectricityWidgetView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 SmallWidgetHeader(icon: "bolt.fill", title: "宿舍电量", tint: .orange)
-                    .padding(.trailing, 32)
-                    .frame(height: 28, alignment: .top)
-                    .overlay(alignment: .topTrailing) {
-                        Button(intent: RefreshElectricityIntent()) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
-                                .frame(width: 28, height: 28)
-                                .background(.primary.opacity(0.06), in: Circle())
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("刷新电量")
-                    }
 
                 Spacer(minLength: 6)
 
@@ -526,17 +513,29 @@ struct ElectricityWidgetView: View {
 
                 Spacer(minLength: 8)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    if let room = entry.snapshot.roomName, !room.isEmpty {
-                        Label(room, systemImage: "building.2")
-                            .font(.system(size: 10, weight: .medium))
+                HStack(alignment: .bottom, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let room = entry.snapshot.roomName, !room.isEmpty {
+                            Label(room, systemImage: "building.2")
+                                .font(.system(size: 10, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        Text(updateText)
+                            .font(.system(size: 9))
                             .lineLimit(1)
                     }
-                    Text(updateText)
-                        .font(.system(size: 9))
-                        .lineLimit(1)
+                    .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button(intent: RefreshElectricityIntent()) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                            .background(.primary.opacity(0.06), in: Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("刷新电量")
                 }
-                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -610,47 +609,67 @@ struct ExamWidgetView: View {
     @ViewBuilder private var layout: some View {
         switch family {
         case .systemMedium:
-            if let exam {
+            if exam != nil {
                 HStack(spacing: 16) {
-                    countdownCard
+                    countdownCard(showsVenue: !following.isEmpty)
                     Divider()
-                    schedule(after: exam)
+                    schedule
                 }
             } else {
-                countdownCard
+                countdownCard()
             }
         case .accessoryRectangular:
             LockScreenRows(icon: icon, heading: exam == nil ? "考试倒计时" : "考试 · " + countdown,
                            title: exam?.title ?? "暂无待考科目", subtitle: exam.flatMap(detail) ?? "打开 App 查看考试安排",
-                           allowsTwoLineTitle: true)
+                           allowsTwoLineTitle: true, headingDetail: venueText)
         case .accessoryCircular:
             LockScreenCompactValue(icon: icon, value: countdown, caption: exam == nil ? "暂无考试" : "考试")
         case .accessoryInline:
             Label(exam.map { countdown + " · " + $0.title } ?? "暂无待考科目", systemImage: icon)
         default:
-            countdownCard
+            countdownCard()
         }
     }
 
-    private var countdownCard: some View {
+    private var following: ArraySlice<WidgetSnapshot.Exam> {
+        (entry.snapshot.upcomingExams ?? []).dropFirst().prefix(2)
+    }
+
+    private var seatText: String? {
+        guard let seat = exam?.seat?.trimmingCharacters(in: .whitespacesAndNewlines), !seat.isEmpty else { return nil }
+        return "座位 " + seat
+    }
+
+    private var roomText: String? {
+        guard let room = exam?.room?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty else { return nil }
+        return room
+    }
+
+    private var venueText: String? {
+        let parts = [roomText, seatText].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func countdownCard(showsVenue: Bool = true) -> some View {
         SmallCountdownCard(icon: icon, title: "考试倒计时", tint: .indigo,
                            days: exam?.days, name: exam?.title, detail: exam.flatMap(detail),
                            emptyIcon: "calendar.badge.checkmark", emptyTitle: "暂无待考科目",
-                           emptyDetail: "打开 App 查看考试安排")
+                           emptyDetail: "打开 App 查看考试安排",
+                           room: showsVenue && exam != nil ? (roomText ?? "考场待定") : nil,
+                           seat: showsVenue ? seatText : nil)
     }
 
-    private func schedule(after next: WidgetSnapshot.Exam) -> some View {
-        let following = (entry.snapshot.upcomingExams ?? []).dropFirst().prefix(2)
-        return VStack(alignment: .leading, spacing: 8) {
+    private var schedule: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(following.isEmpty ? "本场考试" : "后续考试")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
             if following.isEmpty {
-                Label(next.room.flatMap { $0.isEmpty ? nil : $0 } ?? "考场待定", systemImage: "location.fill")
+                Label(roomText ?? "考场待定", systemImage: "location.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(2)
-                if let seat = next.seat, !seat.isEmpty {
-                    Text("座位 " + seat).font(.caption).foregroundStyle(.secondary)
+                if let seatText {
+                    Text(seatText).font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 ForEach(Array(following.indices), id: \.self) { index in
@@ -703,6 +722,8 @@ private struct SmallCountdownCard: View {
     let emptyIcon: String
     let emptyTitle: String
     let emptyDetail: String
+    var room: String?
+    var seat: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -711,7 +732,7 @@ private struct SmallCountdownCard: View {
             if let days, let name {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(days <= 0 ? "今天" : "\(days)")
-                        .font(.system(size: days <= 0 ? 36 : 48, weight: .bold, design: .rounded))
+                        .font(.system(size: days <= 0 || room != nil ? 36 : 48, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(tint)
                         .minimumScaleFactor(0.6)
@@ -741,6 +762,19 @@ private struct SmallCountdownCard: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if let room {
+                HStack(spacing: 4) {
+                    Text(room)
+                    if let seat {
+                        Text(seat).layoutPriority(1)
+                    }
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -788,6 +822,7 @@ private struct LockScreenRows: View {
     var titleFont: Font = .headline
     var showsLeadingRule = false
     var allowsTwoLineTitle = false
+    var headingDetail: String?
 
     var body: some View {
         HStack(spacing: 7) {
@@ -814,7 +849,14 @@ private struct LockScreenRows: View {
             HStack(spacing: 3) {
                 Image(systemName: icon)
                     .accessibilityHidden(true)
-                Text(heading)
+                if let headingDetail {
+                    ViewThatFits(in: .horizontal) {
+                        Text(heading + " · " + headingDetail).fixedSize()
+                        Text(heading)
+                    }
+                } else {
+                    Text(heading)
+                }
             }
             .font(.caption.weight(.bold))
             .lineLimit(1)

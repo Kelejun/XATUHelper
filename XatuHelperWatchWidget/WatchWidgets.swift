@@ -179,7 +179,20 @@ private struct WatchComplicationView: View {
                 .layoutPriority(1)
                 Text(title).font(.headline).lineLimit(titleLines).minimumScaleFactor(0.75)
             } else {
-                Label(rectangularHeading, systemImage: icon)
+                Label {
+                    if kind == .exam, let exam {
+                        let venue = [exam.room, exam.seat.isEmpty ? "" : "座位 " + exam.seat]
+                            .filter { !$0.isEmpty }.joined(separator: " · ")
+                        ViewThatFits(in: .horizontal) {
+                            if !venue.isEmpty { Text(rectangularHeading + " · " + venue).fixedSize() }
+                            Text(rectangularHeading)
+                        }
+                    } else {
+                        Text(rectangularHeading)
+                    }
+                } icon: {
+                    Image(systemName: icon)
+                }
                     .font(.caption).foregroundStyle(tint).widgetAccentable()
                     .lineLimit(1)
                     .layoutPriority(1)

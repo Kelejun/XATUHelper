@@ -14,7 +14,7 @@ enum RefreshRequest {
     }
 }
 
-/// 点小组件右上角的刷新：带 openAppWhenRun，系统会先拉起 App 再执行，
+/// 点小组件的刷新按钮：带 openAppWhenRun，系统会先拉起 App 再执行，
 /// 执行完往 App 里丢一个标记，App 收到就去刷电费。
 struct RefreshElectricityIntent: AppIntent {
     static var title: LocalizedStringResource = "刷新电费"
