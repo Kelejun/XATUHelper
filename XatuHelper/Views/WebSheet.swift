@@ -190,6 +190,9 @@ private struct WebPage: UIViewRepresentable {
         private let sessionGeneration: UUID
         private let initialURL: URL
         private var attemptedRecovery = false
+        private var provisionalNavigation: WKNavigation?
+        private var cancelledAuthNavigations: Set<WKNavigation> = []
+        private static let authHost = "authserver.xatu.edu.cn"
         private(set) var recoveryTask: Task<Void, Never>?
         @Binding private var isLoading: Bool
         @Binding private var errorText: String?
@@ -285,10 +288,10 @@ private struct WebPage: UIViewRepresentable {
                 let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
                 trace("response \(status)", url: navigationResponse.response.url)
                 // 302 换票不会落到这里；仅拦截真正准备显示的认证页面。
-                if navigationResponse.response.url?.host?.lowercased() == "authserver.xatu.edu.cn",
-                   !usesFreshSession {
-                    decisionHandler(.cancel)
+                if navigationResponse.response.url?.host?.lowercased() == Self.authHost, !usesFreshSession {
+                    if let provisionalNavigation { cancelledAuthNavigations.insert(provisionalNavigation) }
                     recoverSession(in: webView)
+                    decisionHandler(.cancel)
                     return
                 }
             }
@@ -371,6 +374,7 @@ private struct WebPage: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            provisionalNavigation = navigation
             stopLocation()
             isLoading = true
         }
@@ -391,17 +395,13 @@ private struct WebPage: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            guard (error as NSError).code != NSURLErrorCancelled else { return }
-            isLoading = false
-            record(error)
+            recordFailure(error, navigation: navigation)
         }
 
         func webView(_ webView: WKWebView,
                      didFailProvisionalNavigation navigation: WKNavigation!,
                      withError error: Error) {
-            guard (error as NSError).code != NSURLErrorCancelled else { return }
-            isLoading = false
-            record(error)
+            recordFailure(error, navigation: navigation)
         }
 
         /// 换票落地后，把 SPA 带到指定路由。等一会儿是因为落地页要先在 mounted 里写 cookie。
@@ -429,12 +429,20 @@ private struct WebPage: UIViewRepresentable {
             if diagnosticEvents.count > 32 { diagnosticEvents.removeFirst() }
         }
 
-        /// 只有真的打不开才提示，用户自己取消（-999）之类的忽略
-        private func record(_ error: Error) {
+        private func recordFailure(_ error: Error, navigation: WKNavigation?) {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
             let failingURL = (ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
                 ?? (ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:))
+            // 主动取消认证页后，WebKit 的策略中断回调可能晚于重登录后的新导航。
+            if attemptedRecovery, ns.domain == "WebKitErrorDomain", ns.code == 102 {
+                if let navigation {
+                    if cancelledAuthNavigations.contains(navigation) { return }
+                } else if recoveryTask != nil || failingURL?.host?.lowercased() == Self.authHost {
+                    return
+                }
+            }
+            isLoading = false
             trace("failure \(ns.domain) \(ns.code)", url: failingURL)
             let info = Bundle.main.infoDictionary ?? [:]
             diagnosticText = [
