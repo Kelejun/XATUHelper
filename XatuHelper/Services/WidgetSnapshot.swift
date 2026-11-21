@@ -22,6 +22,8 @@ struct WidgetSnapshot: Codable {
         var title: String
         var date: Date?
         var days: Int?
+        var end: Date?
+        var startTime: String?
     }
 
     var generatedAt: Date
@@ -36,6 +38,7 @@ struct WidgetSnapshot: Codable {
     var roomName: String?
     var upcomingBreak: Break?
     var nextExam: Exam?
+    var upcomingExams: [Exam]?
     var loggedIn: Bool
 
     static let empty = WidgetSnapshot(
@@ -71,6 +74,14 @@ struct WidgetSnapshot: Codable {
         if let item = upcomingBreak {
             let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: item.date)).day ?? 0
             value.upcomingBreak = days >= 0 ? Break(title: item.title, date: item.date, days: days) : nil
+        }
+        let exams = upcomingExams ?? nextExam.map { [$0] } ?? []
+        value.nextExam = exams.first { exam in
+            guard let start = exam.date else { return false }
+            return exam.end.map { $0 > date } ?? (start >= today)
+        }
+        if let start = value.nextExam?.date {
+            value.nextExam?.days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: start)).day
         }
         return value
     }

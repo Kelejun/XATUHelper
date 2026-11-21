@@ -9,6 +9,7 @@ struct XatuHelperWidgetBundle: WidgetBundle {
         CourseWidget()
         ElectricityWidget()
         BreakWidget()
+        ExamWidget()
     }
 }
 
@@ -21,17 +22,33 @@ struct TodayEntry: TimelineEntry {
 
 struct SnapshotProvider: TimelineProvider {
     var preview: WidgetSnapshot
+    var schedulesExamChanges = false
 
     func placeholder(in context: Context) -> TodayEntry {
         TodayEntry(date: Date(), snapshot: preview)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        completion(TodayEntry(date: Date(), snapshot: WidgetStore.read() ?? (context.isPreview ? preview : .empty)))
+        let now = Date()
+        let snapshot = WidgetStore.read() ?? (context.isPreview ? preview : .empty)
+        completion(TodayEntry(date: now, snapshot: snapshot.resolved(at: now)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
-        let entry = TodayEntry(date: Date(), snapshot: (WidgetStore.read() ?? .empty).resolved(at: Date()))
+        let now = Date()
+        let snapshot = WidgetStore.read() ?? .empty
+        if schedulesExamChanges {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+            let ends = snapshot.upcomingExams?.compactMap(\.end).filter { $0 > now && $0 < tomorrow } ?? []
+            let entries = Set([now, tomorrow] + ends).sorted().map {
+                TodayEntry(date: $0, snapshot: snapshot.resolved(at: $0))
+            }
+            completion(Timeline(entries: entries, policy: .atEnd))
+            return
+        }
+        let entry = TodayEntry(date: now, snapshot: snapshot.resolved(at: now))
         let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(refresh)))
     }
@@ -56,7 +73,8 @@ enum PreviewData {
             upcomingBreak: WidgetSnapshot.Break(title: "放寒假",
                                                 date: Date().addingTimeInterval(83 * 86400),
                                                 days: 83),
-            nextExam: nil,
+            nextExam: .init(title: "数据结构", date: Date().addingTimeInterval(7 * 86400),
+                            days: 7, startTime: "09:00"),
             loggedIn: true
         )
     }()
@@ -154,6 +172,18 @@ struct BreakWidget: Widget {
     }
 }
 
+struct ExamWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ExamWidget", provider: SnapshotProvider(preview: PreviewData.snapshot, schedulesExamChanges: true)) { entry in
+            ExamWidgetView(entry: entry)
+                .containerBackground(for: .widget) { WidgetBackdrop(tint: .indigo) }
+        }
+        .configurationDisplayName("考试倒计时")
+        .description("查看下一场考试的科目、日期和剩余天数。")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
 // MARK: - 视图
 
 struct CourseWidgetView: View {
@@ -226,7 +256,7 @@ struct CourseWidgetView: View {
 
     private var smallLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            SmallWidgetHeader(icon: "calendar", title: headerText, tint: .blue)
             Spacer(minLength: 6)
             if let course = visibleCourses.first {
                 featuredCourse(course, compact: true)
@@ -444,21 +474,20 @@ struct ElectricityWidgetView: View {
                 .privacySensitive()
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 5) {
-                    Image(systemName: "bolt.fill").foregroundStyle(.orange)
-                    Text("宿舍电量").foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    Button(intent: RefreshElectricityIntent()) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .semibold))
-                            .frame(width: 28, height: 28)
-                            .background(.primary.opacity(0.06), in: Circle())
-                            .contentShape(Circle())
+                SmallWidgetHeader(icon: "bolt.fill", title: "宿舍电量", tint: .orange)
+                    .padding(.trailing, 32)
+                    .frame(height: 28, alignment: .top)
+                    .overlay(alignment: .topTrailing) {
+                        Button(intent: RefreshElectricityIntent()) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .semibold))
+                                .frame(width: 28, height: 28)
+                                .background(.primary.opacity(0.06), in: Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("刷新电量")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("刷新电量")
-                }
-                .font(.system(size: 11, weight: .medium))
 
                 Spacer(minLength: 6)
 
@@ -542,56 +571,110 @@ struct BreakWidgetView: View {
                                    value: entry.snapshot.upcomingBreak.map { $0.days <= 0 ? "今天" : "\($0.days)天" } ?? "—",
                                    caption: entry.snapshot.upcomingBreak?.title ?? "待更新")
         } else {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 5) {
-                    Image(systemName: "sun.horizon.fill").foregroundStyle(.teal)
-                    Text("假期倒计时").foregroundStyle(.secondary)
-                }
-                .font(.system(size: 11, weight: .medium))
-
-                Spacer(minLength: 8)
-
-                if let item = entry.snapshot.upcomingBreak {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(item.days <= 0 ? "今天" : "\(item.days)")
-                            .font(.system(size: item.days <= 0 ? 36 : 48, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.teal)
-                            .minimumScaleFactor(0.6)
-                        if item.days > 0 {
-                            Text("天")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .lineLimit(1)
-                    Text(item.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Spacer(minLength: 8)
-                    Text(item.date, format: .dateTime.month().day().weekday(.abbreviated))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 27, weight: .light))
-                        .foregroundStyle(.teal)
-                    Text("期待下一次放假")
-                        .font(.system(size: 15, weight: .semibold))
-                        .padding(.top, 8)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Spacer(minLength: 8)
-                    Text("打开 App 查看校历后显示")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            let item = entry.snapshot.upcomingBreak
+            SmallCountdownCard(icon: "sun.horizon.fill", title: "假期倒计时", tint: .teal,
+                               days: item?.days, name: item?.title,
+                               detail: item?.date.formatted(.dateTime.month().day().weekday(.abbreviated)),
+                               emptyIcon: "calendar.badge.plus", emptyTitle: "期待下一次放假",
+                               emptyDetail: "打开 App 查看校历后显示")
         }
+    }
+}
+
+struct ExamWidgetView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        if !entry.snapshot.loggedIn {
+            EmptyHint()
+        } else {
+            let exam = entry.snapshot.nextExam
+            SmallCountdownCard(icon: "pencil.and.list.clipboard", title: "考试倒计时", tint: .indigo,
+                               days: exam?.days, name: exam?.title, detail: examDetail,
+                               emptyIcon: "calendar.badge.checkmark", emptyTitle: "暂无待考科目",
+                               emptyDetail: "打开 App 查看考试安排")
+                .privacySensitive()
+        }
+    }
+
+    private var examDetail: String? {
+        guard let exam = entry.snapshot.nextExam, let date = exam.date else { return nil }
+        var format = Date.FormatStyle.dateTime.month().day()
+        format.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return [date.formatted(format), exam.startTime].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+private struct SmallWidgetHeader: View {
+    let icon: String
+    let title: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).foregroundStyle(tint)
+                .frame(width: 13, height: 14)
+                .accessibilityHidden(true)
+            Text(title).foregroundStyle(.secondary)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 18)
+    }
+}
+
+private struct SmallCountdownCard: View {
+    let icon: String
+    let title: String
+    let tint: Color
+    let days: Int?
+    let name: String?
+    let detail: String?
+    let emptyIcon: String
+    let emptyTitle: String
+    let emptyDetail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SmallWidgetHeader(icon: icon, title: title, tint: tint)
+            Spacer(minLength: 6)
+            if let days, let name {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(days <= 0 ? "今天" : "\(days)")
+                        .font(.system(size: days <= 0 ? 36 : 48, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(tint)
+                        .minimumScaleFactor(0.6)
+                    if days > 0 {
+                        Text("天")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .lineLimit(1)
+                Text(name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            } else {
+                Image(systemName: emptyIcon)
+                    .font(.system(size: 27, weight: .light))
+                    .foregroundStyle(tint)
+                Text(emptyTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.top, 8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 6)
+            Text(detail ?? emptyDetail)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

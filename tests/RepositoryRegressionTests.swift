@@ -60,6 +60,18 @@ struct RepositoryRegressionTests {
             .init(id: "tue", name: "英语", room: "", startMinutes: 600, endMinutes: 700, day: tuesday)
         ]
         snapshot.upcomingBreak = .init(title: "放假", date: wednesday, days: 2)
+        let noon = date("2026-11-10 12:00")
+        snapshot.nextExam = .init(title: "旧快照考试", date: tuesday, days: 1)
+        check(snapshot.resolved(at: noon).nextExam?.days == 0, "legacy exam stays visible on exam day")
+        check(snapshot.resolved(at: wednesday).nextExam == nil, "expired legacy exam removed")
+        snapshot.upcomingExams = [
+            .init(title: "数学", date: date("2026-11-10 10:00"), days: 1, end: noon),
+            .init(title: "英语", date: date("2026-11-10 14:00"), days: 1, end: date("2026-11-10 16:00"))
+        ]
+        check(snapshot.resolved(at: monday).nextExam?.days == 1, "exam counts campus calendar days")
+        check(snapshot.resolved(at: tuesday).nextExam?.days == 0, "exam countdown rolls over at midnight")
+        check(snapshot.resolved(at: noon).nextExam?.title == "英语", "next exam takes over at previous exam end")
+        check(snapshot.resolved(at: wednesday).nextExam == nil, "completed exam schedule is empty")
         let next = snapshot.resolved(at: tuesday)
         check(next.courses.map(\.id) == ["tue"], "midnight selects dated courses")
         check(next.tomorrowCourses?.isEmpty == true, "empty following day")

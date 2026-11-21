@@ -46,8 +46,15 @@ extension AppState {
             }
             .sorted { $0.startMinutes < $1.startMinutes }
 
+        let now = Date()
+        let upcomingExams = datedExams.filter { $0.end > now }.sorted { $0.start < $1.start }.map { exam in
+            let time = exam.time.range(of: #"\d{1,2}[:：]\d{2}"#, options: .regularExpression)
+            return WidgetSnapshot.Exam(title: exam.name, date: exam.start,
+                                       days: WatchSnapshot.days(from: now, to: exam.start),
+                                       end: exam.end, startTime: time.map { String(exam.time[$0]).replacingOccurrences(of: "：", with: ":") })
+        }
         var snapshot = WidgetSnapshot(
-            generatedAt: Date(),
+            generatedAt: now,
             week: week,
             weekday: weekdayIndex,
             courses: courses,
@@ -57,7 +64,8 @@ extension AppState {
             balanceUpdatedAt: electricityCheckedAt,
             roomName: dorm?.roomName,
             upcomingBreak: upcomingBreakForWidget(),
-            nextExam: nextExamForWidget(),
+            nextExam: upcomingExams.first,
+            upcomingExams: upcomingExams,
             loggedIn: isLoggedIn
         )
 
@@ -96,22 +104,6 @@ extension AppState {
 
         let days = Calendar.current.dateComponents([.day], from: today, to: next.1).day ?? 0
         return WidgetSnapshot.Break(title: next.0, date: next.1, days: days)
-    }
-
-    private func nextExamForWidget() -> WidgetSnapshot.Exam? {
-        let today = Calendar.current.startOfDay(for: Date())
-        let formatter = Self.dayKeyFormatter
-
-        let upcoming = currentExams
-            .compactMap { exam -> (ExamRecord, Date)? in
-                guard let date = formatter.date(from: exam.dateKey), date >= today else { return nil }
-                return (exam, date)
-            }
-            .sorted { $0.1 < $1.1 }
-
-        guard let first = upcoming.first else { return nil }
-        let days = Calendar.current.dateComponents([.day], from: today, to: first.1).day ?? 0
-        return WidgetSnapshot.Exam(title: first.0.course, date: first.1, days: days)
     }
 
     static let dayKeyFormatter: DateFormatter = {
