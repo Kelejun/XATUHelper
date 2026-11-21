@@ -133,7 +133,7 @@ struct TimetableEditSheet: View {
                     }
                     if mode == .move {
                         Section("课程安排") {
-                            dayPicker
+                            weekdayButtons(singleSelection: true)
                             periodPicker("起始节次", selection: $start, range: 1...maximumStart)
                             LabeledContent("结束节次", value: "第 \(start + block.span - 1) 节")
                             TextField("教室（选填）", text: $room)
@@ -196,7 +196,7 @@ struct TimetableEditSheet: View {
                     Text($0.rawValue).tag($0)
                 }
             }
-            weekdayButtons
+            weekdayButtons(singleSelection: rangeMode == .once)
 
             switch rangeMode {
             case .once, .weeks:
@@ -218,10 +218,9 @@ struct TimetableEditSheet: View {
         }
     }
 
-    private var weekdayButtons: some View {
-        let singleSelection = rangeMode == .once
-        return HStack(spacing: 0) {
-            ForEach([7, 1, 2, 3, 4, 5, 6], id: \.self) { value in
+    private func weekdayButtons(singleSelection: Bool) -> some View {
+        HStack(spacing: 0) {
+            ForEach(1...7, id: \.self) { value in
                 let isSelected = singleSelection ? day == value : days.contains(value)
                 let label = dayLabels[value - 1]
                 Button {
@@ -300,12 +299,6 @@ struct TimetableEditSheet: View {
                 .accessibilityHidden(true)
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private var dayPicker: some View {
-        Picker("星期", selection: $day) {
-            ForEach(1...7, id: \.self) { Text("周" + dayLabels[$0 - 1]).tag($0) }
-        }
     }
 
     private func periodPicker(_ title: String, selection: Binding<Int>, range: ClosedRange<Int>) -> some View {
