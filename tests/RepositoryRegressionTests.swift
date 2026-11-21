@@ -71,6 +71,7 @@ struct RepositoryRegressionTests {
         check(snapshot.resolved(at: monday).nextExam?.days == 1, "exam counts campus calendar days")
         check(snapshot.resolved(at: tuesday).nextExam?.days == 0, "exam countdown rolls over at midnight")
         check(snapshot.resolved(at: noon).nextExam?.title == "英语", "next exam takes over at previous exam end")
+        check(snapshot.resolved(at: noon).upcomingExams?.map(\.title) == ["英语"], "widget list drops the finished exam")
         check(snapshot.resolved(at: wednesday).nextExam == nil, "completed exam schedule is empty")
         let next = snapshot.resolved(at: tuesday)
         check(next.courses.map(\.id) == ["tue"], "midnight selects dated courses")

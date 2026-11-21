@@ -62,6 +62,14 @@ enum PreviewData {
             WidgetSnapshot.Course(id: "2", name: "计算机组成与体系结构", room: "教2-210",
                                   startMinutes: 14 * 60, endMinutes: 15 * 60 + 40)
         ]
+        let exams = [
+            WidgetSnapshot.Exam(title: "数据结构", date: Date().addingTimeInterval(7 * 86400),
+                                days: 7, startTime: "09:00", room: "教3-402", seat: "28"),
+            WidgetSnapshot.Exam(title: "大学英语", date: Date().addingTimeInterval(9 * 86400),
+                                days: 9, startTime: "14:00"),
+            WidgetSnapshot.Exam(title: "计算机网络", date: Date().addingTimeInterval(12 * 86400),
+                                days: 12, startTime: "09:00")
+        ]
         return WidgetSnapshot(
             generatedAt: Date(),
             week: 8,
@@ -73,8 +81,7 @@ enum PreviewData {
             upcomingBreak: WidgetSnapshot.Break(title: "放寒假",
                                                 date: Date().addingTimeInterval(83 * 86400),
                                                 days: 83),
-            nextExam: .init(title: "数据结构", date: Date().addingTimeInterval(7 * 86400),
-                            days: 7, startTime: "09:00"),
+            nextExam: exams.first, upcomingExams: exams,
             loggedIn: true
         )
     }()
@@ -180,7 +187,7 @@ struct ExamWidget: Widget {
         }
         .configurationDisplayName("考试倒计时")
         .description("查看下一场考试的科目、日期和剩余天数。")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular, .accessoryInline])
     }
 }
 
@@ -582,23 +589,84 @@ struct BreakWidgetView: View {
 }
 
 struct ExamWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: TodayEntry
+
+    private let icon = "pencil.and.list.clipboard"
+    private var exam: WidgetSnapshot.Exam? { entry.snapshot.nextExam }
+    private var countdown: String {
+        guard let days = exam?.days else { return "—" }
+        return days <= 0 ? "今天" : "\(days) 天"
+    }
 
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
         } else {
-            let exam = entry.snapshot.nextExam
-            SmallCountdownCard(icon: "pencil.and.list.clipboard", title: "考试倒计时", tint: .indigo,
-                               days: exam?.days, name: exam?.title, detail: examDetail,
-                               emptyIcon: "calendar.badge.checkmark", emptyTitle: "暂无待考科目",
-                               emptyDetail: "打开 App 查看考试安排")
-                .privacySensitive()
+            layout.privacySensitive()
         }
     }
 
-    private var examDetail: String? {
-        guard let exam = entry.snapshot.nextExam, let date = exam.date else { return nil }
+    @ViewBuilder private var layout: some View {
+        switch family {
+        case .systemMedium:
+            if let exam {
+                HStack(spacing: 16) {
+                    countdownCard
+                    Divider()
+                    schedule(after: exam)
+                }
+            } else {
+                countdownCard
+            }
+        case .accessoryRectangular:
+            LockScreenRows(icon: icon, heading: exam == nil ? "考试倒计时" : "考试 · " + countdown,
+                           title: exam?.title ?? "暂无待考科目", subtitle: exam.flatMap(detail) ?? "打开 App 查看考试安排",
+                           allowsTwoLineTitle: true)
+        case .accessoryCircular:
+            LockScreenCompactValue(icon: icon, value: countdown, caption: exam == nil ? "暂无考试" : "考试")
+        case .accessoryInline:
+            Label(exam.map { countdown + " · " + $0.title } ?? "暂无待考科目", systemImage: icon)
+        default:
+            countdownCard
+        }
+    }
+
+    private var countdownCard: some View {
+        SmallCountdownCard(icon: icon, title: "考试倒计时", tint: .indigo,
+                           days: exam?.days, name: exam?.title, detail: exam.flatMap(detail),
+                           emptyIcon: "calendar.badge.checkmark", emptyTitle: "暂无待考科目",
+                           emptyDetail: "打开 App 查看考试安排")
+    }
+
+    private func schedule(after next: WidgetSnapshot.Exam) -> some View {
+        let following = (entry.snapshot.upcomingExams ?? []).dropFirst().prefix(2)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(following.isEmpty ? "本场考试" : "后续考试")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            if following.isEmpty {
+                Label(next.room.flatMap { $0.isEmpty ? nil : $0 } ?? "考场待定", systemImage: "location.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(2)
+                if let seat = next.seat, !seat.isEmpty {
+                    Text("座位 " + seat).font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(Array(following.indices), id: \.self) { index in
+                    let item = following[index]
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(detail(item) ?? "").font(.system(size: 10, weight: .medium)).foregroundStyle(.indigo)
+                        Text(item.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private func detail(_ exam: WidgetSnapshot.Exam) -> String? {
+        guard let date = exam.date else { return nil }
         var format = Date.FormatStyle.dateTime.month().day()
         format.timeZone = TimeZone(identifier: "Asia/Shanghai")!
         return [date.formatted(format), exam.startTime].compactMap { $0 }.joined(separator: " · ")
@@ -683,7 +751,9 @@ struct EmptyHint: View {
     var showsLeadingRule = false
 
     var body: some View {
-        if family == .accessoryRectangular {
+        if family == .accessoryInline {
+            Label("打开 App 登录", systemImage: "lock.fill")
+        } else if family == .accessoryRectangular {
             LockScreenRows(icon: "lock.fill", heading: "XATune",
                            title: "打开 App 登录", subtitle: "同步校园数据", showsLeadingRule: showsLeadingRule)
         } else if family == .accessoryCircular {
@@ -803,7 +873,7 @@ struct WidgetBackdrop: View {
     let tint: Color
 
     var body: some View {
-        if family == .accessoryRectangular || family == .accessoryCircular {
+        if family == .accessoryRectangular || family == .accessoryCircular || family == .accessoryInline {
             Color.clear
         } else {
             ZStack {

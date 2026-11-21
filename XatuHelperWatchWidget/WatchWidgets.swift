@@ -7,11 +7,13 @@ struct WatchWidgetEntry: TimelineEntry {
 }
 
 struct WatchWidgetProvider: TimelineProvider {
+    var preview: WatchSnapshot = .empty
+
     func placeholder(in context: Context) -> WatchWidgetEntry {
-        WatchWidgetEntry(date: Date(), snapshot: .empty)
+        WatchWidgetEntry(date: Date(), snapshot: preview)
     }
     func getSnapshot(in context: Context, completion: @escaping (WatchWidgetEntry) -> Void) {
-        completion(WatchWidgetEntry(date: Date(), snapshot: WatchStore.read().snapshot ?? .empty))
+        completion(WatchWidgetEntry(date: Date(), snapshot: WatchStore.read().snapshot ?? (context.isPreview ? preview : .empty)))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchWidgetEntry>) -> Void) {
         let snapshot = WatchStore.read().snapshot ?? .empty
@@ -22,7 +24,18 @@ struct WatchWidgetProvider: TimelineProvider {
     }
 }
 
-private enum WatchWidgetKind { case course, electricity, holiday }
+private enum WatchWidgetKind: String {
+    case course = "courses", electricity, holiday, exam = "exams"
+
+    var icon: String {
+        switch self {
+        case .course: return "book.closed.fill"
+        case .electricity: return "bolt.fill"
+        case .holiday: return "sun.max.fill"
+        case .exam: return "pencil.and.list.clipboard"
+        }
+    }
+}
 
 private struct WatchComplicationView: View {
     let entry: WatchWidgetEntry
@@ -33,13 +46,20 @@ private struct WatchComplicationView: View {
         entry.snapshot.currentLesson(at: entry.date) ?? entry.snapshot.nextLesson(at: entry.date)
     }
     private var holiday: WatchSnapshot.Holiday? { entry.snapshot.nextHoliday(at: entry.date) }
-    private var url: URL { URL(string: "xatuwatch://\(kind == .course ? "courses" : kind == .electricity ? "electricity" : "holiday")")! }
-    private var icon: String { kind == .course ? "book.closed.fill" : kind == .electricity ? "bolt.fill" : "sun.max.fill" }
+    private var exam: WatchSnapshot.Exam? { entry.snapshot.upcomingExams(at: entry.date).first }
+    private var examCountdown: String {
+        guard let exam else { return "—" }
+        let days = WatchSnapshot.days(from: entry.date, to: exam.start)
+        return days <= 0 ? "今天" : "\(days) 天"
+    }
+    private var url: URL { URL(string: "xatuwatch://\(kind.rawValue)")! }
+    private var icon: String { kind.icon }
 
     private var tint: Color {
         switch kind {
         case .course: return CampusCourseColors.color(index: lesson?.colorIndex)
         case .electricity: return .yellow
+        case .exam: return .indigo
         case .holiday: return .mint
         }
     }
@@ -47,6 +67,7 @@ private struct WatchComplicationView: View {
     private var title: String {
         guard entry.snapshot.loggedIn else { return "请在手机端同步" }
         switch kind {
+        case .exam: return exam?.name ?? (entry.snapshot.examsUpdatedAt == nil ? "考试尚未同步" : "暂无待考科目")
         case .course: return lesson?.name ?? "暂无后续课程"
         case .electricity: return "\(entry.snapshot.balance ?? "—") 度"
         case .holiday:
@@ -59,6 +80,7 @@ private struct WatchComplicationView: View {
         switch kind {
         case .course: return lesson.map { $0.room.isEmpty ? "教室待定" : $0.room } ?? "打开手机更新课表"
         case .electricity: return entry.snapshot.roomName ?? "请在手机端绑定宿舍"
+        case .exam: return exam == nil ? "考试倒计时" : "考试 · " + examCountdown
         case .holiday: return holiday.map(\.title) ?? "假期倒计时"
         }
     }
@@ -72,6 +94,10 @@ private struct WatchComplicationView: View {
             return current ? "\(WatchSnapshot.clock(lesson.end)) 下课" : "\(prefix)\(WatchSnapshot.clock(lesson.start)) 上课"
         case .electricity:
             return entry.snapshot.balanceUpdatedAt.map { "查询于 \(WatchSnapshot.format($0, "M/d HH:mm"))" } ?? "尚未查询"
+        case .exam:
+            guard let exam else { return "打开 iPhone 查看考试安排" }
+            let hasStartTime = exam.time.range(of: #"\d{1,2}[:：]\d{2}"#, options: .regularExpression) != nil
+            return WatchSnapshot.format(exam.start, hasStartTime ? "M月d日 · HH:mm" : "M月d日")
         case .holiday: return holiday.map { WatchSnapshot.format($0.date, "M月d日") } ?? ""
         }
     }
@@ -86,13 +112,27 @@ private struct WatchComplicationView: View {
                 }
             } else {
                 switch family {
+                case .accessoryCorner:
+                    Text(examCountdown)
+                        .font(.system(.body, design: .rounded, weight: .bold))
+                        .widgetAccentable()
+                        .widgetLabel { Text(title) }
                 case .accessoryInline:
-                    Label(kind == .course ? "\(detail) · \(title)" : title, systemImage: icon)
+                    if kind == .exam, exam != nil {
+                        Label(examCountdown + " · " + title, systemImage: icon)
+                    } else {
+                        Label(kind == .course ? "\(detail) · \(title)" : title, systemImage: icon)
+                    }
                 case .accessoryCircular:
                     VStack(spacing: 2) {
                         if kind == .course {
                             Text(detail).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
                             Text(title).font(.system(size: 10)).lineLimit(2).minimumScaleFactor(0.7)
+                        } else if kind == .exam {
+                            Image(systemName: icon).font(.caption2).widgetAccentable()
+                            Text(examCountdown).font(.system(size: 19, weight: .bold, design: .rounded))
+                                .lineLimit(1).minimumScaleFactor(0.65)
+                            Text(exam == nil ? title : "考试").font(.system(size: 9)).lineLimit(1)
                         } else if kind == .holiday, let holiday {
                             Text("\(max(0, WatchSnapshot.days(from: entry.date, to: holiday.date)))")
                                 .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -139,11 +179,11 @@ private struct WatchComplicationView: View {
                 .layoutPriority(1)
                 Text(title).font(.headline).lineLimit(titleLines).minimumScaleFactor(0.75)
             } else {
-                Label(kind == .electricity ? "剩余电量" : "假期倒计时", systemImage: icon)
+                Label(rectangularHeading, systemImage: icon)
                     .font(.caption).foregroundStyle(tint).widgetAccentable()
                     .lineLimit(1)
                     .layoutPriority(1)
-                Text(title).font(.headline).foregroundStyle(tint)
+                Text(title).font(.headline).foregroundStyle(kind == .exam ? Color.primary : tint)
                     .widgetAccentable().lineLimit(titleLines).minimumScaleFactor(0.75)
             }
             Text(time).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
@@ -152,6 +192,13 @@ private struct WatchComplicationView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var rectangularHeading: String {
+        switch kind {
+        case .course, .exam: return detail
+        case .electricity: return "剩余电量"
+        case .holiday: return "假期倒计时"
+        }
+    }
 }
 
 struct WatchCourseWidget: Widget {
@@ -184,11 +231,34 @@ struct WatchHolidayWidget: Widget {
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
+struct WatchExamWidget: Widget {
+    private var preview: WatchSnapshot {
+        var snapshot = WatchSnapshot.empty
+        let calendar = WatchSnapshot.campusCalendar
+        let day = calendar.date(byAdding: .day, value: 7, to: Date())!
+        let date = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day)!
+        snapshot.loggedIn = true
+        snapshot.exams = [.init(id: "exam", name: "数据结构", start: date, end: date.addingTimeInterval(7200),
+                                time: "09:00–11:00", room: "", seat: "", note: "")]
+        return snapshot
+    }
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "WatchExam", provider: WatchWidgetProvider(preview: preview)) {
+            WatchComplicationView(entry: $0, kind: .exam)
+        }
+        .configurationDisplayName("考试倒计时")
+        .description("查看下一场考试，轻点打开手表考试安排。")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
+    }
+}
+
 @main
 struct WatchWidgets: WidgetBundle {
     var body: some Widget {
         WatchCourseWidget()
         WatchElectricityWidget()
         WatchHolidayWidget()
+        WatchExamWidget()
     }
 }

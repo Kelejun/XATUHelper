@@ -51,7 +51,8 @@ extension AppState {
             let time = exam.time.range(of: #"\d{1,2}[:：]\d{2}"#, options: .regularExpression)
             return WidgetSnapshot.Exam(title: exam.name, date: exam.start,
                                        days: WatchSnapshot.days(from: now, to: exam.start),
-                                       end: exam.end, startTime: time.map { String(exam.time[$0]).replacingOccurrences(of: "：", with: ":") })
+                                       end: exam.end, startTime: time.map { String(exam.time[$0]).replacingOccurrences(of: "：", with: ":") },
+                                       room: exam.room, seat: exam.seat)
         }
         var snapshot = WidgetSnapshot(
             generatedAt: now,
