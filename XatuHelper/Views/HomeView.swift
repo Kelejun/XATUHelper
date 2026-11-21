@@ -344,7 +344,7 @@ struct HomeView: View {
             let displayed = showingTomorrow ? tomorrowBlocks : todayBlocks.filter { PeriodSchedule.endMinutes(of: $0) > nowMinutes }
             if displayed.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "sun.horizon")
+                    Image(systemName: "sun.horizon.fill")
                         .font(.system(size: 32, weight: .light))
                         .foregroundStyle(.teal)
                         .frame(width: 60, height: 60)
