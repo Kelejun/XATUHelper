@@ -72,7 +72,9 @@ enum NotificationSettings {
 /// 本地通知：系统自己排期，App 被完全杀掉也会到点弹。
 /// 代价是内容在排期那一刻就固定了，所以每次拉到新课表/新考试都要重排一遍。
 enum NotificationService {
-    private static let prefixes = ["class-", "exam-"]
+    private static let classPrefix = "class-"
+    private static let prefixes = [classPrefix, "exam-"]
+    private static let classEndKey = "classEndTimestamp"
     /// 只排未来这么多天的，免得一学期的课把 64 条额度占满
     private static let daysAhead = 7
     private static let maxPending = 60
@@ -121,7 +123,44 @@ enum NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: await pendingIdentifiers())
     }
 
+    static func clearExpiredClassReminders() async {
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications()
+        guard !Task.isCancelled else { return }
+        let now = Date()
+        let expired = delivered.compactMap { notification -> String? in
+            let request = notification.request
+            guard let end = classEndDate(for: request), end <= now else { return nil }
+            return request.identifier
+        }
+        if !expired.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: expired)
+        }
+    }
+
     // MARK: - 上课提醒
+
+    private static func classEndDate(for request: UNNotificationRequest) -> Date? {
+        guard request.identifier.hasPrefix(classPrefix) else { return nil }
+        if let timestamp = request.content.userInfo[classEndKey] as? TimeInterval, timestamp.isFinite {
+            return Date(timeIntervalSince1970: timestamp)
+        }
+
+        // 旧通知的标识以最后一节的节次结尾，通知触发时间与上课时间在同一天。
+        let calendar = Calendar.current
+        guard let separator = request.identifier.lastIndex(of: "#"),
+              let endPeriod = Int(request.identifier[request.identifier.index(after: separator)...]),
+              (1...PeriodSchedule.end.count).contains(endPeriod),
+              let trigger = request.trigger as? UNCalendarNotificationTrigger,
+              let fire = calendar.date(from: trigger.dateComponents),
+              let hour = trigger.dateComponents.hour, let minute = trigger.dateComponents.minute else { return nil }
+
+        let lead = PeriodSchedule.jiaoSanStartMinutes - (hour * 60 + minute)
+        let isJiaoSanEarly = endPeriod == 4 && request.content.body.contains("教3")
+            && NotificationSettings.classLeadOptions.contains(lead)
+        let endMinutes = isJiaoSanEarly ? PeriodSchedule.jiaoSanEndMinutes : PeriodSchedule.endMinutes(endPeriod)
+        return calendar.startOfDay(for: fire).addingTimeInterval(TimeInterval(endMinutes * 60))
+    }
 
     private static func classReminders(
         occurrences: [CourseOccurrence],
@@ -137,6 +176,7 @@ enum NotificationService {
         // 按合并后的课程块排提醒，否则一门两节连排的课会在第 1、2 节各弹一次
         for item in occurrences.courseBlocks() where !item.isPlaceholder && !item.isRemote {
             let startMinutes = PeriodSchedule.startMinutes(of: item)
+            let endMinutes = PeriodSchedule.endMinutes(of: item)
             for week in item.weeks {
                 guard let day = calendar.date(
                     byAdding: .day,
@@ -152,12 +192,16 @@ enum NotificationService {
                 content.title = "下一节课：\(item.name)"
                 content.body = item.room.isEmpty ? "教室待定" : "教室 \(item.room)"
                 content.sound = .default
+                if endMinutes > 0 {
+                    let end = dayStart.addingTimeInterval(TimeInterval(endMinutes * 60))
+                    content.userInfo[classEndKey] = end.timeIntervalSince1970
+                }
 
                 let trigger = UNCalendarNotificationTrigger(
                     dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire),
                     repeats: false
                 )
-                let identifier = "class-\(week)-\(item.id)"
+                let identifier = "\(classPrefix)\(week)-\(item.id)"
                 result.append((fire, UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)))
             }
         }

@@ -6,6 +6,10 @@ enum PeriodSchedule {
                         "16:00", "16:50", "18:10", "19:05", "20:00", "20:55"]
     static let end = ["09:05", "10:00", "11:05", "12:00", "14:45", "15:40",
                       "16:45", "17:40", "18:55", "19:50", "20:45", "21:40"]
+    private static let jiaoSanStart = "10:10"
+    private static let jiaoSanEnd = "11:40"
+    static let jiaoSanStartMinutes = minutes(jiaoSanStart)
+    static let jiaoSanEndMinutes = minutes(jiaoSanEnd)
 
     static func startTime(_ period: Int) -> String { value(start, period - 1) }
     static func endTime(_ period: Int) -> String { value(end, period - 1) }
@@ -40,7 +44,7 @@ enum PeriodSchedule {
     }
 
     static func range(for block: CourseBlock) -> String {
-        isJiaoSanEarly(block) ? "10:10-11:40" : range(from: block.startPeriod, to: block.endPeriod)
+        isJiaoSanEarly(block) ? "\(jiaoSanStart)-\(jiaoSanEnd)" : range(from: block.startPeriod, to: block.endPeriod)
     }
 
     static func isJiaoSanEarly(room: String, period: Int) -> Bool {
@@ -48,11 +52,11 @@ enum PeriodSchedule {
     }
 
     static func startMinutes(of block: CourseBlock) -> Int {
-        isJiaoSanEarly(block) ? minutes("10:10") : startMinutes(block.startPeriod)
+        isJiaoSanEarly(block) ? jiaoSanStartMinutes : startMinutes(block.startPeriod)
     }
 
     static func endMinutes(of block: CourseBlock) -> Int {
-        isJiaoSanEarly(block) ? minutes("11:40") : endMinutes(block.endPeriod)
+        isJiaoSanEarly(block) ? jiaoSanEndMinutes : endMinutes(block.endPeriod)
     }
 
     private static func value(_ list: [String], _ index: Int) -> String {

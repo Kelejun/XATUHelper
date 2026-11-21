@@ -19,6 +19,10 @@ struct XatuHelperApp: App {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(announcements)
+                .task(id: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    await NotificationService.clearExpiredClassReminders()
+                }
         }
         .backgroundTask(.appRefresh(BackgroundElectricityRefresh.identifier)) {
             await app.performBackgroundElectricityRefresh()
