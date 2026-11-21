@@ -210,8 +210,9 @@ private struct WatchHomeView: View {
     }
 
     private func examSummary(_ exam: WatchSnapshot.Exam, compact: Bool) -> some View {
-        let title = WatchSnapshot.campusCalendar.isDate(exam.start, inSameDayAs: now)
-            ? "今日考试" : "\(WatchSnapshot.dayLabel(exam.start, relativeTo: now))考试"
+        let isToday = WatchSnapshot.campusCalendar.isDate(exam.start, inSameDayAs: now)
+        let title = isToday ? "今日考试" : "\(WatchSnapshot.dayLabel(exam.start, relativeTo: now))考试"
+        let seat = exam.seat.trimmingCharacters(in: .whitespacesAndNewlines)
         return summary(tint: .purple, compact: compact) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
@@ -221,6 +222,9 @@ private struct WatchHomeView: View {
                 }.font(.system(size: captionSize, weight: .medium))
                 Text("\(exam.name) · \(exam.room.isEmpty ? "考场待定" : exam.room)")
                     .font(.system(size: captionSize + 1, weight: .semibold)).lineLimit(2)
+                if isToday && !seat.isEmpty {
+                    Text("座位 \(seat)").font(.system(size: captionSize)).foregroundStyle(.secondary)
+                }
             }
         }
     }
