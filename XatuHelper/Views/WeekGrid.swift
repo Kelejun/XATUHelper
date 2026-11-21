@@ -321,9 +321,13 @@ struct WeekGrid: View {
             }
             .accessibilityLabel(Text(verbatim: name))
         } else {
-            Text(verbatim: name)
+            let displayName = name.replacingOccurrences(
+                of: #"(?<=\p{Han})(?=\p{Han})"#, with: "\u{200B}", options: .regularExpression
+            )
+            Text(verbatim: displayName)
                 .lineLimit(nil)
                 .minimumScaleFactor(0.8)
+                .accessibilityLabel(Text(verbatim: name))
         }
     }
 
