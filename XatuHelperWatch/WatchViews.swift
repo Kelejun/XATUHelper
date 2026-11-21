@@ -78,7 +78,7 @@ private struct WatchPageHeading: View {
             .font(.title2).foregroundStyle(tint)
             .lineLimit(1).minimumScaleFactor(0.9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 4).padding(.trailing, 42).padding(.bottom, 4)
+            .padding(.trailing, 42).padding(.bottom, 4)
     }
 }
 
@@ -90,8 +90,8 @@ private struct CoursePages: View {
     var body: some View {
         TabView(selection: $section) {
             WatchHomeView(snapshot: snapshot, now: now).tag(0)
-            WatchTimetableView(snapshot: snapshot, now: now).tag(1)
-            WatchTimetableView(snapshot: snapshot, now: now, dayOffset: 1).tag(2)
+            WatchTimetableView(snapshot: snapshot, now: now, day: now).tag(1)
+            WatchTimetableView(snapshot: snapshot, now: now, day: snapshot.nextTimetableDay(after: now)).tag(2)
         }
         .tabViewStyle(.verticalPage)
     }
@@ -102,10 +102,12 @@ private struct WatchHomeView: View {
     let now: Date
 
     private var current: WatchSnapshot.Lesson? { snapshot.currentLesson(at: now) }
-    private var next: WatchSnapshot.Lesson? { snapshot.nextLesson(at: now) }
+    private var next: WatchSnapshot.Lesson? { snapshot.nextHomeLesson(at: now) }
     @ScaledMetric private var titleSize: CGFloat = 26
     @ScaledMetric private var captionSize: CGFloat = 12
     @ScaledMetric private var statusSize: CGFloat = 13
+
+    private func cardInset(compact: Bool) -> CGFloat { compact ? 6 : 12 }
 
     var body: some View {
         ViewThatFits(in: .vertical) {
@@ -117,8 +119,9 @@ private struct WatchHomeView: View {
     }
 
     private func content(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 5 : 10) {
-            WatchPageHeading(title: CampusGreeting.text(at: now))
+        let exam = snapshot.homeExam(at: now)
+        return VStack(alignment: .leading, spacing: compact ? 5 : 10) {
+            WatchPageHeading(title: CampusGreeting.text(at: now)).padding(.leading, 4)
             HStack(spacing: 5) {
                 Text(WatchSnapshot.format(now, "M月d日 EEE"))
                 Spacer(minLength: 0)
@@ -131,24 +134,25 @@ private struct WatchHomeView: View {
             .font(.system(size: captionSize, weight: .medium))
             .foregroundStyle(.secondary).padding(.horizontal, 3)
 
+            if case let .aboveCourses(upcoming) = exam {
+                examSummary(upcoming, compact: compact)
+            }
             if let lesson = current ?? next {
                 NavigationLink(value: lesson) { courseCard(lesson, compact: compact) }
                     .buttonStyle(.plain)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "sun.max").font(.title2.weight(.light)).foregroundStyle(.blue)
-                    Text(snapshot.timetableUpdatedAt == nil ? "课表尚未同步" : "暂无后续课程")
+                    Text(snapshot.timetableUpdatedAt == nil ? "课表尚未同步" : "今明两天暂无待上课程")
                         .font(.headline)
                     Text(snapshot.timetableUpdatedAt == nil ? "在手机端加载课表后自动同步" : "留点时间给自己")
                         .font(.system(size: captionSize + 1)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
             }
 
-            if let exam = snapshot.nearExam(at: now) {
-                let title = WatchSnapshot.campusCalendar.isDate(exam.start, inSameDayAs: now)
-                    ? "今日考试" : "\(WatchSnapshot.dayLabel(exam.start, relativeTo: now))考试"
-                examSummary(exam, title: title, compact: compact)
-            } else if current != nil, let next {
+            if case let .belowCourses(upcoming) = exam {
+                examSummary(upcoming, compact: compact)
+            } else if exam == nil, current != nil, let next {
                 summary(tint: CampusCourseColors.color(index: next.colorIndex), compact: compact) {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
@@ -199,17 +203,19 @@ private struct WatchHomeView: View {
                 }
             }
         }
-        .padding(compact ? 6 : 12)
+        .padding(cardInset(compact: compact))
         .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
     }
 
-    private func examSummary(_ exam: WatchSnapshot.Exam, title: String, compact: Bool) -> some View {
-        summary(tint: .orange, compact: compact) {
+    private func examSummary(_ exam: WatchSnapshot.Exam, compact: Bool) -> some View {
+        let title = WatchSnapshot.campusCalendar.isDate(exam.start, inSameDayAs: now)
+            ? "今日考试" : "\(WatchSnapshot.dayLabel(exam.start, relativeTo: now))考试"
+        return summary(tint: .purple, compact: compact) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text(title).foregroundStyle(.orange)
+                    Text(title).foregroundStyle(.purple)
                     Spacer(minLength: 2)
                     Text(exam.time).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
                 }.font(.system(size: captionSize, weight: .medium))
@@ -220,11 +226,11 @@ private struct WatchHomeView: View {
     }
 
     private func summary<Content: View>(tint: Color, compact: Bool, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: compact ? 9 : 11) {
             RoundedRectangle(cornerRadius: 2).fill(tint).frame(width: 3)
             content().frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 4).padding(.vertical, compact ? 3 : 5)
+        .padding(.horizontal, cardInset(compact: compact)).padding(.vertical, compact ? 3 : 5)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
     }
@@ -233,24 +239,22 @@ private struct WatchHomeView: View {
 private struct WatchTimetableView: View {
     let snapshot: WatchSnapshot
     let now: Date
-    var dayOffset: Int = 0
-
-    private var day: Date {
-        WatchSnapshot.campusCalendar.date(byAdding: .day, value: dayOffset, to: now) ?? now
-    }
-    private var title: String { dayOffset == 0 ? "今日课表" : "明日课表" }
+    let day: Date?
 
     var body: some View {
+        let lessons = day.map { snapshot.lessons(on: $0) } ?? []
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                WatchPageHeading(title: title)
-                Text("\(WatchSnapshot.format(day, "M月d日 EEEE")) · \(snapshot.lessons(on: day).count) 节安排")
-                    .font(.caption2).foregroundStyle(.secondary)
-                if snapshot.lessons(on: day).isEmpty {
-                    Label(snapshot.timetableUpdatedAt == nil ? "课表尚未同步" : (dayOffset == 0 ? "今日无课" : "明日无课"), systemImage: "calendar")
+                WatchPageHeading(title: day.map { WatchSnapshot.timetableTitle(for: $0, relativeTo: now) } ?? "后续课表")
+                if let day {
+                    Text("\(WatchSnapshot.format(day, "M月d日 EEEE")) · \(lessons.count) 节安排")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                if lessons.isEmpty {
+                    Label(snapshot.timetableUpdatedAt == nil ? "课表尚未同步" : (day == nil ? "暂无后续课程" : "今日无课"), systemImage: "calendar")
                         .padding(.vertical)
                 }
-                ForEach(snapshot.lessons(on: day)) { lesson in
+                ForEach(lessons) { lesson in
                     let tint = CampusCourseColors.color(index: lesson.colorIndex)
                     NavigationLink(value: lesson) {
                         HStack(spacing: 9) {
@@ -298,14 +302,14 @@ private struct WatchExamsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                WatchPageHeading(title: "考试安排", tint: .orange)
+                WatchPageHeading(title: "考试安排", tint: .purple)
                 if snapshot.upcomingExams(at: now).isEmpty {
                     Text(snapshot.examsUpdatedAt == nil ? "考试尚未同步" : "暂无考试安排").font(.title3.bold()).padding(.vertical, 8)
                 }
                 ForEach(snapshot.upcomingExams(at: now)) { exam in
                     VStack(alignment: .leading, spacing: 7) {
                         let days = WatchSnapshot.days(from: now, to: exam.start)
-                        Text(days == 0 ? "今天考试" : "还有 \(days) 天").font(.caption).foregroundStyle(.orange)
+                        Text(days == 0 ? "今天考试" : "还有 \(days) 天").font(.caption).foregroundStyle(.purple)
                         Text(exam.name).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
                         Text(WatchSnapshot.format(exam.start, "M月d日 EEEE")).font(.caption)
                         Text(exam.time.isEmpty ? "时间待定" : exam.time).font(.caption).foregroundStyle(.secondary)
@@ -313,13 +317,15 @@ private struct WatchExamsView: View {
                         if !exam.seat.isEmpty { Text("座位 \(exam.seat)").font(.caption) }
                         if !exam.note.isEmpty { Text(exam.note).font(.caption2).foregroundStyle(.secondary) }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(10)
-                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 14).fill(.purple.opacity(0.12)).padding(.horizontal, -8)
+                    }
                 }
                 WatchUpdateLabel(title: "考试更新", date: snapshot.examsUpdatedAt)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, 14).padding(.vertical, 8)
         }
     }
 }
@@ -329,10 +335,10 @@ private struct WatchElectricityView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                WatchPageHeading(title: "宿舍电费", tint: .yellow)
+                WatchPageHeading(title: "宿舍电费", tint: .orange)
                 Text("剩余电量").font(.caption).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(snapshot.balance ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).minimumScaleFactor(0.5).lineLimit(1)
+                    Text(snapshot.balance ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).minimumScaleFactor(0.5).lineLimit(1).foregroundStyle(.orange)
                     Text("度").font(.callout).foregroundStyle(.secondary)
                 }
                 Text(snapshot.roomName ?? "请在手机端绑定宿舍").font(.callout)
@@ -349,13 +355,13 @@ private struct WatchHolidayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                WatchPageHeading(title: "假期倒计时", tint: .mint)
+                WatchPageHeading(title: "假期倒计时", tint: .teal)
                 if let holiday = snapshot.nextHoliday(at: now) {
                     Text(holiday.title).font(.title3.bold())
                     let days = WatchSnapshot.days(from: now, to: holiday.date)
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(days == 0 ? "今天" : "\(days)")
-                            .font(.system(size: 52, weight: .bold, design: .rounded)).minimumScaleFactor(0.6).lineLimit(1)
+                            .font(.system(size: 52, weight: .bold, design: .rounded)).minimumScaleFactor(0.6).lineLimit(1).foregroundStyle(.teal)
                         if days > 0 { Text("天").foregroundStyle(.secondary) }
                     }
                     Text(WatchSnapshot.format(holiday.date, "yyyy年M月d日")).font(.caption).foregroundStyle(.secondary)

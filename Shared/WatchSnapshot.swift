@@ -76,6 +76,18 @@ struct WatchSnapshot: Codable, Equatable {
         return lessons.filter { $0.start > date }.min { $0.start < $1.start }
     }
 
+    func nextHomeLesson(at date: Date) -> Lesson? {
+        guard let next = nextLesson(at: date),
+              Self.days(from: date, to: next.start) <= 1 else { return nil }
+        return next
+    }
+
+    func nextTimetableDay(after date: Date) -> Date? {
+        let calendar = Self.campusCalendar
+        guard loggedIn, let tomorrow = calendar.dateInterval(of: .day, for: date)?.end else { return nil }
+        return lessons.lazy.map(\.start).filter { $0 >= tomorrow }.min().map { calendar.startOfDay(for: $0) }
+    }
+
     func upcomingExams(at date: Date) -> [Exam] {
         guard loggedIn else { return [] }
         return exams.filter { $0.end > date }.sorted { $0.start < $1.start }
@@ -85,10 +97,17 @@ struct WatchSnapshot: Codable, Equatable {
         upcomingExams(at: date).first { Self.campusCalendar.isDate($0.start, inSameDayAs: date) }
     }
 
-    func nearExam(at date: Date) -> Exam? {
-        guard let exam = upcomingExams(at: date).first,
-              Self.days(from: date, to: exam.start) <= 7 else { return nil }
-        return exam
+    enum HomeExam {
+        case aboveCourses(Exam), belowCourses(Exam)
+    }
+
+    func homeExam(at date: Date) -> HomeExam? {
+        guard let exam = upcomingExams(at: date).first else { return nil }
+        switch Self.days(from: date, to: exam.start) {
+        case ...3: return .aboveCourses(exam)
+        case 4...7: return .belowCourses(exam)
+        default: return nil
+        }
     }
 
     func nextHoliday(at date: Date) -> Holiday? {
@@ -134,6 +153,21 @@ struct WatchSnapshot: Codable, Equatable {
         case 1: return "明天"
         case 2: return "后天"
         default: return format(date, "M月d日")
+        }
+    }
+
+    static func timetableTitle(for date: Date, relativeTo now: Date) -> String {
+        let offset = days(from: now, to: date)
+        switch offset {
+        case 0: return "今日课表"
+        case 1: return "明日课表"
+        case 2: return "后天课表"
+        default:
+            let weekdayFromMonday = (campusCalendar.component(.weekday, from: now) + 5) % 7
+            let daysUntilMonday = 7 - weekdayFromMonday
+            if offset < daysUntilMonday { return format(date, "EEE") + "课表" }
+            if offset < daysUntilMonday + 7 { return "下" + format(date, "EEE") + "课表" }
+            return format(date, "M月d日") + "课表"
         }
     }
 
