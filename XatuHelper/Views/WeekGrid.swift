@@ -279,10 +279,8 @@ struct WeekGrid: View {
                     .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(block.name)
+                    courseTitle(block.name)
                         .font(dayWidth >= 90 ? .subheadline.weight(.semibold) : .caption2.weight(.semibold))
-                        .lineLimit(dayWidth >= 90 ? 2 : (block.span >= 2 ? 3 : 1))
-                        .minimumScaleFactor(0.8)
 
                     Spacer(minLength: 0)
 
@@ -292,17 +290,18 @@ struct WeekGrid: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                             .foregroundStyle(.secondary)
+                            .layoutPriority(1)
                     }
                     if block.span >= 2, !block.room.isEmpty {
                         Text(block.shortRoom)
                             .font(.system(size: dayWidth >= 90 ? 11 : 9))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
+                            .layoutPriority(1)
                     }
                 }
                 .padding(.vertical, dayWidth >= 90 ? 7 : 3)
-
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.leading, 3)
             .padding(.trailing, 4)
@@ -311,6 +310,21 @@ struct WeekGrid: View {
             .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: navigate == nil ? 6 : 10))
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func courseTitle(_ name: String) -> some View {
+        if name.count == 4, name.unicodeScalars.allSatisfy({ $0.properties.isIdeographic }) {
+            ViewThatFits(in: .horizontal) {
+                Text(verbatim: name).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                Text(verbatim: "\(name.prefix(2))\n\(name.suffix(2))")
+            }
+            .accessibilityLabel(Text(verbatim: name))
+        } else {
+            Text(verbatim: name)
+                .lineLimit(nil)
+                .minimumScaleFactor(0.8)
+        }
     }
 
     private func color(for block: CourseBlock) -> Color {
