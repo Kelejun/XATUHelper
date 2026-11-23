@@ -308,7 +308,7 @@ private struct WatchCourseProgressView: View {
                     .font(.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                    bar(interval, countsDown: true, tint: tint)
+                    bar(interval, countsDown: entry.previous == nil, tint: tint)
                 } else {
                     HStack(spacing: 3) {
                         Text(inClass ? "距下课" : "下节课").foregroundStyle(.secondary)
