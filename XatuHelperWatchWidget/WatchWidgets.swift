@@ -306,12 +306,21 @@ private struct WatchCourseProgressView: View {
                 if minutes != nil, let interval = entry.preparationInterval {
                     Group {
                         if showLessonDetails {
-                            HStack(spacing: 3) {
-                                if let previous = entry.previous {
-                                    Text(previous.displayRoom).foregroundStyle(.secondary)
+                            HStack(spacing: 5) {
+                                if let previousRoom = entry.previous?.displayRoom, previousRoom != lesson.displayRoom {
+                                    Text(previousRoom)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Image(systemName: "arrow.right")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(tint)
+                                        .widgetAccentable()
+                                        .accessibilityHidden(true)
                                 }
-                                Spacer(minLength: 0)
-                                Text(lesson.displayRoom).foregroundStyle(tint).widgetAccentable()
+                                Text(lesson.displayRoom)
+                                    .foregroundStyle(tint)
+                                    .widgetAccentable()
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             .privacySensitive()
                         } else {
