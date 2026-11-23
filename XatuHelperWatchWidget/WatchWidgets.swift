@@ -224,15 +224,35 @@ struct WatchCourseWidget: Widget {
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
+extension WatchCourseProgress: TimelineEntry {}
+
+private struct WatchCourseProgressProvider: TimelineProvider {
+    let preview: WatchSnapshot
+
+    func placeholder(in context: Context) -> WatchCourseProgress {
+        WatchCourseProgress(snapshot: preview, at: Date())
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (WatchCourseProgress) -> Void) {
+        let snapshot = WatchStore.read().snapshot ?? (context.isPreview ? preview : .empty)
+        completion(WatchCourseProgress(snapshot: snapshot, at: Date()))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<WatchCourseProgress>) -> Void) {
+        let now = Date()
+        let entries = WatchCourseProgress.timeline(snapshot: WatchStore.read().snapshot ?? .empty, from: now)
+        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(24 * 3600))))
+    }
+}
+
 private struct WatchCourseProgressView: View {
-    let entry: WatchWidgetEntry
-    @Environment(\.widgetRenderingMode) private var renderingMode
+    let entry: WatchCourseProgress
 
     var body: some View {
         Group {
-            if !entry.snapshot.loggedIn {
+            if !entry.loggedIn {
                 Label("打开 iPhone 同步", systemImage: "iphone")
-            } else if let lesson = entry.snapshot.currentLesson(at: entry.date) ?? entry.snapshot.nextLesson(at: entry.date) {
+            } else if let lesson = entry.lesson {
                 card(for: lesson)
             } else {
                 Label("暂无后续课程", systemImage: "book.closed")
@@ -245,9 +265,14 @@ private struct WatchCourseProgressView: View {
         .widgetURL(URL(string: "xatuwatch://courses"))
     }
 
+    private func room(of lesson: WatchSnapshot.Lesson) -> String {
+        let room = lesson.room.isEmpty ? lesson.fullRoom : lesson.room
+        return room.isEmpty ? "教室待定" : room
+    }
+
     private func card(for lesson: WatchSnapshot.Lesson) -> some View {
         let tint = CampusCourseColors.color(index: lesson.colorIndex)
-        let room = lesson.room.isEmpty ? lesson.fullRoom : lesson.room
+        let minutes = entry.minutesUntilClass
         let inClass = entry.date >= lesson.start
         return GeometryReader { bounds in
             VStack(alignment: .leading, spacing: 3) {
@@ -257,60 +282,76 @@ private struct WatchCourseProgressView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                     Spacer(minLength: 0)
-                    Text(room.isEmpty ? "教室待定" : room)
-                        .font(.caption2.bold())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .foregroundStyle(renderingMode == .fullColor ? Color.black : .primary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background {
-                            let badge = RoundedRectangle(cornerRadius: 4)
-                            if renderingMode == .fullColor { badge.fill(tint) }
-                            else { badge.strokeBorder().widgetAccentable() }
+                    Group {
+                        if let minutes {
+                            Text("\(minutes)分钟后上课")
+                        } else {
+                            Text(room(of: lesson))
                         }
-                        .frame(maxWidth: bounds.size.width * 0.44, alignment: .trailing)
-                        .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .watchCapsule(tint: tint)
+                    .widgetAccentable()
+                    .frame(maxWidth: bounds.size.width * (minutes == nil ? 0.44 : 0.53), alignment: .trailing)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
                 Spacer(minLength: 0)
-                HStack(spacing: 3) {
-                    Text(inClass ? "距下课" : "下节课")
-                        .foregroundStyle(.secondary)
-                    Group {
-                        if inClass {
-                            if #available(watchOS 11, *) {
-                                Text(.currentDate, format: .offset(to: lesson.end, allowedFields: [.minute], sign: .never))
-                            } else {
-                                Text(lesson.end, style: .relative)
-                            }
-                        } else {
-                            Text(WatchSnapshot.dayLabel(lesson.start, relativeTo: entry.date) + " " + WatchSnapshot.clock(lesson.start))
+                if minutes != nil, let interval = entry.preparationInterval {
+                    HStack(spacing: 3) {
+                        if let previous = entry.previous {
+                            Text(room(of: previous)).foregroundStyle(.secondary)
                         }
+                        Spacer(minLength: 0)
+                        Text(room(of: lesson)).foregroundStyle(tint).widgetAccentable()
                     }
-                    .foregroundStyle(tint)
-                    .widgetAccentable()
-                }
-                .font(.caption)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                if inClass {
-                    ProgressView(timerInterval: lesson.start...lesson.end, countsDown: false) {
-                        EmptyView()
-                    } currentValueLabel: {
-                        EmptyView()
-                    }
-                    .progressViewStyle(.linear)
-                    .tint(tint)
-                    .frame(height: 4)
-                    .background(tint.opacity(0.3), in: Capsule())
-                    .clipShape(Capsule())
-                    .widgetAccentable()
+                    .font(.caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    bar(interval, countsDown: true, tint: tint)
                 } else {
-                    Capsule().fill(tint.opacity(0.3)).frame(height: 4)
+                    HStack(spacing: 3) {
+                        Text(inClass ? "距下课" : "下节课").foregroundStyle(.secondary)
+                        Group {
+                            if inClass {
+                                if #available(watchOS 11, *) {
+                                    Text(.currentDate, format: .offset(to: lesson.end, allowedFields: [.minute], sign: .never))
+                                } else {
+                                    Text(lesson.end, style: .relative)
+                                }
+                            } else {
+                                Text(WatchSnapshot.dayLabel(lesson.start, relativeTo: entry.date) + " " + WatchSnapshot.clock(lesson.start))
+                            }
+                        }
+                        .foregroundStyle(tint)
+                        .widgetAccentable()
+                    }
+                    .font(.caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    if inClass {
+                        bar(lesson.start...lesson.end, countsDown: false, tint: tint)
+                    } else {
+                        Capsule().fill(tint.opacity(0.3)).frame(height: 4)
+                    }
                 }
             }
             .frame(width: bounds.size.width, height: bounds.size.height)
         }
+    }
+
+    private func bar(_ interval: ClosedRange<Date>, countsDown: Bool, tint: Color) -> some View {
+        ProgressView(timerInterval: interval, countsDown: countsDown) {
+            EmptyView()
+        } currentValueLabel: {
+            EmptyView()
+        }
+        .progressViewStyle(.linear)
+        .tint(tint)
+        .frame(height: 4)
+        .background(tint.opacity(0.3), in: Capsule())
+        .clipShape(Capsule())
+        .widgetAccentable()
     }
 }
 
@@ -326,7 +367,7 @@ private struct WatchCourseProgressWidget: Widget {
     }
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "WatchCourseProgress", provider: WatchWidgetProvider(preview: preview)) {
+        StaticConfiguration(kind: "WatchCourseProgress", provider: WatchCourseProgressProvider(preview: preview)) {
             WatchCourseProgressView(entry: $0)
         }
         .configurationDisplayName("课程进度")

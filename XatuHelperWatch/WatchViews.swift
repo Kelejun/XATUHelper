@@ -126,10 +126,7 @@ private struct WatchHomeView: View {
                 Text(WatchSnapshot.format(now, "M月d日 EEE"))
                 Spacer(minLength: 0)
                 Text(snapshot.week(at: now) > 0 ? "第\(snapshot.week(at: now))周" : "学期未开始")
-                    .font(.system(size: captionSize, weight: .medium))
-                    .foregroundStyle(.blue)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(.blue.opacity(0.16), in: Capsule())
+                    .watchCapsule(tint: .blue)
             }
             .font(.system(size: captionSize, weight: .medium))
             .foregroundStyle(.secondary).padding(.horizontal, 3)
