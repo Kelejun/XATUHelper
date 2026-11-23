@@ -51,7 +51,7 @@ struct CourseLiveActivityWidget: Widget {
                 .accessibilityLabel(Text("\(course.phase)，\(course.state.room)"))
             } compactTrailing: {
                 course.timer(width: 46, font: .caption, capsule: false)
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 3)
             } minimal: {
                 CourseActivityEmblem(course: course)
             }
@@ -281,8 +281,8 @@ private struct CoursePresentation {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-                .multilineTextAlignment(.center)
-                .frame(width: width)
+                .multilineTextAlignment(capsule ? .center : .trailing)
+                .frame(width: width, alignment: capsule ? .center : .trailing)
                 .foregroundStyle(foreground)
                 .accessibilityLabel(Text(countdownLabel))
                 .accessibilityValue(Text(timerInterval: interval, countsDown: true))
