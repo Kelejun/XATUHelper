@@ -46,7 +46,8 @@ struct CourseLiveActivityWidget: Widget {
                 .privacySensitive()
                 .accessibilityLabel(Text("\(course.phase)，\(course.state.room)"))
             } compactTrailing: {
-                course.timer(width: 42, font: .caption, horizontalPadding: 5, verticalPadding: 2)
+                course.timer(width: 46, font: .caption, capsule: false)
+                    .padding(.trailing, 4)
             } minimal: {
                 CourseActivityEmblem(course: course)
             }
@@ -84,17 +85,17 @@ private struct CourseLockScreen: View {
                 .padding(.vertical, 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         course.status
                         Spacer(minLength: 10)
-                        course.timer(width: 54, font: .subheadline)
+                        course.timer(width: 60, font: .headline, horizontalPadding: 10, verticalPadding: 5)
                     }
-                    CourseDetails(course: course, titleFont: .headline)
-                    CourseProgressFooter(course: course, height: 4)
+                    CourseDetails(course: course, titleFont: .title3)
+                    CourseProgressFooter(course: course, height: 5)
                 }
-                .padding(.horizontal, 17)
-                .padding(.vertical, 13)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
             }
         }
     }
@@ -146,10 +147,11 @@ private struct CourseProgressFooter: View {
                         .foregroundStyle(course.tint)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.69))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.82))
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.8)
                 .privacySensitive()
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text("从\(previous)到\(course.state.room)"))
@@ -231,6 +233,7 @@ private struct CoursePresentation {
     @ViewBuilder func timer(
         width: CGFloat,
         font: Font,
+        capsule: Bool = true,
         horizontalPadding: CGFloat = 8,
         verticalPadding: CGFloat = 4
     ) -> some View {
@@ -240,7 +243,7 @@ private struct CoursePresentation {
                 .foregroundStyle(tint)
                 .accessibilityLabel(Text(phase))
         } else {
-            Text(timerInterval: interval, countsDown: true, showsHours: false)
+            let countdown = Text(timerInterval: interval, countsDown: true, showsHours: false)
                 .font(font.weight(.semibold))
                 .monospacedDigit()
                 .lineLimit(1)
@@ -248,11 +251,16 @@ private struct CoursePresentation {
                 .multilineTextAlignment(.center)
                 .frame(width: width)
                 .foregroundStyle(.white)
-                .padding(.horizontal, horizontalPadding)
-                .padding(.vertical, verticalPadding)
-                .background(tint.opacity(0.18), in: Capsule())
                 .accessibilityLabel(Text(countdownLabel))
                 .accessibilityValue(Text(timerInterval: interval, countsDown: true))
+            if capsule {
+                countdown
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.vertical, verticalPadding)
+                    .background(tint.opacity(0.18), in: Capsule())
+            } else {
+                countdown
+            }
         }
     }
 
