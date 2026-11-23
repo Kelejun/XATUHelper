@@ -18,7 +18,7 @@ struct CourseLiveActivityWidget: Widget {
                         .padding(.leading, 5)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    course.timer(width: 55, font: .headline)
+                    course.timer(width: 55, font: .headline, capsule: false)
                         .modifier(CourseExpandedHeaderAlignment())
                         .padding(.trailing, 5)
                 }
@@ -36,6 +36,7 @@ struct CourseLiveActivityWidget: Widget {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 3) {
                         course.mark.font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(course.tint)
                         room
                     }
                     .fixedSize()
@@ -46,7 +47,7 @@ struct CourseLiveActivityWidget: Widget {
                 }
                 .frame(maxWidth: 59, alignment: .leading)
                 .padding(.leading, 3)
-                .foregroundStyle(course.tint)
+                .foregroundStyle(course.foreground)
                 .privacySensitive()
                 .accessibilityLabel(Text("\(course.phase)，\(course.state.room)"))
             } compactTrailing: {
@@ -55,7 +56,6 @@ struct CourseLiveActivityWidget: Widget {
             } minimal: {
                 CourseActivityEmblem(course: course)
             }
-            .keylineTint(course.tint)
             .widgetURL(timetable)
         }
     }
@@ -77,8 +77,9 @@ private struct CourseLockScreen: View {
 
     var body: some View {
         let preferredScheme = context.state.prefersDarkAppearance.map { $0 ? ColorScheme.dark : .light }
-        let course = CoursePresentation(context, colorScheme: luminanceReduced ? .dark : (preferredScheme ?? colorScheme))
-        let background = course.colorScheme == .dark
+        let scheme: ColorScheme = luminanceReduced ? .dark : (preferredScheme ?? colorScheme)
+        let course = CoursePresentation(context, lockScreenColorScheme: scheme)
+        let background = scheme == .dark
             ? Color(red: 0.06, green: 0.08, blue: 0.11)
             : Color(red: 0.96, green: 0.97, blue: 0.99)
 
@@ -137,15 +138,21 @@ private struct CourseDetails: View {
                 .fixedSize(horizontal: false, vertical: true)
             if course.routeOrigin == nil {
                 Spacer(minLength: 0)
-                Text(course.state.room)
+                let room = Text(course.state.room)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(course.tint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(course.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: 96, alignment: .trailing)
+                Group {
+                    if course.isOnIsland {
+                        room.foregroundStyle(.secondary)
+                    } else {
+                        room.foregroundStyle(course.tint)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(course.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+                .frame(maxWidth: 96, alignment: .trailing)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,7 +174,7 @@ private struct CourseProgressFooter: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(course.tint)
                     Text(course.state.room)
-                        .foregroundStyle(course.tint)
+                        .foregroundStyle(course.isOnIsland ? course.foreground : course.tint)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .font(.subheadline.weight(.semibold))
@@ -212,10 +219,12 @@ private struct CoursePresentation {
     let state: CourseActivityAttributes.ContentState
     let preparing: Bool
     let finished: Bool
-    let colorScheme: ColorScheme
+    let lockScreenColorScheme: ColorScheme?
 
-    init(_ context: ActivityViewContext<CourseActivityAttributes>, colorScheme: ColorScheme = .dark) {
-        self.colorScheme = colorScheme
+    var isOnIsland: Bool { lockScreenColorScheme == nil }
+
+    init(_ context: ActivityViewContext<CourseActivityAttributes>, lockScreenColorScheme: ColorScheme? = nil) {
+        self.lockScreenColorScheme = lockScreenColorScheme
         state = context.state
         let now = Date()
         let hasPreparation = state.begins < state.start
@@ -238,9 +247,10 @@ private struct CoursePresentation {
     var mark: Image {
         Image(systemName: finished ? "checkmark" : preparing ? "figure.walk" : "book.fill")
     }
-    var foreground: Color { colorScheme == .dark ? .white : Color(white: 0.12) }
+    var foreground: Color { lockScreenColorScheme == .light ? Color(white: 0.12) : .white }
 
     var tint: Color {
+        guard let colorScheme = lockScreenColorScheme else { return .blue }
         let color = CampusCourseColors.color(index: state.colorIndex)
         if colorScheme == .light {
             let resolved = color.resolve(in: EnvironmentValues())
@@ -256,11 +266,13 @@ private struct CoursePresentation {
 
     var status: some View {
         HStack(spacing: 5) {
-            mark.font(.caption.weight(.semibold)).accessibilityHidden(true)
+            mark.font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
             Text(phase).font(.caption.weight(.semibold))
                 .lineLimit(1)
         }
-        .foregroundStyle(tint)
+        .foregroundStyle(isOnIsland ? foreground.opacity(0.75) : tint)
     }
 
     @ViewBuilder func timer(
