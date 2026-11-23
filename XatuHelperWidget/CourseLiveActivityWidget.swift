@@ -16,10 +16,12 @@ struct CourseLiveActivityWidget: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     course.status
+                        .modifier(CourseExpandedHeaderAlignment())
                         .padding(.leading, 5)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     course.timer(width: 55, font: .headline)
+                        .modifier(CourseExpandedHeaderAlignment())
                         .padding(.trailing, 5)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -32,15 +34,19 @@ struct CourseLiveActivityWidget: Widget {
                     .padding(.bottom, 8)
                 }
             } compactLeading: {
+                let room = Text(course.state.room).font(.system(size: 11, weight: .semibold))
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 3) {
                         course.mark.font(.system(size: 10, weight: .semibold))
-                        Text(course.state.room)
-                            .font(.system(size: 11, weight: .semibold))
-                    }.fixedSize()
-                    course.mark.font(.caption.weight(.semibold))
+                        room
+                    }
+                    .fixedSize()
+                    room
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .truncationMode(.head)
                 }
-                .frame(maxWidth: 59)
+                .frame(maxWidth: 59, alignment: .leading)
                 .padding(.leading, 3)
                 .foregroundStyle(course.tint)
                 .privacySensitive()
@@ -54,6 +60,14 @@ struct CourseLiveActivityWidget: Widget {
             .keylineTint(course.tint)
             .widgetURL(timetable)
         }
+    }
+}
+
+private struct CourseExpandedHeaderAlignment: ViewModifier {
+    @ScaledMetric(relativeTo: .headline) private var height = 32.0
+
+    func body(content: Content) -> some View {
+        content.frame(height: height)
     }
 }
 
