@@ -284,7 +284,7 @@ private struct WatchCourseProgressView: View {
                     Spacer(minLength: 0)
                     Group {
                         if let minutes {
-                            Text("\(minutes)分钟后上课")
+                            Text("\(minutes)分钟")
                         } else {
                             Text(room(of: lesson))
                         }
