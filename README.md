@@ -27,8 +27,6 @@ xcodebuild -project XatuHelper.xcodeproj \
 
 Apple Watch 的编译、签名与同步说明见 [WATCH.md](WATCH.md)。
 
-独立 iOS 应用工程模板及完整使用说明见 [XATuneAppTemplate](Templates/XATuneAppTemplate/README.md)。该模板仅限经书面授权的一名自然人本人使用，禁止二次分享，具体条件见模板内的版权与使用条款。
-
 ## 项目结构
 
 ```text
