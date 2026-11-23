@@ -7,45 +7,37 @@ struct CourseLiveActivityWidget: Widget {
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CourseActivityAttributes.self) { context in
-            let course = CoursePresentation(context)
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(course.state.name).font(.headline).lineLimit(2)
-                    Spacer(minLength: 8)
-                    course.countdown.font(.headline)
-                }
-                course.details
-                course.progress
-            }
-            .padding()
-            .privacySensitive()
-            .widgetURL(timetable)
+            CourseActivityCard(course: CoursePresentation(context))
+                .padding(14)
+                .activityBackgroundTint(CourseActivityCard.background)
+                .widgetURL(timetable)
         } dynamicIsland: { context in
             let course = CoursePresentation(context)
             return DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    Text(course.state.name).font(.headline).lineLimit(1).privacySensitive()
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    course.countdown.font(.headline)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 6) {
-                        course.details
-                        course.progress
-                    }.privacySensitive()
+                DynamicIslandExpandedRegion(.center) {
+                    CourseActivityCard(course: course)
+                        .padding(10)
+                        .background(CourseActivityCard.background, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 5)
+                        .padding(.bottom, 3)
                 }
             } compactLeading: {
                 ViewThatFits(in: .horizontal) {
-                    Text(course.state.room).font(.caption.weight(.semibold)).fixedSize()
+                    Text(course.state.room).fixedSize()
                     Image(systemName: course.symbol)
                 }
-                .frame(maxWidth: 52)
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: 47)
+                .padding(.leading, 4)
                 .foregroundStyle(course.tint)
                 .privacySensitive()
                 .accessibilityLabel(Text(course.state.room))
             } compactTrailing: {
-                course.timer.font(.caption.weight(.semibold)).frame(width: 49)
+                course.timer
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 49)
+                    .accessibilityLabel(course.label)
+                    .accessibilityValue(course.finished ? Text("") : Text(timerInterval: course.interval, countsDown: true))
             } minimal: {
                 Image(systemName: course.symbol)
                     .foregroundStyle(course.tint)
@@ -54,6 +46,71 @@ struct CourseLiveActivityWidget: Widget {
             .keylineTint(course.tint)
             .widgetURL(timetable)
         }
+    }
+}
+
+private struct CourseActivityCard: View {
+    static let background = Color(white: 0.17)
+    let course: CoursePresentation
+    @ScaledMetric(relativeTo: .caption) private var preparationTimerWidth = 47.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(course.state.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+                Group {
+                    if course.preparing {
+                        if #available(iOS 18, *) {
+                            Text(.currentDate, format: .offset(to: course.state.start, allowedFields: [.minute], sign: .never)
+                                .locale(Locale(identifier: "zh_CN")))
+                                .monospacedDigit()
+                                .multilineTextAlignment(.center)
+                                .lineLimit(1)
+                                .frame(width: preparationTimerWidth)
+                        } else {
+                            course.timer.frame(width: preparationTimerWidth)
+                        }
+                    } else {
+                        Text(course.state.room)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(course.tint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(course.tint.opacity(0.16), in: Capsule())
+            }
+            HStack(spacing: 3) {
+                if course.preparing {
+                    if let previous = course.state.previousRoom {
+                        Text(previous)
+                    }
+                    Spacer(minLength: 6)
+                    Text(course.state.room).foregroundStyle(course.tint)
+                } else {
+                    Text(course.label)
+                    if !course.finished {
+                        course.timer.frame(width: 58, alignment: .leading)
+                            .foregroundStyle(course.tint)
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.68))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            course.progress
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .privacySensitive()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -82,37 +139,8 @@ private struct CoursePresentation {
         } else {
             Text(timerInterval: interval, countsDown: true, showsHours: false)
                 .monospacedDigit()
-                .multilineTextAlignment(.trailing)
                 .lineLimit(1)
-                .accessibilityLabel(label)
-                .accessibilityValue(Text(timerInterval: interval, countsDown: true))
         }
-    }
-
-    var countdown: some View {
-        HStack(spacing: 4) {
-            Text(label).font(.caption)
-            if !finished { timer.frame(width: 62, alignment: .trailing) }
-        }
-        .foregroundStyle(tint)
-    }
-
-    var details: some View {
-        HStack(spacing: 5) {
-            if preparing, let from = state.previousRoom {
-                Text(from)
-                Image(systemName: "arrow.right").font(.caption2)
-            } else {
-                Image(systemName: "mappin")
-            }
-            Text(state.room).fontWeight(.semibold)
-            Spacer(minLength: 6)
-            Text(WatchSnapshot.clock(state.start) + "–" + WatchSnapshot.clock(state.end))
-                .monospacedDigit()
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
     }
 
     var progress: some View {
@@ -123,6 +151,9 @@ private struct CoursePresentation {
         }
         .progressViewStyle(.linear)
         .tint(tint)
-        .accessibilityLabel(label)
+        .frame(height: 4)
+        .background(tint.opacity(0.3), in: Capsule())
+        .clipShape(Capsule())
+        .accessibilityLabel(preparing ? "课前进度" : "课程进度")
     }
 }
