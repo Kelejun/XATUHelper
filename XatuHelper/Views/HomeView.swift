@@ -168,26 +168,20 @@ struct HomeView: View {
     }
 
     private func holidayCard(_ event: HolidayEvent) -> some View {
-        Button {
-            openHomePage(.calendar)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(event.title)还有")
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(event.days == 0 ? "今天" : "\(event.days) 天")
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.teal)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text(event.dateText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(event.title)还有")
+                .font(.headline)
+                .lineLimit(1)
+            Text(event.days == 0 ? "今天" : "\(event.days) 天")
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .foregroundStyle(.teal)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(event.dateText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
     }
 
     // MARK: - 视图
@@ -260,11 +254,11 @@ struct HomeView: View {
 
                 if showsContent {
                     layout {
-                        scheduleOverview(fillHeight: wide)
-                            .overviewPanel(fillHeight: wide)
+                        overviewButton(.timetable, fillHeight: wide) {
+                            scheduleOverview
+                        }
 
                         supportingCards(fillHeight: wide)
-
                     }
                     .transition(.offset(y: 40).combined(with: .opacity))
 
@@ -286,40 +280,54 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 20) {
             if !usesWorkspace && !dynamicTypeSize.isAccessibilitySize {
                 HStack(alignment: .top, spacing: 12) {
-                    electricityCard.overviewPanel(fillHeight: true)
+                    overviewButton(.electricity, fillHeight: true) { electricityCard }
                     if let holiday = nextHoliday {
-                        holidayCard(holiday).overviewPanel(fillHeight: true)
+                        overviewButton(.calendar, fillHeight: true) { holidayCard(holiday) }
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 examOverview(fillHeight: false)
             } else {
-                electricityCard.overviewPanel(fillHeight: fillHeight)
+                overviewButton(.electricity, fillHeight: fillHeight) { electricityCard }
                 examOverview(fillHeight: fillHeight)
                 if let holiday = nextHoliday {
-                    holidayCard(holiday).overviewPanel(fillHeight: fillHeight)
+                    overviewButton(.calendar, fillHeight: fillHeight) { holidayCard(holiday) }
                 }
             }
         }
     }
 
-    @ViewBuilder
     private func examOverview(fillHeight: Bool) -> some View {
-        if let exam = nextExam {
-            Button { openHomePage(.exam) } label: {
+        overviewButton(.exam, fillHeight: fillHeight) {
+            if let exam = nextExam {
                 examCard(exam)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("考试安排").font(.headline)
+                    Text("暂无待考科目").font(.subheadline).foregroundStyle(.secondary)
+                    Text("查看全部考试")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.accentColor)
+                }
             }
-            .buttonStyle(.plain)
-            .overviewPanel(fillHeight: fillHeight)
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("考试安排").font(.headline)
-                Text("暂无待考科目").font(.subheadline).foregroundStyle(.secondary)
-                Button("查看全部考试") { openHomePage(.exam) }
-                    .font(.subheadline)
-            }
-            .overviewPanel(fillHeight: fillHeight)
         }
+    }
+
+    private func overviewButton<Content: View>(
+        _ page: CampusPage,
+        fillHeight: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20)
+        return Button { openHomePage(page) } label: {
+            content()
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
+                .background(Color(.secondarySystemGroupedBackground), in: shape)
+                .contentShape(.interaction, shape)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
     }
 
     private var scheduleTitle: String {
@@ -330,7 +338,7 @@ struct HomeView: View {
         return remainingToday.count == todayBlocks.count ? "今天要上这些课：" : "今天还有这些课："
     }
 
-    private func scheduleOverview(fillHeight: Bool) -> some View {
+    private var scheduleOverview: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(scheduleTitle)
@@ -362,23 +370,6 @@ struct HomeView: View {
                     if block.id != displayed.last?.id { Divider() }
                 }
             }
-
-            if fillHeight {
-                Spacer(minLength: 0)
-            }
-
-            Button { openHomePage(.timetable) } label: {
-                HStack {
-                    Text("查看完整课表")
-                    Spacer()
-                    Image(systemName: "arrow.right")
-                }
-                .font(.subheadline.weight(.medium))
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
         }
     }
 
@@ -537,48 +528,42 @@ struct HomeView: View {
 
     /// 电费卡片：余额低于 10 度变黄
     private var electricityCard: some View {
-        Button {
-            openHomePage(.electricity)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text("剩余电量")
-                        .font(.headline)
-                    if app.electricityLoading {
-                        ProgressView().controlSize(.mini)
-                    }
-                }
-
-                if let balance = app.electricityBalance {
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(balance)
-                            .font(.system(size: 28, weight: .semibold, design: .rounded))
-                            .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        Text("度")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(electricityCaption)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else if app.dorm == nil {
-                    Text("还没选宿舍")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text(app.electricityError == nil ? "还没查到" : "查询失败")
-                        .font(.caption)
-                        .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("剩余电量")
+                    .font(.headline)
+                if app.electricityLoading {
+                    ProgressView().controlSize(.mini)
                 }
             }
+
+            if let balance = app.electricityBalance {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(balance)
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("度")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(electricityCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else if app.dorm == nil {
+                Text("还没选宿舍")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(app.electricityError == nil ? "还没查到" : "查询失败")
+                    .font(.caption)
+                    .foregroundStyle(app.electricityError == nil ? Color.secondary : Color.red)
+                    .lineLimit(1)
+            }
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
     }
 
     private var electricityCaption: String {
@@ -597,17 +582,6 @@ struct HomeView: View {
 #Preview {
     HomeView()
         .environmentObject(AppState())
-}
-
-/// 统一的卡片外观，跟课程表那边一套
-private extension View {
-    func overviewPanel(fillHeight: Bool = false) -> some View {
-        self
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-    }
-
 }
 
 /// 两列使用各自的自然高度测量，再共同填充较高的一列，保持卡片组上下对齐。
