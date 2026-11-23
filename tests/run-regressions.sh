@@ -20,5 +20,5 @@ swiftc -module-cache-path "$build_dir/modules" \
   -o "$build_dir/electricity"
 "$build_dir/electricity"
 swiftc -module-cache-path "$build_dir/modules" \
-  Shared/WatchSnapshot.swift Shared/WatchCourseProgress.swift tests/WatchHomeTests.swift -o "$build_dir/watch-home"
+  Shared/WatchSnapshot.swift Shared/WatchCourseProgress.swift Shared/CourseActivitySlot.swift tests/WatchHomeTests.swift -o "$build_dir/watch-home"
 "$build_dir/watch-home"

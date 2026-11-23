@@ -72,6 +72,14 @@ struct WatchHomeTests {
             precondition(entry(469).minutesUntilClass == nil)
             precondition(entry(470).minutesUntilClass == 30 && entry(470).previous == nil)
             precondition(entry(500).lesson == first && entry(500).minutesUntilClass == nil)
+            let before = CourseActivitySlot.upcoming(in: snapshot, at: time(469))
+            precondition(before.map(\.lesson) == [first, next] && before[0].visibleFrom == time(470))
+            let during = CourseActivitySlot.upcoming(in: snapshot, at: time(550))
+            precondition(during.map(\.lesson) == [first, next])
+            precondition(during[1].visibleFrom == time(max(600, 600 + gap - 30)))
+            precondition(during[1].previousRoom == (gap <= 30 ? first.displayRoom : nil))
+            let atEnd = CourseActivitySlot.upcoming(in: snapshot, at: time(700))
+            precondition(atEnd.isEmpty)
             let duration = min(30, gap)
             let start = 600 + gap - duration
             for elapsed in 0..<duration {
@@ -89,9 +97,12 @@ struct WatchHomeTests {
         let lunch = WatchCourseProgress(snapshot: snapshot, at: time(720))
         precondition(lunch.lesson == afternoon && lunch.previous == nil)
         precondition(lunch.preparationInterval == time(700)...time(730))
+        let beforeLunch = CourseActivitySlot.upcoming(in: snapshot, at: time(690))
+        precondition(beforeLunch.last?.visibleFrom == time(720) && beforeLunch.last?.previousRoom == nil)
         snapshot.lessons = [lesson("5B502", -60, -5), lesson("3A201", 10, 60)]
         precondition(WatchCourseProgress(snapshot: snapshot, at: time(0)).previous == nil)
         snapshot.loggedIn = false
         precondition(WatchCourseProgress(snapshot: snapshot, at: time(0)).lesson == nil)
+        precondition(CourseActivitySlot.upcoming(in: snapshot, at: time(0)).isEmpty)
     }
 }

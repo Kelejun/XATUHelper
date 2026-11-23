@@ -265,11 +265,6 @@ private struct WatchCourseProgressView: View {
         .widgetURL(URL(string: "xatuwatch://courses"))
     }
 
-    private func room(of lesson: WatchSnapshot.Lesson) -> String {
-        let room = lesson.room.isEmpty ? lesson.fullRoom : lesson.room
-        return room.isEmpty ? "教室待定" : room
-    }
-
     private func card(for lesson: WatchSnapshot.Lesson) -> some View {
         let tint = CampusCourseColors.color(index: lesson.colorIndex)
         let minutes = entry.minutesUntilClass
@@ -286,7 +281,7 @@ private struct WatchCourseProgressView: View {
                         if let minutes {
                             Text("\(minutes)分钟")
                         } else {
-                            Text(room(of: lesson))
+                            Text(lesson.displayRoom)
                         }
                     }
                     .lineLimit(1)
@@ -300,10 +295,10 @@ private struct WatchCourseProgressView: View {
                 if minutes != nil, let interval = entry.preparationInterval {
                     HStack(spacing: 3) {
                         if let previous = entry.previous {
-                            Text(room(of: previous)).foregroundStyle(.secondary)
+                            Text(previous.displayRoom).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
-                        Text(room(of: lesson)).foregroundStyle(tint).widgetAccentable()
+                        Text(lesson.displayRoom).foregroundStyle(tint).widgetAccentable()
                     }
                     .font(.caption)
                     .lineLimit(1)

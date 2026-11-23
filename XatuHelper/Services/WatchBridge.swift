@@ -10,17 +10,17 @@ final class PhoneWatchBridge: NSObject, WCSessionDelegate {
     private var latest: WatchSnapshot?
     private var lastContent: WatchSnapshot?
     private var pendingData: Data?
-    private let session = WCSession.default
+    private var session: WCSession? { WCSession.isSupported() ? .default : nil }
 
     func start(app: AppState) {
-        guard !app.isDemoMode, WCSession.isSupported() else { return }
+        guard !app.isDemoMode else { return }
         if self.app !== app {
             self.app = app
             observation = app.objectWillChange
                 .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
                 .sink { [weak self] _ in self?.publish() }
         }
-        if session.delegate == nil {
+        if let session, session.delegate == nil {
             session.delegate = self
             session.activate()
         }
@@ -36,6 +36,8 @@ final class PhoneWatchBridge: NSObject, WCSessionDelegate {
         lastContent = snapshot
         snapshot.generatedAt = Date()
         latest = snapshot
+        CourseActivityController.shared.receive(snapshot)
+        guard session != nil else { return }
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         pendingData = try? encoder.encode(snapshot)
@@ -43,7 +45,7 @@ final class PhoneWatchBridge: NSObject, WCSessionDelegate {
     }
 
     private func sendLatest() {
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled,
+        guard let session, session.activationState == .activated, session.isPaired, session.isWatchAppInstalled,
               let snapshot = latest, let data = pendingData else { return }
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary

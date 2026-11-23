@@ -10,6 +10,7 @@ struct XatuHelperWidgetBundle: WidgetBundle {
         ElectricityWidget()
         BreakWidget()
         ExamWidget()
+        CourseLiveActivityWidget()
     }
 }
 

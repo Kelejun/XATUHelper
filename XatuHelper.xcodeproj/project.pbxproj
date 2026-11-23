@@ -219,6 +219,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				0000000000000000000000B1 /* XatuHelperWidget */,
+				A90000000000000000000001 /* Shared */,
 			);
 			name = XatuHelperWidget;
 			productName = XatuHelperWidget;

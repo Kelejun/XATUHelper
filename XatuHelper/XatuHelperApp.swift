@@ -4,6 +4,7 @@ import SwiftUI
 struct XatuHelperApp: App {
     @UIApplicationDelegateAdaptor(ElectricityRefreshAppDelegate.self) private var delegate
     @StateObject private var app: AppState
+    @AppStorage(CourseActivityController.enabledKey) private var courseActivityEnabled = false
     @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,7 +20,11 @@ struct XatuHelperApp: App {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(announcements)
+                .onChange(of: courseActivityEnabled) { _, _ in
+                    CourseActivityController.shared.refresh()
+                }
                 .task(id: scenePhase) {
+                    CourseActivityController.shared.setForeground(scenePhase == .active)
                     guard scenePhase == .active else { return }
                     await NotificationService.clearExpiredClassReminders()
                 }

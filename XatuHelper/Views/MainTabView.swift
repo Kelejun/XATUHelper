@@ -131,6 +131,13 @@ struct MainTabView: View {
                 tabs
             }
         }
+        .onOpenURL { url in
+            guard url.scheme == "xatuhelper", url.host == "timetable" else { return }
+            timetableWeek = nil
+            showsSettings = false
+            sidebarSelection = .timetable
+            selection = .timetable
+        }
         .onChange(of: sidebarSelection) { _, page in
             guard let page else { return }
             preferredCompactColumn = .detail
