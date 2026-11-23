@@ -7,9 +7,7 @@ struct CourseLiveActivityWidget: Widget {
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CourseActivityAttributes.self) { context in
-            CourseLockScreen(course: CoursePresentation(context))
-                .activityBackgroundTint(Color(red: 0.06, green: 0.08, blue: 0.11))
-                .activitySystemActionForegroundColor(.white)
+            CourseLockScreen(context: context)
                 .widgetURL(timetable)
         } dynamicIsland: { context in
             let course = CoursePresentation(context)
@@ -72,11 +70,19 @@ private struct CourseExpandedHeaderAlignment: ViewModifier {
 }
 
 private struct CourseLockScreen: View {
-    let course: CoursePresentation
+    let context: ActivityViewContext<CourseActivityAttributes>
     @Environment(\.isActivityFullscreen) private var fullscreen
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
 
     var body: some View {
-        Group {
+        let preferredScheme = context.state.prefersDarkAppearance.map { $0 ? ColorScheme.dark : .light }
+        let course = CoursePresentation(context, colorScheme: luminanceReduced ? .dark : (preferredScheme ?? colorScheme))
+        let background = course.colorScheme == .dark
+            ? Color(red: 0.06, green: 0.08, blue: 0.11)
+            : Color(red: 0.96, green: 0.97, blue: 0.99)
+
+        return Group {
             if fullscreen {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .center, spacing: 16) {
@@ -89,7 +95,7 @@ private struct CourseLockScreen: View {
                             if !course.finished {
                                 Text(course.countdownLabel)
                                     .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.67))
+                                    .foregroundStyle(course.foreground.opacity(0.67))
                             }
                         }
                     }
@@ -112,6 +118,9 @@ private struct CourseLockScreen: View {
                 .padding(.vertical, 18)
             }
         }
+        .background(background)
+        .activityBackgroundTint(fullscreen ? background : .clear)
+        .activitySystemActionForegroundColor(course.foreground)
     }
 }
 
@@ -123,7 +132,7 @@ private struct CourseDetails: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(course.state.name)
                 .font(titleFont.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(course.foreground)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             if course.routeOrigin == nil {
@@ -163,7 +172,7 @@ private struct CourseProgressFooter: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.82))
+                .foregroundStyle(course.foreground.opacity(0.82))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .privacySensitive()
@@ -203,8 +212,10 @@ private struct CoursePresentation {
     let state: CourseActivityAttributes.ContentState
     let preparing: Bool
     let finished: Bool
+    let colorScheme: ColorScheme
 
-    init(_ context: ActivityViewContext<CourseActivityAttributes>) {
+    init(_ context: ActivityViewContext<CourseActivityAttributes>, colorScheme: ColorScheme = .dark) {
+        self.colorScheme = colorScheme
         state = context.state
         let now = Date()
         let hasPreparation = state.begins < state.start
@@ -227,8 +238,16 @@ private struct CoursePresentation {
     var mark: Image {
         Image(systemName: finished ? "checkmark" : preparing ? "figure.walk" : "book.fill")
     }
+    var foreground: Color { colorScheme == .dark ? .white : Color(white: 0.12) }
+
     var tint: Color {
         let color = CampusCourseColors.color(index: state.colorIndex)
+        if colorScheme == .light {
+            let resolved = color.resolve(in: EnvironmentValues())
+            return Color(red: Double(resolved.red) * 0.72,
+                         green: Double(resolved.green) * 0.72,
+                         blue: Double(resolved.blue) * 0.72)
+        }
         if #available(iOS 18, *) { return color.mix(with: .white, by: 0.34) }
         return color
     }
@@ -264,7 +283,7 @@ private struct CoursePresentation {
                 .minimumScaleFactor(0.75)
                 .multilineTextAlignment(.center)
                 .frame(width: width)
-                .foregroundStyle(.white)
+                .foregroundStyle(foreground)
                 .accessibilityLabel(Text(countdownLabel))
                 .accessibilityValue(Text(timerInterval: interval, countsDown: true))
             if capsule {
@@ -287,7 +306,7 @@ private struct CoursePresentation {
         .progressViewStyle(.linear)
         .tint(tint)
         .frame(height: height)
-        .background(.white.opacity(0.15), in: Capsule())
+        .background(foreground.opacity(0.15), in: Capsule())
         .clipShape(Capsule())
         .accessibilityLabel(Text(preparing ? "课前进度" : "课程进度"))
     }

@@ -58,6 +58,7 @@ struct XatuHelperApp: App {
 struct ContentView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var announcements: AnnouncementCenter
 
     var body: some View {
@@ -67,6 +68,9 @@ struct ContentView: View {
             } else {
                 LoginView()
             }
+        }
+        .onChange(of: colorScheme, initial: true) { _, scheme in
+            CourseActivityController.shared.setDarkAppearance(scheme == .dark)
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
         .background {

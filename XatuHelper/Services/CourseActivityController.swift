@@ -5,6 +5,7 @@ import Foundation
 final class CourseActivityController {
     static let shared = CourseActivityController()
     static let enabledKey = "courseProgress.liveActivity"
+    private static let darkAppearanceKey = "courseProgress.prefersDarkAppearance"
     private typealias CourseActivity = Activity<CourseActivityAttributes>
 
     private var snapshot = WatchSnapshot.empty
@@ -21,6 +22,15 @@ final class CourseActivityController {
 
     func setForeground(_ foreground: Bool) {
         self.foreground = foreground
+        refresh()
+    }
+
+    func setDarkAppearance(_ dark: Bool) {
+        // The Lock Screen's appearance can follow its wallpaper rather than the device setting.
+        guard #available(iOS 26, *) else { return }
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.darkAppearanceKey) as? Bool != dark else { return }
+        defaults.set(dark, forKey: Self.darkAppearanceKey)
         refresh()
     }
 
@@ -93,7 +103,8 @@ final class CourseActivityController {
     }
 
     private func content(for slot: CourseActivitySlot, now: Date) -> ActivityContent<CourseActivityAttributes.ContentState> {
-        let state = CourseActivityAttributes.ContentState(slot: slot)
+        let darkAppearance = UserDefaults.standard.object(forKey: Self.darkAppearanceKey) as? Bool
+        let state = CourseActivityAttributes.ContentState(slot: slot, prefersDarkAppearance: darkAppearance)
         // A stale preparation presentation renders the class timer even if iOS suspended the app.
         let boundary = state.begins < state.start && now < state.start ? state.start : state.end
         return ActivityContent(state: state, staleDate: boundary, relevanceScore: slot.lesson.start.timeIntervalSince1970)
