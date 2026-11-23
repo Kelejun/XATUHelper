@@ -230,7 +230,7 @@ private struct WatchCourseProgressProvider: TimelineProvider {
     let preview: WatchSnapshot
 
     func placeholder(in context: Context) -> WatchCourseProgress {
-        WatchCourseProgress(snapshot: preview, at: Date())
+        WatchCourseProgress(snapshot: .empty, at: Date())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WatchCourseProgress) -> Void) {
@@ -247,20 +247,22 @@ private struct WatchCourseProgressProvider: TimelineProvider {
 
 private struct WatchCourseProgressView: View {
     let entry: WatchCourseProgress
+    @Environment(\.redactionReasons) private var redactionReasons
 
     var body: some View {
         Group {
-            if !entry.loggedIn {
-                Label("打开 iPhone 同步", systemImage: "iphone")
+            if redactionReasons.contains(.placeholder) {
+                Label("课程进度", systemImage: "book.closed").unredacted()
+            } else if !entry.loggedIn {
+                Label("打开 iPhone 同步", systemImage: "iphone").unredacted()
             } else if let lesson = entry.lesson {
                 card(for: lesson)
             } else {
-                Label("暂无后续课程", systemImage: "book.closed")
+                Label("暂无后续课程", systemImage: "book.closed").unredacted()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .containerBackground(Color(white: 0.17), for: .widget)
-        .privacySensitive()
         .accessibilityElement(children: .combine)
         .widgetURL(URL(string: "xatuwatch://courses"))
     }
@@ -269,36 +271,52 @@ private struct WatchCourseProgressView: View {
         let tint = CampusCourseColors.color(index: lesson.colorIndex)
         let minutes = entry.minutesUntilClass
         let inClass = entry.date >= lesson.start
+        let showLessonDetails = !redactionReasons.contains(.privacy)
         return GeometryReader { bounds in
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(lesson.name)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Spacer(minLength: 0)
                     Group {
-                        if let minutes {
-                            Text("\(minutes)分钟")
+                        if showLessonDetails {
+                            Text(lesson.name).privacySensitive()
                         } else {
-                            Text(lesson.displayRoom)
+                            Text("课程进度").unredacted()
                         }
                     }
+                    .font(.headline)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .watchCapsule(tint: tint)
-                    .widgetAccentable()
-                    .frame(maxWidth: bounds.size.width * (minutes == nil ? 0.44 : 0.53), alignment: .trailing)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.75)
+                    Spacer(minLength: 0)
+                    if minutes != nil || showLessonDetails {
+                        Group {
+                            if let minutes {
+                                Text("\(minutes)分钟").unredacted()
+                            } else {
+                                Text(lesson.displayRoom).privacySensitive()
+                            }
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .watchCapsule(tint: tint)
+                        .widgetAccentable()
+                        .frame(maxWidth: bounds.size.width * (minutes == nil ? 0.44 : 0.53), alignment: .trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
                 Spacer(minLength: 0)
                 if minutes != nil, let interval = entry.preparationInterval {
-                    HStack(spacing: 3) {
-                        if let previous = entry.previous {
-                            Text(previous.displayRoom).foregroundStyle(.secondary)
+                    Group {
+                        if showLessonDetails {
+                            HStack(spacing: 3) {
+                                if let previous = entry.previous {
+                                    Text(previous.displayRoom).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Text(lesson.displayRoom).foregroundStyle(tint).widgetAccentable()
+                            }
+                            .privacySensitive()
+                        } else {
+                            Text("距上课").foregroundStyle(.secondary).unredacted()
                         }
-                        Spacer(minLength: 0)
-                        Text(lesson.displayRoom).foregroundStyle(tint).widgetAccentable()
                     }
                     .font(.caption)
                     .lineLimit(1)
@@ -306,16 +324,18 @@ private struct WatchCourseProgressView: View {
                     bar(interval, countsDown: entry.previous == nil, tint: tint)
                 } else {
                     HStack(spacing: 3) {
-                        Text(inClass ? "距下课" : "下节课").foregroundStyle(.secondary)
+                        Text(inClass ? "距下课" : "下节课").foregroundStyle(.secondary).unredacted()
                         Group {
                             if inClass {
                                 if #available(watchOS 11, *) {
                                     Text(.currentDate, format: .offset(to: lesson.end, allowedFields: [.minute], sign: .never))
+                                        .unredacted()
                                 } else {
-                                    Text(lesson.end, style: .relative)
+                                    Text(lesson.end, style: .relative).unredacted()
                                 }
-                            } else {
+                            } else if showLessonDetails {
                                 Text(WatchSnapshot.dayLabel(lesson.start, relativeTo: entry.date) + " " + WatchSnapshot.clock(lesson.start))
+                                    .privacySensitive()
                             }
                         }
                         .foregroundStyle(tint)
