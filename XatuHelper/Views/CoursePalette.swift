@@ -27,18 +27,18 @@ enum CoursePalette {
     }
 
     /// 小组件拿不到这个类，把下标写进快照让它自己上色
-    static func index(forCourseKey key: String) -> Int? {
-        registeredKeys.firstIndex(of: key).map { $0 % colors.count }
-    }
-
-    static func color(forCourseKey key: String) -> Color {
+    static func index(forCourseKey key: String) -> Int {
         if let index = registeredKeys.firstIndex(of: key) {
-            return colors[index % colors.count]
+            return index % colors.count
         }
         var hash = 5381
         for byte in key.utf8 {
             hash = (hash &* 33) &+ Int(byte)
         }
-        return colors[abs(hash % colors.count)]
+        return abs(hash % colors.count)
+    }
+
+    static func color(forCourseKey key: String) -> Color {
+        colors[index(forCourseKey: key)]
     }
 }

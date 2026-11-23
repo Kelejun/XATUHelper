@@ -224,6 +224,117 @@ struct WatchCourseWidget: Widget {
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
+private struct WatchCourseProgressView: View {
+    let entry: WatchWidgetEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    var body: some View {
+        Group {
+            if !entry.snapshot.loggedIn {
+                Label("打开 iPhone 同步", systemImage: "iphone")
+            } else if let lesson = entry.snapshot.currentLesson(at: entry.date) ?? entry.snapshot.nextLesson(at: entry.date) {
+                card(for: lesson)
+            } else {
+                Label("暂无后续课程", systemImage: "book.closed")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .containerBackground(Color(white: 0.17), for: .widget)
+        .privacySensitive()
+        .accessibilityElement(children: .combine)
+        .widgetURL(URL(string: "xatuwatch://courses"))
+    }
+
+    private func card(for lesson: WatchSnapshot.Lesson) -> some View {
+        let tint = CampusCourseColors.color(index: lesson.colorIndex)
+        let room = lesson.room.isEmpty ? lesson.fullRoom : lesson.room
+        let inClass = entry.date >= lesson.start
+        return GeometryReader { bounds in
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(lesson.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 0)
+                    Text(room.isEmpty ? "教室待定" : room)
+                        .font(.caption2.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(renderingMode == .fullColor ? Color.black : .primary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background {
+                            let badge = RoundedRectangle(cornerRadius: 4)
+                            if renderingMode == .fullColor { badge.fill(tint) }
+                            else { badge.strokeBorder().widgetAccentable() }
+                        }
+                        .frame(maxWidth: bounds.size.width * 0.44, alignment: .trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 3) {
+                    Text(inClass ? "距下课" : "下节课")
+                        .foregroundStyle(.secondary)
+                    Group {
+                        if inClass {
+                            if #available(watchOS 11, *) {
+                                Text(.currentDate, format: .offset(to: lesson.end, allowedFields: [.minute], sign: .never))
+                            } else {
+                                Text(lesson.end, style: .relative)
+                            }
+                        } else {
+                            Text(WatchSnapshot.dayLabel(lesson.start, relativeTo: entry.date) + " " + WatchSnapshot.clock(lesson.start))
+                        }
+                    }
+                    .foregroundStyle(tint)
+                    .widgetAccentable()
+                }
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                if inClass {
+                    ProgressView(timerInterval: lesson.start...lesson.end, countsDown: false) {
+                        EmptyView()
+                    } currentValueLabel: {
+                        EmptyView()
+                    }
+                    .progressViewStyle(.linear)
+                    .tint(tint)
+                    .frame(height: 4)
+                    .background(tint.opacity(0.3), in: Capsule())
+                    .clipShape(Capsule())
+                    .widgetAccentable()
+                } else {
+                    Capsule().fill(tint.opacity(0.3)).frame(height: 4)
+                }
+            }
+            .frame(width: bounds.size.width, height: bounds.size.height)
+        }
+    }
+}
+
+private struct WatchCourseProgressWidget: Widget {
+    private var preview: WatchSnapshot {
+        let now = Date()
+        var snapshot = WatchSnapshot.empty
+        snapshot.loggedIn = true
+        snapshot.lessons = [.init(id: "preview", name: "高等数学", room: "5B502", fullRoom: "",
+                                  teacher: "", periods: "", start: now.addingTimeInterval(-42 * 60),
+                                  end: now.addingTimeInterval(8 * 60), colorIndex: 4)]
+        return snapshot
+    }
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "WatchCourseProgress", provider: WatchWidgetProvider(preview: preview)) {
+            WatchCourseProgressView(entry: $0)
+        }
+        .configurationDisplayName("课程进度")
+        .description("查看教室、距下课时间和课程进度。")
+        .supportedFamilies([.accessoryRectangular])
+    }
+}
+
 struct WatchElectricityWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "WatchElectricity", provider: WatchWidgetProvider()) {
@@ -270,6 +381,7 @@ struct WatchExamWidget: Widget {
 struct WatchWidgets: WidgetBundle {
     var body: some Widget {
         WatchCourseWidget()
+        WatchCourseProgressWidget()
         WatchElectricityWidget()
         WatchHolidayWidget()
         WatchExamWidget()
