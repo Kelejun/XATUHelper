@@ -97,7 +97,7 @@ struct ExamView: View {
                         nextExamCard(exam)
                             .listRowBackground(
                                 LinearGradient(
-                                    colors: [Color.yellow.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
+                                    colors: [CampusFeatureColors.exam.opacity(0.09), Color(uiColor: .secondarySystemGroupedBackground)],
                                     startPoint: .topLeading, endPoint: .bottomTrailing
                                 )
                             )
@@ -203,7 +203,7 @@ struct ExamView: View {
     }
 
     private func nextExamCard(_ exam: ExamRecord) -> some View {
-        let tint: Color = .yellow
+        let tint = CampusFeatureColors.exam
 
         return VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 12) {

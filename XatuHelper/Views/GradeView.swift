@@ -4,12 +4,17 @@ import UIKit
 /// 成绩概览与课程分项。
 struct GradeView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("showDiagnostics") private var showDiagnostics = false
 
     /// 空表示跟当前学期走
     @State private var semesterID = ""
     @State private var expanded: Set<String> = []
     @State private var searchText = ""
+
+    private var accent: Color {
+        colorScheme == .dark ? CampusFeatureColors.grade : Color(red: 0.52, green: 0.40, blue: 0)
+    }
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -246,7 +251,7 @@ struct GradeView: View {
     }
 
     private var overview: some View {
-        let tint: Color = .purple
+        let tint = CampusFeatureColors.grade
         return Section {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 12) {
@@ -256,7 +261,7 @@ struct GradeView: View {
                     Spacer(minLength: 0)
                     Image(systemName: "chart.bar.fill")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(tint)
+                        .foregroundStyle(accent)
                         .frame(width: 48, height: 48)
                         .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                         .accessibilityHidden(true)
@@ -264,11 +269,11 @@ struct GradeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("平均绩点")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(tint)
+                        .foregroundStyle(accent)
                     Text(displayGPA)
                         .font(.system(.largeTitle, design: .rounded, weight: .bold))
                         .monospacedDigit()
-                        .foregroundStyle(tint)
+                        .foregroundStyle(accent)
                 }
                 .accessibilityElement(children: .combine)
                 HStack(alignment: .firstTextBaseline, spacing: 16) {
@@ -316,7 +321,7 @@ struct GradeView: View {
             } label: {
                 gradeLabel(grade)
             }
-            .tint(.purple)
+            .tint(accent)
         }
     }
 

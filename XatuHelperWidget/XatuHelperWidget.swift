@@ -184,7 +184,7 @@ struct ExamWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ExamWidget", provider: SnapshotProvider(preview: PreviewData.snapshot, schedulesExamChanges: true)) { entry in
             ExamWidgetView(entry: entry)
-                .containerBackground(for: .widget) { WidgetBackdrop(tint: .indigo) }
+                .containerBackground(for: .widget) { WidgetBackdrop(tint: CampusFeatureColors.exam) }
         }
         .configurationDisplayName("考试倒计时")
         .description("查看下一场考试的科目、日期和剩余天数。")
@@ -652,7 +652,7 @@ struct ExamWidgetView: View {
     }
 
     private func countdownCard(showsVenue: Bool = true) -> some View {
-        SmallCountdownCard(icon: icon, title: "考试倒计时", tint: .indigo,
+        SmallCountdownCard(icon: icon, title: "考试倒计时", tint: CampusFeatureColors.exam,
                            days: exam?.days, name: exam?.title, detail: exam.flatMap(detail),
                            emptyIcon: "calendar.badge.checkmark", emptyTitle: "暂无待考科目",
                            emptyDetail: "打开 App 查看考试安排",
@@ -676,7 +676,7 @@ struct ExamWidgetView: View {
                 ForEach(Array(following.indices), id: \.self) { index in
                     let item = following[index]
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(detail(item) ?? "").font(.system(size: 10, weight: .medium)).foregroundStyle(.indigo)
+                        Text(detail(item) ?? "").font(.system(size: 10, weight: .medium)).foregroundStyle(CampusFeatureColors.exam)
                         Text(item.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     }
                 }

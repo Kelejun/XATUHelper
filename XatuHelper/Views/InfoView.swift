@@ -88,8 +88,8 @@ struct InfoView: View {
 
         var tint: Color {
             switch self {
-            case .exam: return .yellow
-            case .grade: return .purple
+            case .exam: return CampusFeatureColors.exam
+            case .grade: return CampusFeatureColors.grade
             case .plan: return .green
             case .bill: return .orange
             case .netfee: return .cyan
