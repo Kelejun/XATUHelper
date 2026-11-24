@@ -136,12 +136,9 @@ private struct WatchComplicationView: View {
                     } else {
                         Label(kind == .course ? "\(detail) · \(title)" : title, systemImage: icon)
                     }
-                case .accessoryCircular:
+                case .accessoryCircular where kind != .course:
                     VStack(spacing: 2) {
-                        if kind == .course {
-                            Text(detail).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
-                            Text(title).font(.system(size: 10)).lineLimit(2).minimumScaleFactor(0.7)
-                        } else if kind == .exam {
+                        if kind == .exam {
                             Image(systemName: icon).font(.caption2).widgetAccentable()
                             Text(examCountdown).font(.system(size: 19, weight: .bold, design: .rounded))
                                 .lineLimit(1).minimumScaleFactor(0.65)
@@ -244,7 +241,7 @@ struct WatchCourseWidget: Widget {
         }
         .configurationDisplayName("当前／下一节课")
         .description("查看教室、课程时间和进度。")
-        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
+        .supportedFamilies([.accessoryRectangular, .accessoryInline])
     }
 }
 
@@ -277,28 +274,14 @@ private struct WatchCourseProgressView: View {
 
     var body: some View {
         Group {
-            switch family {
-            case .accessoryInline:
+            if family == .accessoryInline {
                 Label {
                     Text("\(countdownLabel) \(countdown)")
                 } icon: {
                     Image(systemName: "book.closed.fill")
                 }
                 .unredacted()
-            case .accessoryCircular:
-                ZStack {
-                    progress.progressViewStyle(.circular).accessibilityHidden(true)
-                    VStack(spacing: 1) {
-                        countdown.font(.caption2.weight(.semibold)).monospacedDigit()
-                        Text(countdownLabel).font(.system(size: 9))
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .padding(.horizontal, 6)
-                    .unredacted()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            default:
+            } else {
                 card
             }
         }
@@ -385,23 +368,23 @@ private struct WatchCourseProgressView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 }
-                progress
-                    .progressViewStyle(.linear)
-                    .frame(height: 4)
-                    .background(tint.opacity(0.3), in: Capsule())
-                    .clipShape(Capsule())
+                progressBar
             }
             .frame(width: bounds.size.width, height: bounds.size.height)
         }
     }
 
-    private var progress: some View {
+    private var progressBar: some View {
         ProgressView(timerInterval: interval, countsDown: false) {
             EmptyView()
         } currentValueLabel: {
             EmptyView()
         }
+        .progressViewStyle(.linear)
         .tint(tint)
+        .frame(height: 4)
+        .background(tint.opacity(0.3), in: Capsule())
+        .clipShape(Capsule())
         .widgetAccentable()
     }
 }
