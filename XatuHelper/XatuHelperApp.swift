@@ -6,6 +6,7 @@ struct XatuHelperApp: App {
     @StateObject private var app: AppState
     @AppStorage(CourseActivityController.beforeKey) private var beforeClass = false
     @AppStorage(CourseActivityController.duringKey) private var duringClass = false
+    @StateObject private var permissionReview = NotificationPermissionReview()
     @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -22,6 +23,7 @@ struct XatuHelperApp: App {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(announcements)
+                .environmentObject(permissionReview)
                 .onChange(of: [beforeClass, duringClass]) { _, _ in
                     CourseActivityController.shared.refresh()
                 }
@@ -62,6 +64,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var announcements: AnnouncementCenter
+    @EnvironmentObject private var permissionReview: NotificationPermissionReview
 
     var body: some View {
         Group {
@@ -76,8 +79,13 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
         .background {
+            NotificationPermissionReviewPresenter(review: permissionReview,
+                canPresent: scenePhase == .active && !app.isDemoMode && !app.showsDemoAccount &&
+                    !app.showsWebLogin && app.deepLink == nil)
+        }
+        .background {
             AnnouncementNotice(center: announcements,
-                canPresent: scenePhase == .active && app.inAppNotice == nil &&
+                canPresent: !permissionReview.pending && scenePhase == .active && app.inAppNotice == nil &&
                     !app.showsWebLogin && !app.showsDemoAccount && app.deepLink == nil)
         }
         .task { await announcements.refresh() }
@@ -122,5 +130,6 @@ struct ContentView: View {
             }
         }
         .environmentObject(announcements)
+        .environment(\.notificationReviewPending, permissionReview.pending)
     }
 }

@@ -1,86 +1,198 @@
 import SwiftUI
 
-private func clockText(_ minutes: Int) -> String {
-    String(format: "%02d:%02d", minutes / 60, minutes % 60)
+private struct PreviewDataKey: EnvironmentKey {
+    static let defaultValue: ReminderPreviewData? = nil
 }
 
-struct NotificationSample: View {
-    var time: String
-    var timing: String
-    var title: String
-    var detail: String
+private extension EnvironmentValues {
+    var reminderPreview: ReminderPreviewData? {
+        get { self[PreviewDataKey.self] }
+        set { self[PreviewDataKey.self] = newValue }
+    }
+}
+
+private struct PreviewInputs: Equatable {
+    let account: String
+    let loggedIn: Bool
+    let monday: Date
+    let courses: [CourseOccurrence]
+    let exams: [ExamRecord]
+}
+
+private struct ReminderPreviewProvider: ViewModifier {
+    @EnvironmentObject private var app: AppState
+    @State private var sampleIndex = UInt64.random(in: .min ... .max)
+    @State private var data: ReminderPreviewData?
+
+    func body(content: Content) -> some View {
+        let hasLocalExamList = app.isDemoMode || app.hasExamContext(app.currentSemesterID)
+        let exams = app.currentExams.isEmpty && hasLocalExamList ? app.exams : app.currentExams
+        let inputs = PreviewInputs(account: app.studentID, loggedIn: app.isLoggedIn, monday: app.reminderMonday,
+                                   courses: app.reminderOccurrences, exams: exams)
+        content
+            .environment(\.reminderPreview, data)
+            .onChange(of: inputs, initial: true) { _, inputs in
+                data = inputs.loggedIn ? ReminderPreviewData(snapshot: app.makeWatchSnapshot(), exams: inputs.exams,
+                                                             fallbackCourses: inputs.courses, sampleIndex: sampleIndex) : nil
+            }
+    }
+}
+
+extension View {
+    func withReminderPreviewData() -> some View { modifier(ReminderPreviewProvider()) }
+}
+
+private func clockText(_ minutes: Int) -> String {
+    let time = (minutes % 1440 + 1440) % 1440
+    return String(format: "%02d:%02d", time / 60, time % 60)
+}
+
+private struct NotificationAppIcon: View {
     @Environment(\.colorScheme) private var scheme
 
-    static func course(lead: Int) -> Self {
-        Self(time: clockText(500 - lead), timing: "课前 \(lead) 分钟",
-             title: "下一节课：高等数学", detail: "教室 教1-201")
-    }
-
-    static func exam(time: Int, timing: String, prefix: String) -> Self {
-        Self(time: clockText(time), timing: timing, title: prefix + "：计算机网络",
-             detail: "09:00–11:00 · 考场 教3-109 · 座位 16")
-    }
-
-    private var accentFill: Color {
-        scheme == .dark ? Color(red: 0.14, green: 0.20, blue: 0.31)
-                        : Color(red: 0.89, green: 0.94, blue: 1)
+    private var image: UIImage? {
+        let bundle = Bundle.main
+        let icons = bundle.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any]
+        guard let primary = icons?["CFBundlePrimaryIcon"] as? [String: Any] else { return nil }
+        let traits = UITraitCollection(userInterfaceStyle: scheme == .dark ? .dark : .light)
+        let names = [primary["CFBundleIconName"] as? String].compactMap { $0 }
+            + (primary["CFBundleIconFiles"] as? [String] ?? []).reversed()
+        for name in names {
+            if let icon = UIImage(named: name, in: bundle, compatibleWith: traits) { return icon }
+        }
+        return nil
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(time).font(.system(.title, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
-                Text(timing).font(.caption.weight(.medium))
-                Spacer()
-                Text("通知示例").font(.caption.weight(.medium))
-            }
-            .foregroundStyle(scheme == .dark ? Color(red: 0.69, green: 0.82, blue: 1) : Color(red: 0.16, green: 0.33, blue: 0.55))
-            HStack(spacing: 11) {
-                Image("XATuneMark").resizable().scaledToFit().padding(5)
-                    .foregroundStyle(.white).frame(width: 36, height: 36).background(.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 9)).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Text(detail).font(.footnote).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(12).background(Color(uiColor: .secondarySystemGroupedBackground),
-                                    in: RoundedRectangle(cornerRadius: 13))
+        if let image {
+            Image(uiImage: image).renderingMode(.original).resizable()
+                .frame(width: 36, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .accessibilityHidden(true)
         }
-        .padding(14)
-        .background(accentFill,
-                    in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+struct NotificationSample: View {
+    enum Trigger { case course(Int), eve(Int), morning(Int), examLead(Int) }
+    let trigger: Trigger
+    @Environment(\.reminderPreview) private var data
+    @Environment(\.colorScheme) private var scheme
+
+    private struct Sample {
+        let time: String
+        let timing: String
+        let title: String
+        let detail: String
+        var simulated = false
+    }
+
+    private var sample: Sample? {
+        if case .course(let lead) = trigger {
+            guard let lesson = data?.before else { return nil }
+            let room = lesson.fullRoom.isEmpty ? lesson.room : lesson.fullRoom
+            return Sample(time: clockText(ReminderPreviewData.minutes(of: lesson.start) - lead),
+                          timing: "课前 \(lead) 分钟", title: "下一节课：\(lesson.name)",
+                          detail: room.isEmpty ? "教室待定" : "教室 \(room)")
+        }
+        guard let exam = data?.exam else { return nil }
+        switch trigger {
+        case .eve(let minutes):
+            return Sample(time: clockText(minutes), timing: "考试前一天", title: "明天考试：\(exam.name)",
+                          detail: exam.detail, simulated: exam.simulated)
+        case .morning(let minutes):
+            return Sample(time: clockText(minutes), timing: "当天早间", title: "今天考试：\(exam.name)",
+                          detail: exam.detail, simulated: exam.simulated)
+        case .examLead(let lead):
+            return Sample(time: exam.startMinutes.map { clockText($0 - lead) } ?? "待定",
+                          timing: "开考前 \(lead) 分钟", title: "快考试了：\(exam.name)",
+                          detail: exam.detail, simulated: exam.simulated)
+        case .course: return nil
+        }
+    }
+
+    var body: some View {
+        if let sample {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(sample.time).font(.system(.title, design: .rounded, weight: .semibold)).monospacedDigit()
+                    Text(sample.timing).font(.caption.weight(.medium))
+                    Spacer(minLength: 3)
+                    Text(sample.simulated ? "课程模拟" : "通知示例").font(.caption.weight(.medium))
+                }
+                .foregroundStyle(scheme == .dark ? Color(red: 0.69, green: 0.82, blue: 1) : Color(red: 0.16, green: 0.33, blue: 0.55))
+                HStack(spacing: 11) {
+                    NotificationAppIcon()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(sample.title).font(.subheadline.weight(.semibold))
+                        Text(sample.detail).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 13))
+            }
+            .padding(14)
+            .background(scheme == .dark ? Color(red: 0.14, green: 0.20, blue: 0.31) : Color(red: 0.89, green: 0.94, blue: 1),
+                        in: RoundedRectangle(cornerRadius: 18))
+        } else {
+            Text("暂无可预览的本地安排").font(.footnote).foregroundStyle(.secondary)
+        }
     }
 }
 
 struct CourseActivityPreview: View {
-    let during: Bool
-    @Environment(\.colorScheme) private var scheme
-    private var remaining: String { during ? "18:00" : "05:00" }
-    private var progress: Double { during ? 0.60 : 0.50 }
-    private var symbol: String { during ? "book.fill" : "figure.walk" }
-    private var blue: Color { scheme == .dark ? Color(red: 0.69, green: 0.82, blue: 1) : Color(red: 0.16, green: 0.33, blue: 0.55) }
+    enum Phase: String { case before = "课前", between = "课间", during = "课中" }
+    let phase: Phase
+    @Environment(\.reminderPreview) private var data
+
+    private var lesson: WatchSnapshot.Lesson? {
+        switch phase {
+        case .before: data?.before
+        case .during: data?.during
+        case .between: data?.between?.next ?? data?.before
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Label(during ? "上课中" : "课前", systemImage: symbol)
-                Spacer()
-                Text(during ? "距下课" : "距上课")
-                Text(remaining).monospacedDigit().font(.subheadline.weight(.semibold))
+        if let lesson {
+            let duration = phase == .during ? max(1, Int(lesson.end.timeIntervalSince(lesson.start) / 60))
+                : (phase == .between ? (data?.between?.minutes ?? 10) : 30)
+            let remaining = min(duration, phase == .during ? 18 : (phase == .between ? 8 : 5))
+            let tint = CampusCourseColors.color(index: lesson.colorIndex)
+            let previous = phase == .between ? data?.between?.previous.displayRoom : nil
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Label(phase.rawValue, systemImage: phase == .during ? "book.fill" : "figure.walk")
+                    Spacer()
+                    Text(phase == .during ? "距下课" : "距上课")
+                    Text(String(format: "%02d:00", remaining)).monospacedDigit().font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(tint).font(.caption)
+                HStack {
+                    Text(lesson.name).font(.headline)
+                    Spacer()
+                    if previous == nil || previous == lesson.displayRoom {
+                        Text(lesson.displayRoom).font(.caption).foregroundStyle(tint)
+                    }
+                }
+                if let previous, previous != lesson.displayRoom {
+                    HStack {
+                        Text(previous)
+                        Spacer()
+                        Image(systemName: "arrow.right").foregroundStyle(tint)
+                        Spacer()
+                        Text(lesson.displayRoom).foregroundStyle(tint)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("从\(previous)到\(lesson.displayRoom)")
+                }
+                ProgressView(value: 1 - Double(remaining) / Double(duration)).tint(tint).accessibilityHidden(true)
             }
-            .foregroundStyle(blue).font(.caption)
-            HStack {
-                Text("高等数学").font(.headline)
-                Spacer()
-                Text("教1-201").font(.caption).foregroundStyle(blue)
-            }
-            ProgressView(value: progress).tint(blue).accessibilityHidden(true)
+            .padding(12).background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .accessibilityElement(children: .combine)
+        } else {
+            Text("暂无可预览的本地课程").font(.footnote).foregroundStyle(.secondary)
         }
-        .padding(12).background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("锁定屏幕，高等数学，教1-201，" + (during ? "距下课18分钟" : "距上课5分钟"))
     }
 }

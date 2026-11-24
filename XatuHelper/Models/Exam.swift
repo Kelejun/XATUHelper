@@ -19,6 +19,13 @@ struct ExamRecord: Identifiable, Hashable, Codable {
         dateFormatter.firstMatch(in: text) ?? ""
     }
 
+    var startMinutes: Int? {
+        guard let parts = timeWithoutDate.regexGroups(#"(\d{1,2})\s*[:：]\s*(\d{2})"#).first,
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
+              hour < 24, minute < 60 else { return nil }
+        return hour * 60 + minute
+    }
+
     var timeWithoutDate: String {
         guard let range = time.range(of: #"(?:\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}|(?:\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日)"#, options: .regularExpression) else { return time }
         return time[range.upperBound...].trimmingCharacters(in: .whitespaces)

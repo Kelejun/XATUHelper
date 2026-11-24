@@ -88,6 +88,13 @@ struct SettingsContent: View {
                     } label: {
                         Text("提醒")
                     }
+                    NavigationLink("实时活动与灵动岛") {
+                        Form { CourseActivitySettingsSection() }
+                            .formStyle(.grouped)
+                            .navigationTitle("实时活动与灵动岛")
+                            .withReminderPreviewData()
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
                 }
                 NavigationLink {
                     TimetableSettingsContent()
@@ -160,11 +167,11 @@ private struct ReminderSettingsContent: View {
     var body: some View {
         Form {
             ClassNotificationSection()
-            CourseActivitySettingsSection()
             ExamNotificationSection()
         }
         .formStyle(.grouped)
         .navigationTitle("提醒")
+        .withReminderPreviewData()
         .navigationBarTitleDisplayMode(.inline)
     }
 }

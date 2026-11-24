@@ -22,3 +22,8 @@ swiftc -module-cache-path "$build_dir/modules" \
 swiftc -module-cache-path "$build_dir/modules" \
   Shared/WatchSnapshot.swift Shared/WatchCourseProgress.swift Shared/CourseActivitySlot.swift tests/WatchHomeTests.swift -o "$build_dir/watch-home"
 "$build_dir/watch-home"
+swiftc -module-cache-path "$build_dir/modules" \
+  Shared/WatchSnapshot.swift Shared/WatchCourseProgress.swift Shared/CourseActivitySlot.swift \
+  XatuHelper/Models/Course.swift XatuHelper/Models/Exam.swift XatuHelper/Models/ReminderPreviewData.swift \
+  tests/ReminderPreviewTests.swift -o "$build_dir/reminder-preview"
+"$build_dir/reminder-preview"

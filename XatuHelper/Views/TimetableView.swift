@@ -6,6 +6,7 @@ struct TimetableView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.campusNavigation) private var navigate
     @State private var showSettings = false
+    @Environment(\.notificationReviewPending) private var reviewPending
     @State private var showNotificationSetup = false
     @State private var selection: TimetableSelection?
     @State private var showAddCourse = false
@@ -297,6 +298,9 @@ struct TimetableView: View {
             if app.isStale(.timetable) {
                 await app.refresh()
             }
+        }
+        .task(id: reviewPending) {
+            guard !reviewPending else { return }
             if !app.isDemoMode && (!NotificationSettings.hasPrompted || !UserDefaults.standard.bool(forKey: CourseActivityController.promptedKey)) {
                 showNotificationSetup = true
             }

@@ -22,7 +22,7 @@ struct ClassNotificationSection: View {
         Section {
             Toggle("上课提醒", isOn: $enabled)
             LeadPicker(title: "提前", options: NotificationSettings.classLeadOptions, minutes: $lead)
-            NotificationSample.course(lead: lead)
+            NotificationSample(trigger: .course(lead))
         } header: {
             Text("上课提醒")
         } footer: {
@@ -47,9 +47,9 @@ private struct ExamTimes: Equatable {
     var lead = NotificationSettings.examLeadMinutes
 
     var count: Int { [eve, morning, before].filter { $0 }.count }
-    var eveSample: NotificationSample { .exam(time: eveMinutes, timing: "考试前一天", prefix: "明天考试") }
-    var morningSample: NotificationSample { .exam(time: morningMinutes, timing: "当天早间", prefix: "今天考试") }
-    var leadSample: NotificationSample { .exam(time: 540 - lead, timing: "开考前 \(lead) 分钟", prefix: "快考试了") }
+    var eveSample: NotificationSample { .init(trigger: .eve(eveMinutes)) }
+    var morningSample: NotificationSample { .init(trigger: .morning(morningMinutes)) }
+    var leadSample: NotificationSample { .init(trigger: .examLead(lead)) }
 
     func save() {
         let defaults = UserDefaults.standard
@@ -125,11 +125,14 @@ struct CourseActivitySettingsSection: View {
     @AppStorage(CourseActivityController.duringKey) private var during = false
 
     var body: some View {
-        Section("课程实时活动") {
-            Toggle("课前候课", isOn: $before)
-            CourseActivityPreview(during: false)
-            Toggle("课中进度", isOn: $during)
-            CourseActivityPreview(during: true)
+        Section {
+            Toggle("课前", isOn: $before)
+            CourseActivityPreview(phase: .before)
+            CourseActivityPreview(phase: .between)
+        }
+        Section {
+            Toggle("课中", isOn: $during)
+            CourseActivityPreview(phase: .during)
         }
     }
 }
@@ -167,16 +170,17 @@ struct NotificationSetupSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if activityStep {
-                    Text("开启课程实时活动？").font(.title2.bold())
+                    Text("开启实时活动与灵动岛？").font(.title2.bold())
                     Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Picker("预览阶段", selection: $previewDuring) {
                         Text("课前预览").tag(false)
                         Text("课中预览").tag(true)
                     }.pickerStyle(.segmented)
-                    CourseActivityPreview(during: previewDuring)
-                    Toggle("课前候课", isOn: $before)
-                    Toggle("课中进度", isOn: $during)
+                    CourseActivityPreview(phase: previewDuring ? .during : .before)
+                    if !previewDuring { CourseActivityPreview(phase: .between) }
+                    Toggle("课前", isOn: $before)
+                    Toggle("课中", isOn: $during)
                     PromptActions(title: "完成", skip: finishActivity) {
                         UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
                         UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
@@ -186,7 +190,7 @@ struct NotificationSetupSheet: View {
                     Text("上课前，要提醒你吗？").font(.title2.bold())
                     Text("上课前发一条通知，课程和教室抬眼就能看到。")
                         .font(.subheadline).foregroundStyle(.secondary)
-                    NotificationSample.course(lead: lead)
+                    NotificationSample(trigger: .course(lead))
                     LabeledContent("提醒时间") {
                         LeadPicker(title: "课前", options: NotificationSettings.classLeadOptions, minutes: $lead)
                             .labelsHidden()
@@ -208,9 +212,10 @@ struct NotificationSetupSheet: View {
                 }
             }.padding(.horizontal, 22).padding(.vertical, 30)
         }
+        .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)
         .presentationDragIndicator(.visible)
-        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(activityStep ? 430 : 350), .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(activityStep ? (previewDuring ? 430 : 535) : 350), .large])
         .alert("通知权限未开启", isPresented: $denied) {
             Button("继续", action: next)
         } message: { Text("可在系统设置中允许 XATune 发送通知。") }
@@ -268,6 +273,7 @@ struct ExamNotificationSetupSheet: View {
         }
         .presentationDetents(typeSize.isAccessibilitySize || editing ? [.large] : [.height(350), .large])
         .presentationDragIndicator(.visible)
+        .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)
         .alert("通知权限未开启", isPresented: $denied) {
             Button("完成", action: finish)

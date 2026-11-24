@@ -126,9 +126,10 @@ extension AppState {
         let calendar = WatchSnapshot.campusCalendar
         let base = calendar.startOfDay(for: reminderMonday)
         var lessons: [WatchSnapshot.Lesson] = []
-        let weeks = Set(reminderOccurrences.flatMap(\.weeks)).sorted()
+        let occurrences = reminderOccurrences
+        let weeks = Set(occurrences.flatMap(\.weeks)).sorted()
         for week in weeks where week > 0 && week <= 60 {
-            for block in reminderOccurrences.filter({ $0.weeks.contains(week) }).courseBlocks() where !block.isPlaceholder && !block.isRemote {
+            for block in occurrences.filter({ $0.weeks.contains(week) }).courseBlocks() where !block.isPlaceholder && !block.isRemote {
                 guard (1...7).contains(block.day),
                       let day = calendar.date(byAdding: .day, value: (week - 1) * 7 + block.day - 1, to: base),
                       let start = calendar.date(byAdding: .minute, value: PeriodSchedule.startMinutes(of: block), to: day),

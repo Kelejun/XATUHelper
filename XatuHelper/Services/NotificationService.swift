@@ -257,7 +257,8 @@ enum NotificationService {
             }
 
             // 开考前 N 分钟
-            if NotificationSettings.examLeadEnabled, let start = startOfExam(exam.time, on: day) {
+            if NotificationSettings.examLeadEnabled, let minutes = exam.startMinutes,
+               let start = calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day) {
                 let fire = start.addingTimeInterval(TimeInterval(-leadMinutes * 60))
                 if fire > now {
                     let formatter = DateFormatter()
@@ -311,15 +312,5 @@ enum NotificationService {
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter.date(from: key)
-    }
-
-    /// 从 "09:00-11:00" 这类文本里取出开考时间，日期用考试当天
-    private static func startOfExam(_ text: String, on day: Date) -> Date? {
-        guard let groups = text.regexGroups(#"(\d{1,2})\s*[:：]\s*(\d{2})"#).first,
-              groups.count >= 2,
-              let hour = Int(groups[0]), let minute = Int(groups[1]),
-              hour < 24, minute < 60 else { return nil }
-        let calendar = Calendar.current
-        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day)
     }
 }

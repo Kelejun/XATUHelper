@@ -8,6 +8,7 @@ struct ExamView: View {
 
     /// 空表示跟当前学期走；选了历史学期就钉住那一个
     @State private var semesterID = ""
+    @Environment(\.notificationReviewPending) private var reviewPending
     @State private var showNotificationSetup = false
     @State private var showsCompleted = false
 
@@ -165,6 +166,9 @@ struct ExamView: View {
         }
         .task {
             if !app.hasExamContext(effectiveSemesterID) || app.isStale(.exams) { await app.refreshExams(semesterID: effectiveSemesterID) }
+        }
+        .task(id: reviewPending) {
+            guard !reviewPending else { return }
             if !app.isDemoMode && !NotificationSettings.hasPromptedExam {
                 showNotificationSetup = true
             }
