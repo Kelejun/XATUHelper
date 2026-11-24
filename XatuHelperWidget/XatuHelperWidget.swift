@@ -886,25 +886,22 @@ private struct LockScreenCompactValue: View {
     let caption: String
 
     var body: some View {
-        ZStack {
-            AccessoryWidgetBackground()
-            VStack(spacing: 1) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .bold))
-                    .widgetAccentable()
-                    .accessibilityHidden(true)
-                Text(value)
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text(caption)
-                    .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .padding(4)
+        VStack(spacing: 1) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .bold))
+                .widgetAccentable()
+                .accessibilityHidden(true)
+            Text(value)
+                .font(.system(size: 19, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            Text(caption)
+                .font(.system(size: 9, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
+        .padding(4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
     }
