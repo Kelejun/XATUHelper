@@ -134,14 +134,12 @@ struct CourseActivitySettingsSection: View {
     var body: some View {
         Section {
             Toggle("课前", isOn: $before)
-            if before {
-                CourseActivityPreview(phase: .before)
-                CourseActivityPreview(phase: .between)
-            }
+            CourseActivityPreview(phase: .before)
+            CourseActivityPreview(phase: .between)
         }
         Section {
             Toggle("课中", isOn: $during)
-            if during { CourseActivityPreview(phase: .during) }
+            CourseActivityPreview(phase: .during)
         }
     }
 }
