@@ -50,26 +50,18 @@ private func clockText(_ minutes: Int) -> String {
 private struct NotificationAppIcon: View {
     @Environment(\.colorScheme) private var scheme
 
-    private var image: UIImage? {
-        let bundle = Bundle.main
-        let icons = bundle.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any]
-        guard let primary = icons?["CFBundlePrimaryIcon"] as? [String: Any] else { return nil }
-        let traits = UITraitCollection(userInterfaceStyle: scheme == .dark ? .dark : .light)
-        let names = [primary["CFBundleIconName"] as? String].compactMap { $0 }
-            + (primary["CFBundleIconFiles"] as? [String] ?? []).reversed()
-        for name in names {
-            if let icon = UIImage(named: name, in: bundle, compatibleWith: traits) { return icon }
-        }
-        return nil
-    }
-
     var body: some View {
-        if let image {
-            Image(uiImage: image).renderingMode(.original).resizable()
-                .frame(width: 36, height: 36)
-                .clipShape(RoundedRectangle(cornerRadius: 9))
-                .accessibilityHidden(true)
-        }
+        // Icon Composer app icons aren't ordinary UIImage assets.
+        Image("XATuneMark")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(scheme == .dark ? Color(red: 105 / 255, green: 180 / 255, blue: 1) : .white)
+            .frame(width: 24, height: 24)
+            .frame(width: 36, height: 36)
+            .background(scheme == .dark ? Color(white: 0.1) : Color(red: 1 / 255, green: 89 / 255, blue: 218 / 255))
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .accessibilityHidden(true)
     }
 }
 
