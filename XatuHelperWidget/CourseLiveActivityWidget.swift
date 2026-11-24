@@ -64,7 +64,7 @@ struct CourseLiveActivityWidget: Widget {
                 .privacySensitive()
                 .accessibilityLabel(Text("\(course.phase)，\(course.state.room)"))
             } compactTrailing: {
-                course.timer(width: 46, font: .caption, capsule: false)
+                CourseCompactTimer(course: course)
                     .padding(.trailing, 3)
             } minimal: {
                 CourseActivityEmblem(course: course)
@@ -257,20 +257,30 @@ private struct CourseProgressFooter: View {
     }
 }
 
+private struct CourseCompactTimer: View {
+    let course: CoursePresentation
+
+    var body: some View {
+        Group {
+            if course.finished {
+                course.completionMark(font: .caption)
+            } else {
+                course.progressRing
+                    .accessibilityLabel(Text(course.countdownLabel))
+                    .accessibilityValue(Text(timerInterval: course.interval, countsDown: true))
+            }
+        }
+        .frame(width: 20, height: 20)
+    }
+}
+
 private struct CourseActivityEmblem: View {
     let course: CoursePresentation
 
     var body: some View {
         ZStack {
             if !course.finished {
-                ProgressView(timerInterval: course.interval, countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
-                    EmptyView()
-                }
-                .progressViewStyle(.circular)
-                .tint(course.tint)
-                .accessibilityHidden(true)
+                course.progressRing.accessibilityHidden(true)
             }
             course.mark.font(.system(size: 10, weight: .semibold))
         }
@@ -338,48 +348,53 @@ private struct CoursePresentation {
     @ViewBuilder func timer(
         width: CGFloat,
         font: Font,
-        capsule: Bool = true,
         horizontalPadding: CGFloat = 8,
         verticalPadding: CGFloat = 4
     ) -> some View {
         if finished {
-            Image(systemName: "checkmark")
-                .font(font.weight(.semibold))
-                .foregroundStyle(tint)
-                .accessibilityLabel(Text(phase))
+            completionMark(font: font)
         } else {
-            let countdown = Text(timerInterval: interval, countsDown: true, showsHours: false)
+            Text(timerInterval: interval, countsDown: true, showsHours: false)
                 .font(font.weight(.semibold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-                .multilineTextAlignment(capsule ? .center : .trailing)
-                .frame(width: width, alignment: capsule ? .center : .trailing)
+                .multilineTextAlignment(.center)
+                .frame(width: width)
                 .foregroundStyle(foreground)
                 .accessibilityLabel(Text(countdownLabel))
                 .accessibilityValue(Text(timerInterval: interval, countsDown: true))
-            if capsule {
-                countdown
-                    .padding(.horizontal, horizontalPadding)
-                    .padding(.vertical, verticalPadding)
-                    .background(tint.opacity(0.18), in: Capsule())
-            } else {
-                countdown
-            }
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
+                .background(tint.opacity(0.18), in: Capsule())
         }
     }
 
+    func completionMark(font: Font) -> some View {
+        mark.font(font.weight(.semibold))
+            .foregroundStyle(tint)
+            .accessibilityLabel(Text(phase))
+    }
+
+    var progressRing: some View {
+        progress.progressViewStyle(.circular).tint(tint)
+    }
+
     func track(height: CGFloat) -> some View {
+        progress
+            .progressViewStyle(.linear)
+            .tint(tint)
+            .frame(height: height)
+            .background(foreground.opacity(0.15), in: Capsule())
+            .clipShape(Capsule())
+            .accessibilityLabel(Text(preparing ? "课前进度" : "课程进度"))
+    }
+
+    private var progress: ProgressView<EmptyView, EmptyView> {
         ProgressView(timerInterval: interval, countsDown: false) {
             EmptyView()
         } currentValueLabel: {
             EmptyView()
         }
-        .progressViewStyle(.linear)
-        .tint(tint)
-        .frame(height: height)
-        .background(foreground.opacity(0.15), in: Capsule())
-        .clipShape(Capsule())
-        .accessibilityLabel(Text(preparing ? "课前进度" : "课程进度"))
     }
 }
