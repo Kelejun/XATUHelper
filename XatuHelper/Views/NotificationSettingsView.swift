@@ -7,8 +7,12 @@ private struct LeadPicker: View {
     @Binding var minutes: Int
 
     var body: some View {
-        Picker(title, selection: $minutes) {
-            ForEach(options, id: \.self) { Text("\($0) 分钟").tag($0) }
+        LabeledContent(title) {
+            Picker(title, selection: $minutes) {
+                ForEach(options, id: \.self) { Text("\($0) 分钟").tag($0) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
         }
     }
 }
@@ -21,12 +25,12 @@ struct ClassNotificationSection: View {
     var body: some View {
         Section {
             Toggle("上课提醒", isOn: $enabled)
-            LeadPicker(title: "提前", options: NotificationSettings.classLeadOptions, minutes: $lead)
-            NotificationSample(trigger: .course(lead))
+            if enabled {
+                LeadPicker(title: "提前", options: NotificationSettings.classLeadOptions, minutes: $lead)
+                NotificationSample(trigger: .course(lead))
+            }
         } header: {
             Text("上课提醒")
-        } footer: {
-            Text("通知只管 7 天，期间进入 app 更新。")
         }
         .onChange(of: enabled) { _, on in
             Task {
@@ -71,6 +75,7 @@ private struct ClockPicker: View {
         }, set: {
             minutes = calendar.component(.hour, from: $0) * 60 + calendar.component(.minute, from: $0)
         }), displayedComponents: .hourAndMinute)
+        .datePickerStyle(.compact)
     }
 }
 
@@ -80,17 +85,17 @@ private struct ExamTimeRows: View {
 
     var body: some View {
         Toggle("前一天提醒", isOn: $times.eve)
-        if previews || times.eve {
+        if times.eve {
             ClockPicker(minutes: $times.eveMinutes)
             if previews { times.eveSample }
         }
         Toggle("当天早间提醒", isOn: $times.morning)
-        if previews || times.morning {
+        if times.morning {
             ClockPicker(minutes: $times.morningMinutes)
             if previews { times.morningSample }
         }
         Toggle("开考前提醒", isOn: $times.before)
-        if previews || times.before {
+        if times.before {
             LeadPicker(title: "提前", options: NotificationSettings.examLeadOptions, minutes: $times.lead)
             if previews { times.leadSample }
         }
@@ -105,7 +110,9 @@ struct ExamNotificationSection: View {
     var body: some View {
         Section("考试提醒") {
             Toggle("考试提醒", isOn: $enabled)
-            ExamTimeRows(times: $times, previews: true)
+            if enabled {
+                ExamTimeRows(times: $times, previews: true)
+            }
         }
         .onChange(of: enabled) { _, on in
             Task {
@@ -127,12 +134,14 @@ struct CourseActivitySettingsSection: View {
     var body: some View {
         Section {
             Toggle("课前", isOn: $before)
-            CourseActivityPreview(phase: .before)
-            CourseActivityPreview(phase: .between)
+            if before {
+                CourseActivityPreview(phase: .before)
+                CourseActivityPreview(phase: .between)
+            }
         }
         Section {
             Toggle("课中", isOn: $during)
-            CourseActivityPreview(phase: .during)
+            if during { CourseActivityPreview(phase: .during) }
         }
     }
 }
@@ -159,6 +168,7 @@ struct NotificationSetupSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var activityStep = NotificationSettings.hasPrompted
+    @State private var detent: PresentationDetent = NotificationSettings.hasPrompted ? .large : .height(420)
     @State private var lead = NotificationSettings.classLeadMinutes
     @State private var before = UserDefaults.standard.bool(forKey: CourseActivityController.beforeKey)
     @State private var during = UserDefaults.standard.bool(forKey: CourseActivityController.duringKey)
@@ -166,72 +176,96 @@ struct NotificationSetupSheet: View {
     @State private var denied = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if activityStep {
-                    Text("开启实时活动与灵动岛？").font(.title2.bold())
-                    Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Toggle("课前", isOn: $before)
-                    CourseActivityPreview(phase: .before)
-                    CourseActivityPreview(phase: .between)
-                    Toggle("课中", isOn: $during)
-                    CourseActivityPreview(phase: .during)
-                    PromptActions(title: "完成", skip: {
-                        UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
-                        UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
-                        finishActivity()
-                    }) {
-                        UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
-                        UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
-                        finishActivity()
-                    }
-                } else {
-                    Text("上课前，要提醒你吗？").font(.title2.bold())
-                    Text("上课前发一条通知，课程和教室抬眼就能看到。")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    NotificationSample(trigger: .course(lead))
-                    LabeledContent("提醒时间") {
-                        Picker("提醒时间", selection: $lead) {
-                            ForEach(NotificationSettings.classLeadOptions, id: \.self) {
-                                Text("课前 \($0) 分钟").tag($0)
-                            }
-                        }.labelsHidden()
-                    }
-                    PromptActions(title: "开启课程提醒", skip: {
-                        UserDefaults.standard.set(false, forKey: NotificationSettings.classEnabled)
-                        Task { await app.rescheduleNotifications() }
-                        next()
-                    }) {
-                        guard !requesting else { return }
-                        requesting = true
-                        Task {
-                            let allowed = await NotificationService.requestAuthorization()
-                            if allowed {
-                                UserDefaults.standard.set(lead, forKey: NotificationSettings.classLead)
-                                UserDefaults.standard.set(true, forKey: NotificationSettings.classEnabled)
-                                await app.rescheduleNotifications()
-                            }
-                            requesting = false
-                            if allowed { next() } else { denied = true }
-                        }
-                    }.disabled(requesting)
+        ScrollViewReader { proxy in
+            ScrollView {
+                Group {
+                    if activityStep { activityContent }
+                    else { courseContent }
                 }
-            }.padding(.horizontal, 22).padding(.vertical, 30)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 22).padding(.vertical, 30)
+                .id("promptTop")
+            }
+            .onChange(of: activityStep) { _, _ in
+                proxy.scrollTo("promptTop", anchor: .top)
+            }
         }
         .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)
         .presentationDragIndicator(.visible)
-        .presentationDetents(activityStep || typeSize.isAccessibilitySize ? [.large] : [.height(350), .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(420), .large], selection: $detent)
         .alert("通知权限未开启", isPresented: $denied) {
             Button("继续", action: next)
         } message: { Text("可在系统设置中允许 XATune 发送通知。") }
     }
 
+    private var activityContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("开启实时活动与灵动岛？").font(.title2.bold())
+            Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Toggle("课前", isOn: $before)
+            CourseActivityPreview(phase: .before)
+            CourseActivityPreview(phase: .between)
+            Toggle("课中", isOn: $during)
+            CourseActivityPreview(phase: .during)
+            PromptActions(title: "完成", skip: {
+                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
+                UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
+                finishActivity()
+            }) {
+                UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
+                UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
+                finishActivity()
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private var courseContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("上课前，要提醒你吗？").font(.title2.bold())
+            Text("上课前发一条通知，课程和教室抬眼就能看到。")
+                .font(.subheadline).foregroundStyle(.secondary)
+            NotificationSample(trigger: .course(lead))
+            LabeledContent("提醒时间") {
+                Picker("提醒时间", selection: $lead) {
+                    ForEach(NotificationSettings.classLeadOptions, id: \.self) {
+                        Text("课前 \($0) 分钟").tag($0)
+                    }
+                }.pickerStyle(.menu).labelsHidden()
+            }
+            PromptActions(title: "开启课程提醒", skip: {
+                UserDefaults.standard.set(false, forKey: NotificationSettings.classEnabled)
+                Task { await app.rescheduleNotifications() }
+                next()
+            }) {
+                guard !requesting else { return }
+                requesting = true
+                Task {
+                    let allowed = await NotificationService.requestAuthorization()
+                    if allowed {
+                        UserDefaults.standard.set(lead, forKey: NotificationSettings.classLead)
+                        UserDefaults.standard.set(true, forKey: NotificationSettings.classEnabled)
+                        await app.rescheduleNotifications()
+                    }
+                    requesting = false
+                    if allowed { next() } else { denied = true }
+                }
+            }.disabled(requesting)
+        }
+        .transition(.opacity)
+    }
+
     private func next() {
         NotificationSettings.hasPrompted = true
         if UserDefaults.standard.bool(forKey: CourseActivityController.promptedKey) { dismiss() }
-        else { activityStep = true }
+        else {
+            withAnimation {
+                detent = .large
+                activityStep = true
+            }
+        }
     }
 
     private func finishActivity() {
@@ -246,6 +280,7 @@ struct ExamNotificationSetupSheet: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var times = ExamTimes()
     @State private var editing = false
+    @State private var detent: PresentationDetent = .height(450)
     @State private var requesting = false
     @State private var denied = false
 
@@ -257,10 +292,28 @@ struct ExamNotificationSetupSheet: View {
                 if times.eve { times.eveSample }
                 else if times.morning { times.morningSample }
                 else if times.before { times.leadSample }
-                DisclosureGroup(isExpanded: $editing) {
-                    VStack(spacing: 12) { ExamTimeRows(times: $times, previews: false) }.padding(.vertical, 8)
+                Button {
+                    withAnimation { editing.toggle() }
                 } label: {
-                    LabeledContent("提醒时间", value: "\(times.count) 个时段")
+                    HStack {
+                        Text("提醒时间")
+                        Spacer()
+                        Text("\(times.count) 个时段").foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(editing ? 90 : 0))
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(editing ? "已展开" : "已折叠")
+                if editing {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ExamTimeRows(times: $times, previews: false)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
                 }
                 PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
                     UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
@@ -280,9 +333,16 @@ struct ExamNotificationSetupSheet: View {
                         if allowed { finish() } else { denied = true }
                     }
                 }.disabled(requesting)
-            }.padding(.horizontal, 22).padding(.vertical, 30)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 22).padding(.vertical, 30)
         }
-        .presentationDetents(typeSize.isAccessibilitySize || editing ? [.large] : [.height(350), .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(450), .large], selection: $detent)
+        .onChange(of: editing) { _, expanded in
+            withAnimation {
+                detent = expanded || typeSize.isAccessibilitySize ? .large : .height(450)
+            }
+        }
         .presentationDragIndicator(.visible)
         .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)

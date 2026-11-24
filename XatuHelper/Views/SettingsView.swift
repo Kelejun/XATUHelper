@@ -86,7 +86,7 @@ struct SettingsContent: View {
                     NavigationLink {
                         ReminderSettingsContent()
                     } label: {
-                        LabeledContent("提醒", value: "课程与考试")
+                        Text("提醒")
                     }
                     NavigationLink("实时活动与灵动岛") {
                         Form { CourseActivitySettingsSection() }
@@ -243,7 +243,7 @@ struct TimetableSettingsContent: View {
                     NavigationLink {
                         ReminderSettingsContent()
                     } label: {
-                        LabeledContent("提醒", value: "课程与考试")
+                        Text("提醒")
                     }
                 }
             }

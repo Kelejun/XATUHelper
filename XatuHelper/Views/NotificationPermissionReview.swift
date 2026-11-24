@@ -2,7 +2,7 @@ import SwiftUI
 
 @MainActor
 final class NotificationPermissionReview: ObservableObject {
-    private static let reviewedKey = "notify.reminderSetupReviewed.2026-11"
+    private static let reviewedKey = "notify.reminderSetupReviewed.2026-11-25"
     @Published private(set) var pending: Bool
     @Published private(set) var presenter: UUID?
     private let defaults: UserDefaults
@@ -10,7 +10,8 @@ final class NotificationPermissionReview: ObservableObject {
     init(hasCachedAccount: Bool, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let previousSetup = ["notify.prompted", "notify.examPrompted", "courseProgress.prompted",
-                             "notify.permissionReviewed.2026-11"].contains { defaults.bool(forKey: $0) }
+                             "notify.permissionReviewed.2026-11", "notify.prompted.2026-11",
+                             "notify.examPrompted.2026-11", "courseProgress.prompted.2026-11"].contains { defaults.bool(forKey: $0) }
         if !hasCachedAccount && !previousSetup {
             defaults.set(true, forKey: Self.reviewedKey)
         }
