@@ -18,7 +18,7 @@ struct CourseActivityAttributes: ActivityAttributes, Equatable {
         let start: Date
         let end: Date
 
-        init(slot: CourseActivitySlot, prefersDarkAppearance: Bool? = nil) {
+        init(slot: CourseActivitySlot, prefersDarkAppearance: Bool? = nil, timeOffset: TimeInterval = 0) {
             let lesson = slot.lesson
             name = lesson.name
             room = lesson.displayRoom
@@ -26,9 +26,9 @@ struct CourseActivityAttributes: ActivityAttributes, Equatable {
             colorIndex = lesson.colorIndex
             self.prefersDarkAppearance = prefersDarkAppearance
             preparationOnly = !slot.includesClass
-            begins = slot.visibleFrom >= lesson.start ? lesson.start : slot.begins
-            start = lesson.start
-            end = lesson.end
+            begins = (slot.visibleFrom >= lesson.start ? lesson.start : slot.begins).addingTimeInterval(timeOffset)
+            start = lesson.start.addingTimeInterval(timeOffset)
+            end = lesson.end.addingTimeInterval(timeOffset)
         }
     }
 }

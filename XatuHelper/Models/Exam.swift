@@ -12,6 +12,19 @@ struct ExamRecord: Identifiable, Hashable, Codable {
     var seat: String        // 座位号
     var note: String        // 备注
 
+    var notificationDetail: String {
+        [timeWithoutDate, room.isEmpty ? "" : "考场 \(room)", seat.isEmpty ? "" : "座位 \(seat)"]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    var reminderBody: String { notificationDetail.isEmpty ? name : notificationDetail }
+
+    var leadReminderBody: String {
+        guard let startMinutes else { return reminderBody }
+        let start = String(format: "%02d:%02d 开考", startMinutes / 60, startMinutes % 60)
+        return notificationDetail.isEmpty ? start : start + " · " + notificationDetail
+    }
+
     /// 用来分组的日期，形如 "2027-01-12"；认不出来就留空
     var dateKey: String { ExamRecord.dateKey(in: time) }
 

@@ -17,8 +17,8 @@ struct ReminderPreviewTests {
             ReminderPreviewData(snapshot: snapshot, exams: records, fallbackCourses: [], sampleIndex: seed, now: at(500))
         }
         let result = preview()
-        precondition(result.before == b && result.during == a)
-        precondition(result.between?.next == b && result.between?.previous == a && result.between?.minutes == 10)
+        precondition(result.before == b && result.during?.lesson == a && result.preparation?.lesson == a)
+        precondition(result.between?.lesson == b && result.between?.previousRoom == a.room && result.between?.begins == a.end)
         precondition(result.exam?.name == a.name && result.exam?.simulated == true)
         precondition(preview(seed: 1).exam?.name == b.name)
         let record = ExamRecord(id: "e", course: "英语", code: "", name: "", time: "2027-09-08 14：30–16：30",
@@ -26,6 +26,7 @@ struct ReminderPreviewTests {
         let exam = preview([record]).exam
         precondition(exam?.name == record.course && exam?.startMinutes == 870 && exam?.simulated == false)
         precondition(exam?.detail.contains("三教109") == true && exam?.detail.contains("座位 16") == true)
+        precondition(exam?.leadDetail == "14:30 开考 · " + record.notificationDetail)
         snapshot.lessons = [lesson("上午", "A", 660, 712), lesson("下午", "B", 732, 777)]
         precondition(preview().between == nil)
         snapshot.lessons = []

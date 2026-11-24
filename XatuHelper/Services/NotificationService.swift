@@ -7,8 +7,8 @@ enum NotificationSettings {
     static let classLead = "notify.class.lead"
     static let examEnabled = "notify.exam.enabled"
     static let examLead = "notify.exam.lead"
-    static let prompted = "notify.prompted"
-    static let examPrompted = "notify.examPrompted"
+    static let prompted = "notify.prompted.2026-11"
+    static let examPrompted = "notify.examPrompted.2026-11"
     static let examEve = "notify.exam.eve"
     static let examMorning = "notify.exam.morning"
     static let examLeadOn = "notify.exam.leadOn"
@@ -220,13 +220,6 @@ enum NotificationService {
 
         for exam in exams {
             guard let day = day(from: exam.dateKey) else { continue }
-            let detail = [exam.timeWithoutDate,
-                          exam.room.isEmpty ? nil : "考场 \(exam.room)",
-                          exam.seat.isEmpty ? nil : "座位 \(exam.seat)"]
-                .compactMap { $0 }
-                .filter { !$0.isEmpty }
-                .joined(separator: " · ")
-
             // 前一天 21:00
             let eveMinutes = NotificationSettings.examEveMinutes
             if NotificationSettings.examEveOn,
@@ -237,7 +230,7 @@ enum NotificationService {
                 result.append((eve, request(
                     id: "exam-\(exam.id)-eve",
                     title: "明天考试：\(exam.course)",
-                    body: detail.isEmpty ? exam.name : detail,
+                    body: exam.reminderBody,
                     fire: eve
                 )))
             }
@@ -251,7 +244,7 @@ enum NotificationService {
                 result.append((fire, request(
                     id: "exam-\(exam.id)-morning",
                     title: "今天考试：\(exam.course)",
-                    body: detail.isEmpty ? exam.name : detail,
+                    body: exam.reminderBody,
                     fire: fire
                 )))
             }
@@ -261,13 +254,10 @@ enum NotificationService {
                let start = calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day) {
                 let fire = start.addingTimeInterval(TimeInterval(-leadMinutes * 60))
                 if fire > now {
-                    let formatter = DateFormatter()
-                    formatter.dateFormat = "HH:mm"
                     result.append((fire, request(
                         id: "exam-\(exam.id)-lead",
                         title: "快考试了：\(exam.course)",
-                        body: "\(formatter.string(from: start)) 开考"
-                            + (detail.isEmpty ? "" : " · \(detail)"),
+                        body: exam.leadReminderBody,
                         fire: fire,
                         timeSensitive: true
                     )))

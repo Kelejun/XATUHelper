@@ -162,7 +162,6 @@ struct NotificationSetupSheet: View {
     @State private var lead = NotificationSettings.classLeadMinutes
     @State private var before = UserDefaults.standard.bool(forKey: CourseActivityController.beforeKey)
     @State private var during = UserDefaults.standard.bool(forKey: CourseActivityController.duringKey)
-    @State private var previewDuring = false
     @State private var requesting = false
     @State private var denied = false
 
@@ -173,15 +172,16 @@ struct NotificationSetupSheet: View {
                     Text("开启实时活动与灵动岛？").font(.title2.bold())
                     Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
                         .font(.subheadline).foregroundStyle(.secondary)
-                    Picker("预览阶段", selection: $previewDuring) {
-                        Text("课前预览").tag(false)
-                        Text("课中预览").tag(true)
-                    }.pickerStyle(.segmented)
-                    CourseActivityPreview(phase: previewDuring ? .during : .before)
-                    if !previewDuring { CourseActivityPreview(phase: .between) }
                     Toggle("课前", isOn: $before)
+                    CourseActivityPreview(phase: .before)
+                    CourseActivityPreview(phase: .between)
                     Toggle("课中", isOn: $during)
-                    PromptActions(title: "完成", skip: finishActivity) {
+                    CourseActivityPreview(phase: .during)
+                    PromptActions(title: "完成", skip: {
+                        UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
+                        UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
+                        finishActivity()
+                    }) {
                         UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
                         UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
                         finishActivity()
@@ -192,10 +192,17 @@ struct NotificationSetupSheet: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                     NotificationSample(trigger: .course(lead))
                     LabeledContent("提醒时间") {
-                        LeadPicker(title: "课前", options: NotificationSettings.classLeadOptions, minutes: $lead)
-                            .labelsHidden()
+                        Picker("提醒时间", selection: $lead) {
+                            ForEach(NotificationSettings.classLeadOptions, id: \.self) {
+                                Text("课前 \($0) 分钟").tag($0)
+                            }
+                        }.labelsHidden()
                     }
-                    PromptActions(title: "开启课程提醒", skip: next) {
+                    PromptActions(title: "开启课程提醒", skip: {
+                        UserDefaults.standard.set(false, forKey: NotificationSettings.classEnabled)
+                        Task { await app.rescheduleNotifications() }
+                        next()
+                    }) {
                         guard !requesting else { return }
                         requesting = true
                         Task {
@@ -215,7 +222,7 @@ struct NotificationSetupSheet: View {
         .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)
         .presentationDragIndicator(.visible)
-        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(activityStep ? (previewDuring ? 430 : 535) : 350), .large])
+        .presentationDetents(activityStep || typeSize.isAccessibilitySize ? [.large] : [.height(350), .large])
         .alert("通知权限未开启", isPresented: $denied) {
             Button("继续", action: next)
         } message: { Text("可在系统设置中允许 XATune 发送通知。") }
@@ -255,7 +262,11 @@ struct ExamNotificationSetupSheet: View {
                 } label: {
                     LabeledContent("提醒时间", value: "\(times.count) 个时段")
                 }
-                PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: finish) {
+                PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
+                    UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
+                    Task { await app.rescheduleNotifications() }
+                    finish()
+                }) {
                     guard !requesting else { return }
                     requesting = true
                     Task {

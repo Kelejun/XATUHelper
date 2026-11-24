@@ -6,13 +6,14 @@ struct XatuHelperApp: App {
     @StateObject private var app: AppState
     @AppStorage(CourseActivityController.beforeKey) private var beforeClass = false
     @AppStorage(CourseActivityController.duringKey) private var duringClass = false
-    @StateObject private var permissionReview = NotificationPermissionReview()
+    @StateObject private var permissionReview: NotificationPermissionReview
     @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         CourseActivityController.migratePreferences()
         let state = AppState()
+        _permissionReview = StateObject(wrappedValue: NotificationPermissionReview(hasCachedAccount: state.isLoggedIn))
         _app = StateObject(wrappedValue: state)
         // Activate even for a background launch triggered by the paired watch.
         PhoneWatchBridge.shared.start(app: state)
@@ -70,6 +71,11 @@ struct ContentView: View {
         Group {
             if app.isLoggedIn {
                 MainTabView()
+                    .background {
+                        NotificationPermissionReviewPresenter(review: permissionReview,
+                            canPresent: scenePhase == .active && !app.isDemoMode && app.inAppNotice == nil &&
+                                !app.showsWebLogin && !app.showsDemoAccount && app.deepLink == nil)
+                    }
             } else {
                 LoginView()
             }
@@ -79,13 +85,8 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: app.isLoggedIn)
         .background {
-            NotificationPermissionReviewPresenter(review: permissionReview,
-                canPresent: scenePhase == .active && !app.isDemoMode && !app.showsDemoAccount &&
-                    !app.showsWebLogin && app.deepLink == nil)
-        }
-        .background {
             AnnouncementNotice(center: announcements,
-                canPresent: !permissionReview.pending && scenePhase == .active && app.inAppNotice == nil &&
+                canPresent: (!app.isLoggedIn || !permissionReview.pending) && scenePhase == .active && app.inAppNotice == nil &&
                     !app.showsWebLogin && !app.showsDemoAccount && app.deepLink == nil)
         }
         .task { await announcements.refresh() }

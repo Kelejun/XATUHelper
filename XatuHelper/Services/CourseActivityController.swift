@@ -6,7 +6,7 @@ final class CourseActivityController {
     static let shared = CourseActivityController()
     static let beforeKey = "courseProgress.beforeClass"
     static let duringKey = "courseProgress.duringClass"
-    static let promptedKey = "courseProgress.prompted"
+    static let promptedKey = "courseProgress.prompted.2026-11"
 
     static func migratePreferences() {
         let defaults = UserDefaults.standard

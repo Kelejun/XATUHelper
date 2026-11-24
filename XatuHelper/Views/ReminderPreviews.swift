@@ -106,7 +106,7 @@ struct NotificationSample: View {
         case .examLead(let lead):
             return Sample(time: exam.startMinutes.map { clockText($0 - lead) } ?? "待定",
                           timing: "开考前 \(lead) 分钟", title: "快考试了：\(exam.name)",
-                          detail: exam.detail, simulated: exam.simulated)
+                          detail: exam.leadDetail ?? exam.detail, simulated: exam.simulated)
         case .course: return nil
         }
     }
@@ -141,58 +141,33 @@ struct NotificationSample: View {
 }
 
 struct CourseActivityPreview: View {
-    enum Phase: String { case before = "课前", between = "课间", during = "课中" }
+    enum Phase { case before, between, during }
     let phase: Phase
     @Environment(\.reminderPreview) private var data
+    @Environment(\.colorScheme) private var scheme
+    @State private var anchor = Date()
 
-    private var lesson: WatchSnapshot.Lesson? {
+    private var slot: CourseActivitySlot? {
         switch phase {
-        case .before: data?.before
+        case .before: data?.preparation
+        case .between: data?.between
         case .during: data?.during
-        case .between: data?.between?.next ?? data?.before
         }
     }
 
     var body: some View {
-        if let lesson {
-            let duration = phase == .during ? max(1, Int(lesson.end.timeIntervalSince(lesson.start) / 60))
-                : (phase == .between ? (data?.between?.minutes ?? 10) : 30)
-            let remaining = min(duration, phase == .during ? 18 : (phase == .between ? 8 : 5))
-            let tint = CampusCourseColors.color(index: lesson.colorIndex)
-            let previous = phase == .between ? data?.between?.previous.displayRoom : nil
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Label(phase.rawValue, systemImage: phase == .during ? "book.fill" : "figure.walk")
-                    Spacer()
-                    Text(phase == .during ? "距下课" : "距上课")
-                    Text(String(format: "%02d:00", remaining)).monospacedDigit().font(.subheadline.weight(.semibold))
-                }
-                .foregroundStyle(tint).font(.caption)
-                HStack {
-                    Text(lesson.name).font(.headline)
-                    Spacer()
-                    if previous == nil || previous == lesson.displayRoom {
-                        Text(lesson.displayRoom).font(.caption).foregroundStyle(tint)
-                    }
-                }
-                if let previous, previous != lesson.displayRoom {
-                    HStack {
-                        Text(previous)
-                        Spacer()
-                        Image(systemName: "arrow.right").foregroundStyle(tint)
-                        Spacer()
-                        Text(lesson.displayRoom).foregroundStyle(tint)
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("从\(previous)到\(lesson.displayRoom)")
-                }
-                ProgressView(value: 1 - Double(remaining) / Double(duration)).tint(tint).accessibilityHidden(true)
+        if let slot {
+            let end = phase == .during ? slot.lesson.end : slot.lesson.start
+            let remaining = end.timeIntervalSince(slot.begins) / 2
+            TimelineView(.periodic(from: anchor, by: remaining)) { tick in
+                let offset = tick.date.addingTimeInterval(remaining).timeIntervalSince(end)
+                let state = CourseActivityAttributes.ContentState(slot: slot, timeOffset: offset)
+                CourseActivityCard(course: CoursePresentation(state: state, colorScheme: scheme, now: tick.date))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
             }
-            .padding(12).background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-            .accessibilityElement(children: .combine)
         } else {
-            Text("暂无可预览的本地课程").font(.footnote).foregroundStyle(.secondary)
+            Text(phase == .between ? "本地课表暂无课间安排" : "暂无可预览的本地课程")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 }
