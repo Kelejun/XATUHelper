@@ -6,9 +6,23 @@ struct CourseLiveActivityWidget: Widget {
     private let timetable = URL(string: "xatuhelper://timetable")
 
     var body: some WidgetConfiguration {
+        if #available(iOS 18, *) {
+            return configuration.supplementalActivityFamilies([.small])
+        } else {
+            return configuration
+        }
+    }
+
+    private var configuration: some WidgetConfiguration {
         ActivityConfiguration(for: CourseActivityAttributes.self) { context in
-            CourseLockScreen(context: context)
-                .widgetURL(timetable)
+            Group {
+                if #available(iOS 18, *) {
+                    CourseActivityContent(context: context)
+                } else {
+                    CourseLockScreen(context: context)
+                }
+            }
+            .widgetURL(timetable)
         } dynamicIsland: { context in
             let course = CoursePresentation(context)
             return DynamicIsland {
@@ -58,6 +72,62 @@ struct CourseLiveActivityWidget: Widget {
             .keylineTint(course.tint)
             .widgetURL(timetable)
         }
+    }
+}
+
+@available(iOS 18, *)
+private struct CourseActivityContent: View {
+    let context: ActivityViewContext<CourseActivityAttributes>
+    @Environment(\.activityFamily) private var family
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
+
+    var body: some View {
+        if family == .small {
+            CourseWatchActivityView(course: CoursePresentation(context, colorScheme: luminanceReduced ? .dark : colorScheme))
+        } else {
+            CourseLockScreen(context: context)
+        }
+    }
+}
+
+private struct CourseWatchActivityView: View {
+    let course: CoursePresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(course.state.name)
+                    .font(.headline)
+                    .foregroundStyle(course.foreground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .privacySensitive()
+                course.timer(width: 43, font: .caption, horizontalPadding: 6, verticalPadding: 3)
+            }
+            if course.routeOrigin == nil {
+                HStack(spacing: 6) {
+                    Text(course.phase)
+                        .foregroundStyle(course.foreground.opacity(0.72))
+                        .layoutPriority(1)
+                    Spacer(minLength: 0)
+                    Text(course.state.room)
+                        .foregroundStyle(course.tint)
+                        .truncationMode(.head)
+                        .privacySensitive()
+                }
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            }
+            if !course.finished {
+                CourseProgressFooter(course: course, height: 4, routeFont: .caption, routeTruncation: .head, spacing: 4)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 }
 
@@ -156,25 +226,28 @@ private struct CourseDetails: View {
 private struct CourseProgressFooter: View {
     let course: CoursePresentation
     let height: CGFloat
+    var routeFont: Font = .subheadline
+    var routeTruncation: Text.TruncationMode = .tail
+    var spacing: CGFloat = 6
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: spacing) {
             if let previous = course.routeOrigin {
                 HStack(spacing: 8) {
                     Text(previous)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "arrow.right")
-                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(course.tint)
                     Text(course.state.room)
                         .foregroundStyle(course.tint)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .font(.subheadline.weight(.semibold))
+                .font(routeFont.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(course.foreground.opacity(0.82))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .truncationMode(routeTruncation)
                 .privacySensitive()
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text("从\(previous)到\(course.state.room)"))

@@ -1,16 +1,14 @@
 import Foundation
 
 struct WatchCourseProgress {
-    static let preparationMinutes = 30
+    private static let preparationMinutes = 30
 
-    var date: Date
-    let loggedIn: Bool
+    private let date: Date
     let lesson: WatchSnapshot.Lesson?
     let previous: WatchSnapshot.Lesson?
 
     init(snapshot: WatchSnapshot, at date: Date) {
         self.date = date
-        loggedIn = snapshot.loggedIn
         if let current = snapshot.currentLesson(at: date) {
             lesson = current
             previous = nil
@@ -35,36 +33,5 @@ struct WatchCourseProgress {
         guard let lesson, date < lesson.start else { return nil }
         let start = previous?.end ?? lesson.start.addingTimeInterval(-Double(Self.preparationMinutes * 60))
         return start...lesson.start
-    }
-
-    var minutesUntilClass: Int? {
-        guard let interval = preparationInterval, interval.contains(date) else { return nil }
-        return Int(ceil(interval.upperBound.timeIntervalSince(date) / 60))
-    }
-
-    var progressInterval: ClosedRange<Date>? {
-        if let interval = preparationInterval, interval.contains(date) { return interval }
-        guard let lesson, lesson.start <= date, date < lesson.end else { return nil }
-        return lesson.start...lesson.end
-    }
-
-    static func timeline(snapshot: WatchSnapshot, from now: Date, horizon: TimeInterval = 48 * 3600) -> [Self] {
-        let limit = now.addingTimeInterval(horizon)
-        let transitions = [now] + snapshot.timelineDates(after: now, horizon: horizon)
-        var entries: [Self] = []
-        for (index, date) in transitions.enumerated() {
-            var entry = Self(snapshot: snapshot, at: date)
-            entries.append(entry)
-            guard let interval = entry.preparationInterval else { continue }
-            let nextTransition = transitions.dropFirst(index + 1).first
-            for minute in (1...preparationMinutes).reversed() {
-                let tick = interval.upperBound.addingTimeInterval(-Double(minute * 60))
-                guard tick > date, tick >= interval.lowerBound, tick <= limit,
-                      nextTransition.map({ tick < $0 }) ?? true else { continue }
-                entry.date = tick
-                entries.append(entry)
-            }
-        }
-        return entries
     }
 }

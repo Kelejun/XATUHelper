@@ -4,36 +4,23 @@ import WidgetKit
 struct WatchWidgetEntry: TimelineEntry {
     var date: Date
     var snapshot: WatchSnapshot
-    var courseProgress: WatchCourseProgress? = nil
 }
 
 struct WatchWidgetProvider: TimelineProvider {
     var preview: WatchSnapshot = .empty
-    var includesCourseProgress = false
 
     func placeholder(in context: Context) -> WatchWidgetEntry {
         WatchWidgetEntry(date: Date(), snapshot: preview)
     }
     func getSnapshot(in context: Context, completion: @escaping (WatchWidgetEntry) -> Void) {
-        let snapshot = WatchStore.read().snapshot ?? (context.isPreview ? preview : .empty)
-        let date = Date()
-        let progress = includesCourseProgress ? WatchCourseProgress(snapshot: snapshot, at: date) : nil
-        completion(WatchWidgetEntry(date: date, snapshot: snapshot, courseProgress: progress))
+        completion(WatchWidgetEntry(date: Date(), snapshot: WatchStore.read().snapshot ?? (context.isPreview ? preview : .empty)))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchWidgetEntry>) -> Void) {
         let snapshot = WatchStore.read().snapshot ?? .empty
         let now = Date()
-        let entries: [WatchWidgetEntry]
-        if includesCourseProgress {
-            entries = WatchCourseProgress.timeline(snapshot: snapshot, from: now).map {
-                WatchWidgetEntry(date: $0.date, snapshot: snapshot, courseProgress: $0)
-            }
-        } else {
-            entries = ([now] + snapshot.timelineDates(after: now)).map {
-                WatchWidgetEntry(date: $0, snapshot: snapshot)
-            }
-        }
-        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(24 * 3600))))
+        let dates = [now] + snapshot.timelineDates(after: now)
+        completion(Timeline(entries: dates.map { WatchWidgetEntry(date: $0, snapshot: snapshot) },
+                            policy: .after(now.addingTimeInterval(24 * 3600))))
     }
 }
 
@@ -225,167 +212,13 @@ private struct WatchComplicationView: View {
 }
 
 struct WatchCourseWidget: Widget {
-    private var preview: WatchSnapshot {
-        let now = Date()
-        var snapshot = WatchSnapshot.empty
-        snapshot.loggedIn = true
-        snapshot.lessons = [.init(id: "preview", name: "高等数学", room: "5B502", fullRoom: "",
-                                  teacher: "", periods: "", start: now.addingTimeInterval(-42 * 60),
-                                  end: now.addingTimeInterval(8 * 60), colorIndex: 4)]
-        return snapshot
-    }
-
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "WatchCourse", provider: WatchWidgetProvider(preview: preview, includesCourseProgress: true)) {
-            WatchCourseWidgetView(entry: $0)
+        StaticConfiguration(kind: "WatchCourse", provider: WatchWidgetProvider()) {
+            WatchComplicationView(entry: $0, kind: .course)
         }
         .configurationDisplayName("当前／下一节课")
-        .description("查看教室、课程时间和进度。")
+        .description("教室、课程名和上课时间，随课表自动切换。")
         .supportedFamilies([.accessoryRectangular, .accessoryInline])
-    }
-}
-
-private struct WatchCourseWidgetView: View {
-    let entry: WatchWidgetEntry
-    @Environment(\.redactionReasons) private var redactionReasons
-
-    var body: some View {
-        if !redactionReasons.contains(.placeholder), let progress = entry.courseProgress,
-           let lesson = progress.lesson, let interval = progress.progressInterval {
-            WatchCourseProgressView(lesson: lesson, previousRoom: progress.previous?.displayRoom,
-                                    minutesUntilClass: progress.minutesUntilClass, interval: interval)
-        } else {
-            WatchComplicationView(entry: entry, kind: .course)
-        }
-    }
-}
-
-private struct WatchCourseProgressView: View {
-    let lesson: WatchSnapshot.Lesson
-    let previousRoom: String?
-    let minutesUntilClass: Int?
-    let interval: ClosedRange<Date>
-    @Environment(\.widgetFamily) private var family
-    @Environment(\.redactionReasons) private var redactionReasons
-
-    private var tint: Color { CampusCourseColors.color(index: lesson.colorIndex) }
-    private var countdownLabel: String { minutesUntilClass == nil ? "距下课" : "距上课" }
-    private var countdown: Text { Text(timerInterval: interval, countsDown: true, showsHours: false) }
-
-    var body: some View {
-        Group {
-            if family == .accessoryInline {
-                Label {
-                    Text("\(countdownLabel) \(countdown)")
-                } icon: {
-                    Image(systemName: "book.closed.fill")
-                }
-                .unredacted()
-            } else {
-                card
-            }
-        }
-        .containerBackground(family == .accessoryRectangular ? Color(white: 0.17) : .clear, for: .widget)
-        .accessibilityElement(children: .combine)
-        .widgetURL(URL(string: "xatuwatch://courses"))
-    }
-
-    private var card: some View {
-        let showLessonDetails = !redactionReasons.contains(.privacy)
-        return GeometryReader { bounds in
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
-                    Group {
-                        if showLessonDetails {
-                            Text(lesson.name).privacySensitive()
-                        } else {
-                            Text("课程进度").unredacted()
-                        }
-                    }
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    Spacer(minLength: 0)
-                    if minutesUntilClass != nil || showLessonDetails {
-                        Group {
-                            if let minutes = minutesUntilClass {
-                                Text("\(minutes)分钟").unredacted()
-                            } else {
-                                Text(lesson.displayRoom).privacySensitive()
-                            }
-                        }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .watchCapsule(tint: tint)
-                        .widgetAccentable()
-                        .frame(maxWidth: bounds.size.width * (minutesUntilClass == nil ? 0.44 : 0.53), alignment: .trailing)
-                        .fixedSize(horizontal: true, vertical: false)
-                    }
-                }
-                Spacer(minLength: 0)
-                if minutesUntilClass != nil {
-                    Group {
-                        if showLessonDetails {
-                            HStack(spacing: 5) {
-                                if let previousRoom, previousRoom != lesson.displayRoom {
-                                    Text(previousRoom)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Image(systemName: "arrow.right")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(tint)
-                                        .widgetAccentable()
-                                        .accessibilityHidden(true)
-                                }
-                                Text(lesson.displayRoom)
-                                    .foregroundStyle(tint)
-                                    .widgetAccentable()
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
-                            }
-                            .privacySensitive()
-                        } else {
-                            Text("距上课").foregroundStyle(.secondary).unredacted()
-                        }
-                    }
-                    .font(.caption)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                } else {
-                    HStack(spacing: 3) {
-                        Text(countdownLabel).foregroundStyle(.secondary).unredacted()
-                        Group {
-                            if #available(watchOS 11, *) {
-                                Text(.currentDate, format: .offset(to: lesson.end, allowedFields: [.minute], sign: .never))
-                            } else {
-                                Text(lesson.end, style: .relative)
-                            }
-                        }
-                        .foregroundStyle(tint)
-                        .widgetAccentable()
-                        .unredacted()
-                    }
-                    .font(.caption)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                }
-                progressBar
-            }
-            .frame(width: bounds.size.width, height: bounds.size.height)
-        }
-    }
-
-    private var progressBar: some View {
-        ProgressView(timerInterval: interval, countsDown: false) {
-            EmptyView()
-        } currentValueLabel: {
-            EmptyView()
-        }
-        .progressViewStyle(.linear)
-        .tint(tint)
-        .frame(height: 4)
-        .background(tint.opacity(0.3), in: Capsule())
-        .clipShape(Capsule())
-        .widgetAccentable()
     }
 }
 
