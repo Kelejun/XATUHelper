@@ -42,6 +42,12 @@ struct WatchCourseProgress {
         return Int(ceil(interval.upperBound.timeIntervalSince(date) / 60))
     }
 
+    var progressInterval: ClosedRange<Date>? {
+        if let interval = preparationInterval, interval.contains(date) { return interval }
+        guard let lesson, lesson.start <= date, date < lesson.end else { return nil }
+        return lesson.start...lesson.end
+    }
+
     static func timeline(snapshot: WatchSnapshot, from now: Date, horizon: TimeInterval = 48 * 3600) -> [Self] {
         let limit = now.addingTimeInterval(horizon)
         let transitions = [now] + snapshot.timelineDates(after: now, horizon: horizon)

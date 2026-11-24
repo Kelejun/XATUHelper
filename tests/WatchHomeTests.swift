@@ -69,9 +69,11 @@ struct WatchHomeTests {
             let dates = entries.map(\.date)
             precondition(dates == Array(Set(dates)).sorted())
             func entry(_ minute: Int) -> WatchCourseProgress { entries.first { $0.date == time(minute) }! }
-            precondition(entry(469).minutesUntilClass == nil)
+            precondition(entry(469).minutesUntilClass == nil && entry(469).progressInterval == nil)
             precondition(entry(470).minutesUntilClass == 30 && entry(470).previous == nil)
+            precondition(entry(470).progressInterval == time(470)...first.start)
             precondition(entry(500).lesson == first && entry(500).minutesUntilClass == nil)
+            precondition(entry(500).progressInterval == first.start...first.end)
             let before = CourseActivitySlot.upcoming(in: snapshot, at: time(469))
             precondition(before.map(\.lesson) == [first, next] && before[0].visibleFrom == time(470))
             let during = CourseActivitySlot.upcoming(in: snapshot, at: time(550))
@@ -82,13 +84,19 @@ struct WatchHomeTests {
             precondition(atEnd.isEmpty)
             let duration = min(30, gap)
             let start = 600 + gap - duration
+            if gap > 30 {
+                precondition(entry(600).lesson == next && entry(600).progressInterval == nil)
+            }
             for elapsed in 0..<duration {
                 let state = entry(start + elapsed)
                 precondition(state.lesson == next && state.minutesUntilClass == duration - elapsed)
                 precondition(state.previous == (gap <= 30 ? first : nil))
                 precondition(state.preparationInterval == time(start)...next.start)
+                precondition(state.progressInterval == time(start)...next.start)
             }
             precondition(entry(600 + gap).lesson == next && entry(600 + gap).minutesUntilClass == nil)
+            precondition(entry(600 + gap).progressInterval == next.start...next.end)
+            precondition(entry(700).progressInterval == nil)
             let midway = WatchCourseProgress(snapshot: snapshot, at: time(600 + gap - 1).addingTimeInterval(55))
             precondition(midway.minutesUntilClass == 1)
         }
@@ -102,7 +110,8 @@ struct WatchHomeTests {
         snapshot.lessons = [lesson("5B502", -60, -5), lesson("3A201", 10, 60)]
         precondition(WatchCourseProgress(snapshot: snapshot, at: time(0)).previous == nil)
         snapshot.loggedIn = false
-        precondition(WatchCourseProgress(snapshot: snapshot, at: time(0)).lesson == nil)
+        let signedOut = WatchCourseProgress(snapshot: snapshot, at: time(0))
+        precondition(signedOut.lesson == nil && signedOut.progressInterval == nil)
         precondition(CourseActivitySlot.upcoming(in: snapshot, at: time(0)).isEmpty)
     }
 }
