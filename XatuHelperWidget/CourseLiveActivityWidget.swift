@@ -303,11 +303,11 @@ private struct CoursePresentation {
         let now = Date()
         let hasPreparation = state.begins < state.start
         preparing = hasPreparation && !context.isStale && now < state.start
-        finished = now >= state.end || (!hasPreparation && context.isStale)
+        finished = (state.preparationOnly == true && !preparing) || now >= state.end || (!hasPreparation && context.isStale)
     }
 
     var phase: String {
-        if finished { return "已下课" }
+        if finished { return state.preparationOnly == true ? "已上课" : "已下课" }
         if !preparing { return "上课中" }
         return state.previousRoom == nil ? "课前" : "课间"
     }
@@ -334,7 +334,7 @@ private struct CoursePresentation {
         if #available(iOS 18, *) { return color.mix(with: .white, by: 0.34) }
         return color
     }
-    var interval: ClosedRange<Date> { preparing ? state.begins...state.start : state.start...state.end }
+    var interval: ClosedRange<Date> { (preparing || state.preparationOnly == true) ? state.begins...state.start : state.start...state.end }
 
     var status: some View {
         HStack(spacing: 5) {

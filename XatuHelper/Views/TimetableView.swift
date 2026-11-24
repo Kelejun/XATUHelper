@@ -297,7 +297,7 @@ struct TimetableView: View {
             if app.isStale(.timetable) {
                 await app.refresh()
             }
-            if !app.isDemoMode && !NotificationSettings.hasPrompted {
+            if !app.isDemoMode && (!NotificationSettings.hasPrompted || !UserDefaults.standard.bool(forKey: CourseActivityController.promptedKey)) {
                 showNotificationSetup = true
             }
         }

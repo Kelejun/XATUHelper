@@ -156,14 +156,11 @@ struct SettingsContent: View {
 }
 
 private struct ReminderSettingsContent: View {
-    @AppStorage(CourseActivityController.enabledKey) private var courseActivityEnabled = false
 
     var body: some View {
         Form {
             ClassNotificationSection()
-            Section("实时活动") {
-                Toggle("课程进度", isOn: $courseActivityEnabled)
-            }
+            CourseActivitySettingsSection()
             ExamNotificationSection()
         }
         .formStyle(.grouped)

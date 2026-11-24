@@ -4,11 +4,13 @@ import SwiftUI
 struct XatuHelperApp: App {
     @UIApplicationDelegateAdaptor(ElectricityRefreshAppDelegate.self) private var delegate
     @StateObject private var app: AppState
-    @AppStorage(CourseActivityController.enabledKey) private var courseActivityEnabled = false
+    @AppStorage(CourseActivityController.beforeKey) private var beforeClass = false
+    @AppStorage(CourseActivityController.duringKey) private var duringClass = false
     @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        CourseActivityController.migratePreferences()
         let state = AppState()
         _app = StateObject(wrappedValue: state)
         // Activate even for a background launch triggered by the paired watch.
@@ -20,7 +22,7 @@ struct XatuHelperApp: App {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(announcements)
-                .onChange(of: courseActivityEnabled) { _, _ in
+                .onChange(of: [beforeClass, duringClass]) { _, _ in
                     CourseActivityController.shared.refresh()
                 }
                 .task(id: scenePhase) {

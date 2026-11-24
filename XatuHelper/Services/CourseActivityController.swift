@@ -4,7 +4,18 @@ import Foundation
 @MainActor
 final class CourseActivityController {
     static let shared = CourseActivityController()
-    static let enabledKey = "courseProgress.liveActivity"
+    static let beforeKey = "courseProgress.beforeClass"
+    static let duringKey = "courseProgress.duringClass"
+    static let promptedKey = "courseProgress.prompted"
+
+    static func migratePreferences() {
+        let defaults = UserDefaults.standard
+        guard let legacy = defaults.object(forKey: "courseProgress.liveActivity") as? Bool else { return }
+        for key in [beforeKey, duringKey] where defaults.object(forKey: key) == nil {
+            defaults.set(legacy, forKey: key)
+        }
+        defaults.removeObject(forKey: "courseProgress.liveActivity")
+    }
     private static let darkAppearanceKey = "courseProgress.prefersDarkAppearance"
     private typealias CourseActivity = Activity<CourseActivityAttributes>
 
@@ -49,9 +60,11 @@ final class CourseActivityController {
     private func reconcile() async {
         wakeup?.cancel()
         let now = Date()
-        let enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
-            && ActivityAuthorizationInfo().areActivitiesEnabled
-        let slots = enabled ? CourseActivitySlot.upcoming(in: snapshot, at: now) : []
+        let defaults = UserDefaults.standard
+        let before = defaults.bool(forKey: Self.beforeKey)
+        let during = defaults.bool(forKey: Self.duringKey)
+        let enabled = (before || during) && ActivityAuthorizationInfo().areActivitiesEnabled
+        let slots = enabled ? CourseActivitySlot.upcoming(in: snapshot, at: now, beforeClass: before, duringClass: during) : []
         let wanted = Set(slots.map { requestKey(account: snapshot.accountID, lesson: $0.lesson.id) })
         issued = issued.filter { wanted.contains($0.key) }
         var retained = Set<String>()
@@ -79,12 +92,13 @@ final class CourseActivityController {
             issued[key] = request(slot, now: now)?.id
         }
         // ActivityKit renders the timers. Wake the foreground app only at a course boundary.
-        let boundaries = slots.flatMap { [$0.visibleFrom, $0.lesson.start, $0.lesson.end] }
+        var boundaries = slots.flatMap { [$0.visibleFrom, $0.lesson.start, $0.lesson.end] }
         guard enabled else { return }
-        let nextStart = snapshot.nextLesson(at: now)?.start ?? .distantFuture
+        if let end = snapshot.currentLesson(at: now)?.end { boundaries.append(end) }
+        if let start = snapshot.nextLesson(at: now)?.start { boundaries.append(start) }
         if let next = boundaries.filter({ $0 > now }).min() {
             wakeup = Task {
-                do { try await Task.sleep(for: .seconds(max(0, min(next, nextStart).timeIntervalSinceNow))) }
+                do { try await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow))) }
                 catch { return }
                 refresh()
             }

@@ -1,216 +1,287 @@
 import SwiftUI
 import UserNotifications
 
-/// 上课提醒单独一节，总设置里夹在中间的入口按钮前面
-struct ClassNotificationSection: View {
-    @EnvironmentObject var app: AppState
+private struct LeadPicker: View {
+    let title: String
+    let options: [Int]
+    @Binding var minutes: Int
 
-    @AppStorage(NotificationSettings.classEnabled) private var classEnabled = false
-    @AppStorage(NotificationSettings.classLead) private var classLead = NotificationSettings.defaultClassLead
+    var body: some View {
+        Picker(title, selection: $minutes) {
+            ForEach(options, id: \.self) { Text("\($0) 分钟").tag($0) }
+        }
+    }
+}
+
+struct ClassNotificationSection: View {
+    @EnvironmentObject private var app: AppState
+    @AppStorage(NotificationSettings.classEnabled) private var enabled = false
+    @AppStorage(NotificationSettings.classLead) private var lead = NotificationSettings.defaultClassLead
 
     var body: some View {
         Section {
-            Toggle("上课提醒", isOn: $classEnabled)
-            if classEnabled {
-                Picker("提前", selection: $classLead) {
-                    ForEach(NotificationSettings.classLeadOptions, id: \.self) { minutes in
-                        Text("\(minutes) 分钟").tag(minutes)
-                    }
-                }
-            }
+            Toggle("上课提醒", isOn: $enabled)
+            LeadPicker(title: "提前", options: NotificationSettings.classLeadOptions, minutes: $lead)
+            NotificationSample.course(lead: lead)
         } header: {
             Text("上课提醒")
         } footer: {
             Text("通知只管 7 天，期间进入 app 更新。")
         }
-        .onChange(of: classEnabled) { _, on in
+        .onChange(of: enabled) { _, on in
             Task {
                 if on { await requestAuthorizationIfNeeded() }
                 await app.rescheduleNotifications()
             }
         }
-        .onChange(of: classLead) { _, _ in Task { await app.rescheduleNotifications() } }
+        .onChange(of: lead) { _, _ in Task { await app.rescheduleNotifications() } }
     }
 }
 
-/// 考试提醒单独一节
+private struct ExamTimes: Equatable {
+    var eve = NotificationSettings.examEveOn
+    var morning = NotificationSettings.examMorningOn
+    var before = NotificationSettings.examLeadEnabled
+    var eveMinutes = NotificationSettings.examEveMinutes
+    var morningMinutes = NotificationSettings.examMorningMinutes
+    var lead = NotificationSettings.examLeadMinutes
+
+    var count: Int { [eve, morning, before].filter { $0 }.count }
+    var eveSample: NotificationSample { .exam(time: eveMinutes, timing: "考试前一天", prefix: "明天考试") }
+    var morningSample: NotificationSample { .exam(time: morningMinutes, timing: "当天早间", prefix: "今天考试") }
+    var leadSample: NotificationSample { .exam(time: 540 - lead, timing: "开考前 \(lead) 分钟", prefix: "快考试了") }
+
+    func save() {
+        let defaults = UserDefaults.standard
+        defaults.set(eve, forKey: NotificationSettings.examEve)
+        defaults.set(morning, forKey: NotificationSettings.examMorning)
+        defaults.set(before, forKey: NotificationSettings.examLeadOn)
+        defaults.set(eveMinutes, forKey: NotificationSettings.examEveTime)
+        defaults.set(morningMinutes, forKey: NotificationSettings.examMorningTime)
+        defaults.set(lead, forKey: NotificationSettings.examLead)
+    }
+}
+
+private struct ClockPicker: View {
+    @Binding var minutes: Int
+    var body: some View {
+        let calendar = Calendar.current
+        DatePicker("时间", selection: Binding(get: {
+            calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
+        }, set: {
+            minutes = calendar.component(.hour, from: $0) * 60 + calendar.component(.minute, from: $0)
+        }), displayedComponents: .hourAndMinute)
+    }
+}
+
+private struct ExamTimeRows: View {
+    @Binding var times: ExamTimes
+    let previews: Bool
+
+    var body: some View {
+        Toggle("前一天提醒", isOn: $times.eve)
+        if previews || times.eve {
+            ClockPicker(minutes: $times.eveMinutes)
+            if previews { times.eveSample }
+        }
+        Toggle("当天早间提醒", isOn: $times.morning)
+        if previews || times.morning {
+            ClockPicker(minutes: $times.morningMinutes)
+            if previews { times.morningSample }
+        }
+        Toggle("开考前提醒", isOn: $times.before)
+        if previews || times.before {
+            LeadPicker(title: "提前", options: NotificationSettings.examLeadOptions, minutes: $times.lead)
+            if previews { times.leadSample }
+        }
+    }
+}
+
 struct ExamNotificationSection: View {
-    @EnvironmentObject var app: AppState
-
-    @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
-    @AppStorage(NotificationSettings.examLead) private var examLead = NotificationSettings.defaultExamLead
-    @AppStorage(NotificationSettings.examEve) private var examEveOn = true
-    @AppStorage(NotificationSettings.examMorning) private var examMorningOn = true
-    @AppStorage(NotificationSettings.examLeadOn) private var examLeadOn = true
-    @AppStorage(NotificationSettings.examEveTime) private var examEveMinutes = 21 * 60
-    @AppStorage(NotificationSettings.examMorningTime) private var examMorningMinutes = 8 * 60
+    @EnvironmentObject private var app: AppState
+    @AppStorage(NotificationSettings.examEnabled) private var enabled = false
+    @State private var times = ExamTimes()
 
     var body: some View {
-        Section {
-            Toggle("考试提醒", isOn: $examEnabled)
-            if examEnabled {
-                Toggle("前一天提醒", isOn: $examEveOn)
-                if examEveOn {
-                    DatePicker("时间", selection: timeBinding($examEveMinutes),
-                               displayedComponents: .hourAndMinute)
-                }
-
-                Toggle("当天早间提醒", isOn: $examMorningOn)
-                if examMorningOn {
-                    DatePicker("时间", selection: timeBinding($examMorningMinutes),
-                               displayedComponents: .hourAndMinute)
-                }
-
-                Toggle("开考前提醒", isOn: $examLeadOn)
-                if examLeadOn {
-                    Picker("提前", selection: $examLead) {
-                        ForEach(NotificationSettings.examLeadOptions, id: \.self) { minutes in
-                            Text("\(minutes) 分钟").tag(minutes)
-                        }
-                    }
-                }
-            }
-        } header: {
-            Text("考试提醒")
+        Section("考试提醒") {
+            Toggle("考试提醒", isOn: $enabled)
+            ExamTimeRows(times: $times, previews: true)
         }
-        .onChange(of: examEnabled) { _, on in
+        .onChange(of: enabled) { _, on in
             Task {
                 if on { await requestAuthorizationIfNeeded() }
                 await app.rescheduleNotifications()
             }
         }
-        .onChange(of: examLead) { _, _ in Task { await app.rescheduleNotifications() } }
-        .onChange(of: examEveOn) { _, _ in Task { await app.rescheduleNotifications() } }
-        .onChange(of: examMorningOn) { _, _ in Task { await app.rescheduleNotifications() } }
-        .onChange(of: examLeadOn) { _, _ in Task { await app.rescheduleNotifications() } }
-        .onChange(of: examEveMinutes) { _, _ in Task { await app.rescheduleNotifications() } }
-        .onChange(of: examMorningMinutes) { _, _ in Task { await app.rescheduleNotifications() } }
-    }
-
-    /// 把「从零点算起的分钟数」包成时间选择器要的 Date
-    private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
-        Binding(
-            get: {
-                let calendar = Calendar.current
-                let base = calendar.startOfDay(for: Date())
-                return calendar.date(byAdding: .minute, value: minutes.wrappedValue, to: base) ?? base
-            },
-            set: { newValue in
-                let calendar = Calendar.current
-                minutes.wrappedValue = calendar.component(.hour, from: newValue) * 60
-                    + calendar.component(.minute, from: newValue)
-            }
-        )
-    }
-}
-
-/// 首次引导里两节一起出现
-struct NotificationSettingsSection: View {
-    var body: some View {
-        Group {
-            ClassNotificationSection()
-            ExamNotificationSection()
+        .onChange(of: times) { _, value in
+            value.save()
+            Task { await app.rescheduleNotifications() }
         }
     }
 }
 
-/// 第一次进课程表时问一次，之后不再弹
+struct CourseActivitySettingsSection: View {
+    @AppStorage(CourseActivityController.beforeKey) private var before = false
+    @AppStorage(CourseActivityController.duringKey) private var during = false
+
+    var body: some View {
+        Section("课程实时活动") {
+            Toggle("课前候课", isOn: $before)
+            CourseActivityPreview(during: false)
+            Toggle("课中进度", isOn: $during)
+            CourseActivityPreview(during: true)
+        }
+    }
+}
+
+private struct PromptActions: View {
+    let title: String
+    var canEnable = true
+    let skip: () -> Void
+    let enable: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+        layout {
+            Button(action: skip) { Text("先不用").frame(maxWidth: .infinity) }
+            Button(action: enable) { Text(title).frame(maxWidth: .infinity) }.disabled(!canEnable)
+        }
+        .buttonStyle(.borderedProminent).tint(.blue).controlSize(.large)
+    }
+}
+
 struct NotificationSetupSheet: View {
-    @EnvironmentObject var app: AppState
+    @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
-
-    @AppStorage(NotificationSettings.classEnabled) private var classEnabled = false
-    @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var activityStep = NotificationSettings.hasPrompted
+    @State private var lead = NotificationSettings.classLeadMinutes
+    @State private var before = UserDefaults.standard.bool(forKey: CourseActivityController.beforeKey)
+    @State private var during = UserDefaults.standard.bool(forKey: CourseActivityController.duringKey)
+    @State private var previewDuring = false
+    @State private var requesting = false
+    @State private var denied = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text("要不要在每节课前提醒你？")
-                        .font(.headline)
-                    Text("通知由系统到点弹出，App 不用开着。内容用的是本地缓存的课表，课表改了记得刷新一次。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                NotificationSettingsSection()
-
-                Section {
-                    Button("开启提醒") {
-                        Task { await enable() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if activityStep {
+                    Text("开启课程实时活动？").font(.title2.bold())
+                    Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Picker("预览阶段", selection: $previewDuring) {
+                        Text("课前预览").tag(false)
+                        Text("课中预览").tag(true)
+                    }.pickerStyle(.segmented)
+                    CourseActivityPreview(during: previewDuring)
+                    Toggle("课前候课", isOn: $before)
+                    Toggle("课中进度", isOn: $during)
+                    PromptActions(title: "完成", skip: finishActivity) {
+                        UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
+                        UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
+                        finishActivity()
                     }
-                    Button("先不用") {
-                        NotificationSettings.hasPrompted = true
-                        NotificationSettings.hasPromptedExam = true
-                        dismiss()
+                } else {
+                    Text("上课前，要提醒你吗？").font(.title2.bold())
+                    Text("上课前发一条通知，课程和教室抬眼就能看到。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    NotificationSample.course(lead: lead)
+                    LabeledContent("提醒时间") {
+                        LeadPicker(title: "课前", options: NotificationSettings.classLeadOptions, minutes: $lead)
+                            .labelsHidden()
                     }
-                    .foregroundStyle(.secondary)
+                    PromptActions(title: "开启课程提醒", skip: next) {
+                        guard !requesting else { return }
+                        requesting = true
+                        Task {
+                            let allowed = await NotificationService.requestAuthorization()
+                            if allowed {
+                                UserDefaults.standard.set(lead, forKey: NotificationSettings.classLead)
+                                UserDefaults.standard.set(true, forKey: NotificationSettings.classEnabled)
+                                await app.rescheduleNotifications()
+                            }
+                            requesting = false
+                            if allowed { next() } else { denied = true }
+                        }
+                    }.disabled(requesting)
                 }
-            }
-            .navigationTitle("提醒")
-            .navigationBarTitleDisplayMode(.inline)
+            }.padding(.horizontal, 22).padding(.vertical, 30)
         }
+        .interactiveDismissDisabled(requesting)
+        .presentationDragIndicator(.visible)
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(activityStep ? 430 : 350), .large])
+        .alert("通知权限未开启", isPresented: $denied) {
+            Button("继续", action: next)
+        } message: { Text("可在系统设置中允许 XATune 发送通知。") }
     }
 
-    private func enable() async {
+    private func next() {
         NotificationSettings.hasPrompted = true
-        NotificationSettings.hasPromptedExam = true
-        classEnabled = true
-        examEnabled = true
-        _ = await NotificationService.requestAuthorization()
-        await app.rescheduleNotifications()
+        if UserDefaults.standard.bool(forKey: CourseActivityController.promptedKey) { dismiss() }
+        else { activityStep = true }
+    }
+
+    private func finishActivity() {
+        UserDefaults.standard.set(true, forKey: CourseActivityController.promptedKey)
         dismiss()
     }
 }
 
-/// 第一次进考试页时单独问一次考试提醒
 struct ExamNotificationSetupSheet: View {
-    @EnvironmentObject var app: AppState
+    @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
-
-    @AppStorage(NotificationSettings.examEnabled) private var examEnabled = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var times = ExamTimes()
+    @State private var editing = false
+    @State private var requesting = false
+    @State private var denied = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text("考试要不要提前提醒？")
-                        .font(.headline)
-                    Text("前一天、当天早间和开考前各弹一次，内容用本地缓存的考试安排。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("考试前，要提醒你吗？").font(.title2.bold())
+                Text("到点查看开考时间、考场和座位号。").font(.subheadline).foregroundStyle(.secondary)
+                if times.eve { times.eveSample }
+                else if times.morning { times.morningSample }
+                else if times.before { times.leadSample }
+                DisclosureGroup(isExpanded: $editing) {
+                    VStack(spacing: 12) { ExamTimeRows(times: $times, previews: false) }.padding(.vertical, 8)
+                } label: {
+                    LabeledContent("提醒时间", value: "\(times.count) 个时段")
                 }
-
-                NotificationSettingsSection()
-
-                Section {
-                    Button("开启提醒") {
-                        Task { await enable() }
+                PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: finish) {
+                    guard !requesting else { return }
+                    requesting = true
+                    Task {
+                        let allowed = await NotificationService.requestAuthorization()
+                        if allowed {
+                            times.save()
+                            UserDefaults.standard.set(true, forKey: NotificationSettings.examEnabled)
+                            await app.rescheduleNotifications()
+                        }
+                        requesting = false
+                        if allowed { finish() } else { denied = true }
                     }
-                    Button("先不用") {
-                        NotificationSettings.hasPromptedExam = true
-                        dismiss()
-                    }
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("考试提醒")
-            .navigationBarTitleDisplayMode(.inline)
+                }.disabled(requesting)
+            }.padding(.horizontal, 22).padding(.vertical, 30)
         }
+        .presentationDetents(typeSize.isAccessibilitySize || editing ? [.large] : [.height(350), .large])
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(requesting)
+        .alert("通知权限未开启", isPresented: $denied) {
+            Button("完成", action: finish)
+        } message: { Text("可在系统设置中允许 XATune 发送通知。") }
     }
 
-    private func enable() async {
+    private func finish() {
         NotificationSettings.hasPromptedExam = true
-        examEnabled = true
-        _ = await NotificationService.requestAuthorization()
-        await app.rescheduleNotifications()
         dismiss()
     }
 }
 
-/// 打开开关时顺手要一下系统权限
-func requestAuthorizationIfNeeded() async {
-    let status = await NotificationService.authorizationStatus()
-    guard status == .notDetermined else { return }
-    _ = await NotificationService.requestAuthorization()
+private func requestAuthorizationIfNeeded() async {
+    if await NotificationService.authorizationStatus() == .notDetermined {
+        _ = await NotificationService.requestAuthorization()
+    }
 }

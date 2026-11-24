@@ -6,23 +6,29 @@ struct CourseActivitySlot: Equatable {
     let begins: Date
     let visibleFrom: Date
     let previousRoom: String?
+    let includesClass: Bool
 
-    init?(snapshot: WatchSnapshot, at date: Date, after boundary: Date = .distantPast) {
+    init?(snapshot: WatchSnapshot, at date: Date, after boundary: Date = .distantPast,
+          beforeClass: Bool = true, duringClass: Bool = true) {
         let progress = WatchCourseProgress(snapshot: snapshot, at: date)
         guard let lesson = progress.lesson else { return nil }
         self.lesson = lesson
-        begins = progress.preparationInterval?.lowerBound ?? lesson.start
+        includesClass = duringClass
+        begins = beforeClass ? (progress.preparationInterval?.lowerBound ?? lesson.start) : lesson.start
         visibleFrom = max(begins, boundary)
-        previousRoom = progress.previous?.displayRoom
+        previousRoom = beforeClass ? progress.previous?.displayRoom : nil
     }
 
-    static func upcoming(in snapshot: WatchSnapshot, at now: Date) -> [Self] {
-        guard let first = Self(snapshot: snapshot, at: now) else { return [] }
+    static func upcoming(in snapshot: WatchSnapshot, at now: Date,
+                         beforeClass: Bool = true, duringClass: Bool = true) -> [Self] {
+        guard beforeClass || duringClass,
+              let first = Self(snapshot: snapshot, at: now, beforeClass: beforeClass, duringClass: duringClass) else { return [] }
         // Reserve the following course too, so a short break can start with the phone locked.
-        guard let next = Self(snapshot: snapshot, at: first.lesson.end, after: first.lesson.end) else {
-            return [first]
+        let next = Self(snapshot: snapshot, at: first.lesson.end, after: first.lesson.end,
+                        beforeClass: beforeClass, duringClass: duringClass)
+        return [first, next].compactMap { $0 }.filter {
+            duringClass || ($0.visibleFrom < $0.lesson.start && now < $0.lesson.start)
         }
-        return [first, next]
     }
 }
 

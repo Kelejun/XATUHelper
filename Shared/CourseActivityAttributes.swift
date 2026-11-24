@@ -13,6 +13,7 @@ struct CourseActivityAttributes: ActivityAttributes, Equatable {
         let previousRoom: String?
         let colorIndex: Int?
         let prefersDarkAppearance: Bool?
+        let preparationOnly: Bool?
         let begins: Date
         let start: Date
         let end: Date
@@ -24,6 +25,7 @@ struct CourseActivityAttributes: ActivityAttributes, Equatable {
             previousRoom = slot.previousRoom
             colorIndex = lesson.colorIndex
             self.prefersDarkAppearance = prefersDarkAppearance
+            preparationOnly = !slot.includesClass
             begins = slot.visibleFrom >= lesson.start ? lesson.start : slot.begins
             start = lesson.start
             end = lesson.end
