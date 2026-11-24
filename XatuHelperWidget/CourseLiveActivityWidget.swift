@@ -190,7 +190,7 @@ private struct CourseActivityEmblem: View {
     var body: some View {
         ZStack {
             if !course.finished {
-                ProgressView(timerInterval: course.interval, countsDown: course.countsDown) {
+                ProgressView(timerInterval: course.interval, countsDown: false) {
                     EmptyView()
                 } currentValueLabel: {
                     EmptyView()
@@ -252,7 +252,6 @@ private struct CoursePresentation {
         return color
     }
     var interval: ClosedRange<Date> { preparing ? state.begins...state.start : state.start...state.end }
-    var countsDown: Bool { preparing && state.previousRoom == nil }
 
     var status: some View {
         HStack(spacing: 5) {
@@ -298,7 +297,7 @@ private struct CoursePresentation {
     }
 
     func track(height: CGFloat) -> some View {
-        ProgressView(timerInterval: interval, countsDown: countsDown) {
+        ProgressView(timerInterval: interval, countsDown: false) {
             EmptyView()
         } currentValueLabel: {
             EmptyView()
