@@ -10,6 +10,7 @@ struct XatuHelperWidgetBundle: WidgetBundle {
         ElectricityWidget()
         BreakWidget()
         ExamWidget()
+        CampusOverviewWidget()
         CourseLiveActivityWidget()
     }
 }
@@ -421,7 +422,7 @@ struct CourseWidgetView: View {
         Color(red: 0.78, green: 0.38, blue: 0.32)
     ]
 
-    private static func color(for course: WidgetSnapshot.Course) -> Color {
+    static func color(for course: WidgetSnapshot.Course) -> Color {
         if let index = course.colorIndex {
             return palette[abs(index % palette.count)]
         }
