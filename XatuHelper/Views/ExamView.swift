@@ -9,6 +9,8 @@ struct ExamView: View {
     /// 空表示跟当前学期走；选了历史学期就钉住那一个
     @State private var semesterID = ""
     @Environment(\.notificationReviewPending) private var reviewPending
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var now = Date()
     @State private var showNotificationSetup = false
     @State private var showsCompleted = false
 
@@ -35,15 +37,12 @@ struct ExamView: View {
         return ordered + names.subtracting(ordered).sorted()
     }
 
-    private var groups: [(key: String, items: [ExamRecord])] {
-        Dictionary(grouping: app.exams) { $0.dateKey }
-            .map { (key: $0.key, items: $0.value.sorted { $0.time < $1.time }) }
-            .sorted { $0.key < $1.key }
-    }
-
-    /// 今天及以后、而且认得出日期的，正常排在前面
+    /// 尚未结束、而且认得出日期的，按日期和开考时间排在前面
     private var upcomingGroups: [(key: String, items: [ExamRecord])] {
-        groups.filter { !$0.key.isEmpty && $0.key >= todayKey }
+        let upcoming = app.exams.filter { !$0.dateKey.isEmpty && !$0.isEnded(at: now) }
+        return Dictionary(grouping: upcoming) { $0.dateKey }
+            .map { (key: $0.key, items: $0.value.sorted(by: Self.examAscending)) }
+            .sorted { $0.key < $1.key }
     }
 
     private var nextExam: ExamRecord? { upcomingGroups.first?.items.first }
@@ -60,11 +59,15 @@ struct ExamView: View {
     }
 
     private var completedExams: [ExamRecord] {
-        app.exams.filter { !$0.dateKey.isEmpty && $0.dateKey < todayKey }
-            .sorted { $0.dateKey == $1.dateKey ? $0.time < $1.time : $0.dateKey > $1.dateKey }
+        app.exams.filter { !$0.dateKey.isEmpty && $0.isEnded(at: now) }
+            .sorted { $0.dateKey == $1.dateKey ? Self.examAscending($0, $1) : $0.dateKey > $1.dateKey }
     }
 
-    private var todayKey: String { ExamView.dayFormatter.string(from: Date()) }
+    private static func examAscending(_ lhs: ExamRecord, _ rhs: ExamRecord) -> Bool {
+        let leftStart = lhs.startMinutes ?? Int.max
+        let rightStart = rhs.startMinutes ?? Int.max
+        return leftStart == rightStart ? lhs.time < rhs.time : leftStart < rightStart
+    }
 
     var body: some View {
         List {
@@ -172,6 +175,11 @@ struct ExamView: View {
             if !app.isDemoMode && !NotificationSettings.hasPromptedExam {
                 showNotificationSetup = true
             }
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
+        .onAppear { now = Date() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { now = Date() }
         }
         .sheet(isPresented: $showNotificationSetup) {
             ExamNotificationSetupSheet()
@@ -395,13 +403,10 @@ struct ExamView: View {
 
     /// 课程名右边的「还有几天」
     private func remainingText(for exam: ExamRecord) -> String {
-        let key = exam.dateKey
-        guard !key.isEmpty,
-              let date = ExamView.parser.date(from: key),
-              let today = ExamView.parser.date(from: ExamView.dayFormatter.string(from: Date())) else {
+        guard !exam.isEnded(at: now),
+              let days = exam.daysUntil(from: now) else {
             return ""
         }
-        let days = Calendar.current.dateComponents([.day], from: today, to: date).day ?? 0
         if days == 1 { return "明天" }
         if days > 1 { return "\(days)天后" }
         if days == 0 { return "今天" }
@@ -453,13 +458,6 @@ struct ExamView: View {
         app.exams = []
         Task { await app.refreshExams(semesterID: id) }
     }
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 
     private static let parser: DateFormatter = {
         let formatter = DateFormatter()

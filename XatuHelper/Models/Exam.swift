@@ -33,15 +33,76 @@ struct ExamRecord: Identifiable, Hashable, Codable {
     }
 
     var startMinutes: Int? {
-        guard let parts = timeWithoutDate.regexGroups(#"(\d{1,2})\s*[:：]\s*(\d{2})"#).first,
-              let hour = Int(parts[0]), let minute = Int(parts[1]),
-              hour < 24, minute < 60 else { return nil }
-        return hour * 60 + minute
+        clockMinutes.first
+    }
+
+    var endMinutes: Int? {
+        guard let start = startMinutes else { return nil }
+        return clockMinutes.dropFirst().first { $0 > start }
+    }
+
+    private var clockMinutes: [Int] {
+        let normalized = timeWithoutDate.replacingOccurrences(of: "：", with: ":")
+        return normalized.regexGroups(#"(\d{1,2})\s*:\s*(\d{2})"#).compactMap { parts -> Int? in
+            guard let hour = Int(parts[0]), let minute = Int(parts[1]),
+                  hour < 24, minute < 60 else { return nil }
+            return hour * 60 + minute
+        }
     }
 
     var timeWithoutDate: String {
         guard let range = time.range(of: #"(?:\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}|(?:\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日)"#, options: .regularExpression) else { return time }
-        return time[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        var rest = time
+        rest.removeSubrange(range)
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static var campusCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        calendar.locale = Locale(identifier: "zh_CN")
+        return calendar
+    }
+
+    func dayDate(in calendar: Calendar = ExamRecord.campusCalendar) -> Date? {
+        guard !dateKey.isEmpty else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter.date(from: dateKey)
+    }
+
+    func startDate(in calendar: Calendar = ExamRecord.campusCalendar) -> Date? {
+        guard let day = dayDate(in: calendar) else { return nil }
+        let startOfDay = calendar.startOfDay(for: day)
+        return calendar.date(byAdding: .minute, value: startMinutes ?? 0, to: startOfDay)
+    }
+
+    func endDate(in calendar: Calendar = ExamRecord.campusCalendar) -> Date? {
+        guard let day = dayDate(in: calendar) else { return nil }
+        let startOfDay = calendar.startOfDay(for: day)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endMinutes,
+              let end = calendar.date(byAdding: .minute, value: endMinutes, to: startOfDay),
+              let start = startDate(in: calendar),
+              end > start else {
+            return nextDay
+        }
+        return end
+    }
+
+    func isEnded(at now: Date, in calendar: Calendar = ExamRecord.campusCalendar) -> Bool {
+        guard let end = endDate(in: calendar) else { return false }
+        return now >= end
+    }
+
+    func daysUntil(from now: Date, in calendar: Calendar = ExamRecord.campusCalendar) -> Int? {
+        guard let day = dayDate(in: calendar) else { return nil }
+        let today = calendar.startOfDay(for: now)
+        return calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: day)).day
     }
 
     private static let dateFormatter = DatePattern()

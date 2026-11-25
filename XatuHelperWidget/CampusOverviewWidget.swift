@@ -26,10 +26,10 @@ struct CampusOverviewProvider: AppIntentTimelineProvider {
         var dates = (0...24).map { now.addingTimeInterval(Double($0) * 3600) }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+        let startOfToday = calendar.startOfDay(for: now)
 
         for offset in 0...1 {
-            let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now))!
+            let day = calendar.date(byAdding: .day, value: offset, to: startOfToday)!
             dates.append(day)
             for course in snapshot.resolved(at: day).courses {
                 dates.append(day.addingTimeInterval(Double(course.startMinutes * 60)))
@@ -37,8 +37,7 @@ struct CampusOverviewProvider: AppIntentTimelineProvider {
             }
         }
 
-        let examEnds = snapshot.upcomingExams?.compactMap(\.end).filter { $0 > now && $0 < tomorrow } ?? []
-        dates.append(contentsOf: examEnds)
+        dates.append(contentsOf: snapshot.examTimelineDates(after: now, days: 2))
 
         let entries = Set(dates.filter { $0 >= now }).sorted().map { date in
             CourseEntry(

@@ -7,6 +7,7 @@ struct HomeView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.campusNavigation) private var navigate
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @State private var now = Date()
     @State private var calendarInfo: CalendarService.Info?
     @State private var destination: HomeDestination?
@@ -211,7 +212,13 @@ struct HomeView: View {
             }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now = $0 }
-        .onAppear { calendarInfo = CalendarCache.load() }
+        .onAppear {
+            now = Date()
+            calendarInfo = CalendarCache.load()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { now = Date() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: CalendarCache.didChange)) { _ in
             calendarInfo = CalendarCache.load()
         }
@@ -468,29 +475,19 @@ struct HomeView: View {
     }
 
     private func daysUntil(_ exam: ExamRecord) -> Int? {
-        guard let date = Self.examDateFormatter.date(from: exam.dateKey) else { return nil }
-        let today = Calendar.current.startOfDay(for: now)
-        return Calendar.current.dateComponents([.day], from: today, to: date).day
+        exam.daysUntil(from: now)
     }
 
-    /// 今天及以后的考试，按日期升序
+    /// 尚未结束的考试，按开考时间升序
     static func examCandidates(_ exams: [ExamRecord], from now: Date) -> [ExamRecord] {
-        let today = Calendar.current.startOfDay(for: now)
-        return exams
+        exams
             .compactMap { exam -> (ExamRecord, Date)? in
-                guard let date = examDateFormatter.date(from: exam.dateKey) else { return nil }
-                return date >= today ? (exam, date) : nil
+                guard let start = exam.startDate(), !exam.isEnded(at: now) else { return nil }
+                return (exam, start)
             }
-            .sorted { $0.1 < $1.1 }
+            .sorted { $0.1 == $1.1 ? $0.0.time < $1.0.time : $0.1 < $1.1 }
             .map { $0.0 }
     }
-
-    private static let examDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-        return formatter
-    }()
 
     private func examCard(_ exam: ExamRecord) -> some View {
         VStack(alignment: .leading, spacing: 10) {

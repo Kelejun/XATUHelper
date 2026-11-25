@@ -631,8 +631,8 @@ struct EamsService {
                 }
             }
             // 日期和时间分两列时，把钟点补上
-            if !time.isEmpty && !time.contains(":"),
-               let clock = row.first(where: { $0.range(of: #"\d{1,2}:\d{2}"#, options: .regularExpression) != nil }),
+            if !time.isEmpty && !time.contains(":") && !time.contains("："),
+               let clock = row.first(where: { $0.range(of: #"\d{1,2}\s*[:：]\s*\d{2}"#, options: .regularExpression) != nil }),
                clock != time {
                 time += " " + clock
             }

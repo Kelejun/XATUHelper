@@ -43,11 +43,10 @@ struct SnapshotProvider: TimelineProvider {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
-            let ends = snapshot.upcomingExams?.compactMap(\.end).filter { $0 > now && $0 < tomorrow } ?? []
-            let entries = Set([now, tomorrow] + ends).sorted().map {
+            let entries = snapshot.examTimelineDates(after: now, days: 7).map {
                 TodayEntry(date: $0, snapshot: snapshot.resolved(at: $0))
             }
-            completion(Timeline(entries: entries, policy: .atEnd))
+            completion(Timeline(entries: entries, policy: .after(tomorrow)))
             return
         }
         let entry = TodayEntry(date: now, snapshot: snapshot.resolved(at: now))

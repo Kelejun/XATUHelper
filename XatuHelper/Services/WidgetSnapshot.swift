@@ -78,16 +78,33 @@ struct WidgetSnapshot: Codable {
             value.upcomingBreak = days >= 0 ? Break(title: item.title, date: item.date, days: days) : nil
         }
         let exams = upcomingExams ?? nextExam.map { [$0] } ?? []
-        let remaining = exams.filter { exam in
-            guard let start = exam.date else { return false }
-            return exam.end.map { $0 > date } ?? (start >= today)
+        let remaining: [Exam] = exams.compactMap { exam in
+            guard let start = exam.date else { return nil }
+            let isRemaining = exam.end.map { $0 > date } ?? (start >= today)
+            guard isRemaining else { return nil }
+            var updated = exam
+            updated.days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: start)).day
+            return updated
         }
         value.upcomingExams = remaining
         value.nextExam = remaining.first
-        if let start = value.nextExam?.date {
-            value.nextExam?.days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: start)).day
-        }
         return value
+    }
+
+    func examTimelineDates(after now: Date, days: Int = 7) -> [Date] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let startOfToday = calendar.startOfDay(for: now)
+        let horizon = calendar.date(byAdding: .day, value: max(1, days), to: startOfToday)!
+        var dates: [Date] = [now]
+        for offset in 1...max(1, days) {
+            if let midnight = calendar.date(byAdding: .day, value: offset, to: startOfToday) {
+                dates.append(midnight)
+            }
+        }
+        let exams = upcomingExams ?? nextExam.map { [$0] } ?? []
+        dates.append(contentsOf: exams.compactMap(\.end).filter { $0 > now && $0 <= horizon })
+        return Array(Set(dates)).sorted()
     }
 
     var weekdayLabel: String { Self.weekdayLabel(weekday) }

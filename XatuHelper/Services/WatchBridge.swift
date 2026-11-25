@@ -101,18 +101,9 @@ extension AppState {
     var datedExams: [WatchSnapshot.Exam] {
         let calendar = WatchSnapshot.campusCalendar
         return currentExams.compactMap { exam in
-            guard let day = WatchSnapshot.parseDay(exam.dateKey) else { return nil }
-            let normalized = exam.timeWithoutDate.replacingOccurrences(of: "：", with: ":")
-            let matches = normalized.regexGroups(#"(\d{1,2}):(\d{2})"#)
-            let minutes = matches.compactMap { parts -> Int? in
-                guard let h = Int(parts[0]), let m = Int(parts[1]), h < 24, m < 60 else { return nil }
-                return h * 60 + m
-            }
-            let startOfDay = calendar.startOfDay(for: day)
-            let start = calendar.date(byAdding: .minute, value: minutes.first ?? 0, to: startOfDay)!
-            let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-            let candidateEnd = minutes.count > 1 ? calendar.date(byAdding: .minute, value: minutes[1], to: startOfDay)! : nextDay
-            return .init(id: exam.id, name: exam.course, start: start, end: candidateEnd > start ? candidateEnd : nextDay,
+            guard let start = exam.startDate(in: calendar),
+                  let end = exam.endDate(in: calendar) else { return nil }
+            return .init(id: exam.id, name: exam.course, start: start, end: end,
                          time: exam.timeWithoutDate, room: exam.room, seat: exam.seat, note: exam.note)
         }
     }
