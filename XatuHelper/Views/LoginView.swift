@@ -2,9 +2,13 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var username = ""
     @State private var password = ""
+    @State private var showsPassword = false
     @State private var showAbout = false
+    @State private var appeared = false
     @FocusState private var focused: Field?
 
     private enum Field { case username, password }
@@ -15,92 +19,45 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    VStack(spacing: 12) {
-                        Image("XATuneMark")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 40, height: 40)
-                            .foregroundStyle(.tint)
-                            .accessibilityHidden(true)
-                        Text("XATune")
-                            .font(.title2.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                }
-                .listRowBackground(Color.clear)
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        header
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 18)
 
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        TextField("学号", text: $username)
-                            .textContentType(.username)
-                            .keyboardType(.numberPad)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focused, equals: .username)
-                            .accessibilityLabel("学号")
-                    }
-                    HStack(spacing: 12) {
-                        Image(systemName: "lock")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        SecureField("统一身份认证密码", text: $password)
-                            .textContentType(.password)
-                            .focused($focused, equals: .password)
-                            .submitLabel(.go)
-                            .onSubmit(submit)
-                            .accessibilityLabel("统一身份认证密码")
-                    }
-                }
-                .disabled(app.isLoading)
-
-                Section {
-                    Button(action: submit) {
-                        ZStack {
-                            Text("登录")
-                                .opacity(app.isLoading ? 0 : 1)
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                Text("登录中…")
-                            }
-                            .opacity(app.isLoading ? 1 : 0)
+                        VStack(alignment: .leading, spacing: 14) {
+                            credentialsCard
+                            submitButton
+                            securityNote
                         }
-                        .frame(maxWidth: .infinity)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(app.isLoading ? "登录中…" : "登录")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!canSubmit)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                } footer: {
-                    Text("密码安全保存在本机钥匙串")
-                }
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 24)
 
-                Section {
-                    Button("体验示例") {
-                        focused = nil
-                        app.showsDemoAccount = true
+                        VStack(spacing: 16) {
+                            demoCard
+                            footerLinks
+                        }
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 28)
                     }
-                    .disabled(app.isLoading)
-                    PrivacyPolicyLink()
-                } footer: {
-                    Text("无需登录，可查看示例课表、考试、成绩和电费。")
+                    .padding(.horizontal, proxy.size.width >= 600 ? 28 : 20)
+                    .padding(.top, proxy.size.height < 640 ? 20 : 56)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: 460, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("登录")
+            .background {
+                ZStack(alignment: .top) {
+                    Color(.systemGroupedBackground)
+                    loginBackground
+                }
+                .ignoresSafeArea()
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -110,6 +67,13 @@ struct LoginView: View {
                     .accessibilityLabel("设置")
                     .disabled(app.isLoading)
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    if focused == .username {
+                        Button("下一步") { focused = .password }
+                    }
+                    Spacer()
+                    Button("完成") { focused = nil }
+                }
             }
             .sheet(isPresented: $showAbout) {
                 AboutSheet()
@@ -117,7 +81,242 @@ struct LoginView: View {
         }
         .onAppear {
             if username.isEmpty { username = app.studentID }
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.smooth(duration: 0.6)) {
+                    appeared = true
+                }
+            }
         }
+    }
+
+    // MARK: - 顶部品牌区
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            brandMark
+            VStack(alignment: .leading, spacing: 6) {
+                Text("XATune")
+                    .font(.largeTitle.bold())
+                Text("使用校园统一身份认证登录")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var brandMark: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return ZStack {
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color(red: 0.14, green: 0.44, blue: 0.96), Color(red: 0.06, green: 0.30, blue: 0.78)]
+                    : [Color(red: 0.08, green: 0.44, blue: 0.96), Color(red: 0.01, green: 0.33, blue: 0.84)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image("XATuneMark")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .foregroundStyle(.white)
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(shape)
+        .overlay {
+            shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.18 : 0.25), lineWidth: 0.5)
+        }
+        .shadow(color: Color(red: 0.01, green: 0.35, blue: 0.85).opacity(colorScheme == .dark ? 0.32 : 0.22), radius: 12, y: 6)
+        .accessibilityHidden(true)
+    }
+
+    // MARK: - 账号密码卡片
+
+    private var credentialsCard: some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        return VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                fieldIcon("person.fill", active: focused == .username)
+                TextField("学号", text: $username)
+                    .textContentType(.username)
+                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focused, equals: .username)
+                    .accessibilityLabel("学号")
+                if !username.isEmpty && !app.isLoading {
+                    Button {
+                        username = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("清空学号")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            Divider()
+                .padding(.leading, 60)
+
+            HStack(spacing: 12) {
+                fieldIcon("lock.fill", active: focused == .password)
+                Group {
+                    if showsPassword {
+                        TextField("统一身份认证密码", text: $password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } else {
+                        SecureField("统一身份认证密码", text: $password)
+                    }
+                }
+                .textContentType(.password)
+                .focused($focused, equals: .password)
+                .submitLabel(.go)
+                .onSubmit(submit)
+                .accessibilityLabel("统一身份认证密码")
+
+                Button {
+                    showsPassword.toggle()
+                } label: {
+                    Image(systemName: showsPassword ? "eye.slash" : "eye")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showsPassword ? "隐藏密码" : "显示密码")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .background(Color(.secondarySystemGroupedBackground), in: shape)
+        .disabled(app.isLoading)
+    }
+
+    private func fieldIcon(_ systemName: String, active: Bool) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(active ? Color.accentColor : Color.secondary)
+            .frame(width: 32, height: 32)
+            .background(
+                (active ? Color.accentColor : Color.secondary).opacity(active ? 0.14 : 0.10),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .animation(.easeInOut(duration: 0.18), value: active)
+            .accessibilityHidden(true)
+    }
+
+    // MARK: - 登录按钮与提示
+
+    private var submitButton: some View {
+        Button(action: submit) {
+            ZStack {
+                Text("登录")
+                    .font(.headline)
+                    .opacity(app.isLoading ? 0 : 1)
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                    Text("登录中…")
+                        .font(.headline)
+                }
+                .opacity(app.isLoading ? 1 : 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(app.isLoading ? "登录中…" : "登录")
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: 16))
+        .controlSize(.large)
+        .disabled(!canSubmit)
+    }
+
+    private var securityNote: some View {
+        Label("密码安全保存在本机钥匙串", systemImage: "lock.shield")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+    }
+
+    // MARK: - 次要入口
+
+    private var demoCard: some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        return Button {
+            focused = nil
+            app.showsDemoAccount = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.teal)
+                    .frame(width: 38, height: 38)
+                    .background(Color.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("体验示例")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("无需登录，可查看示例课表、考试、成绩和电费")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground), in: shape)
+            .contentShape(.interaction, shape)
+        }
+        .buttonStyle(.plain)
+        .disabled(app.isLoading)
+    }
+
+    private var footerLinks: some View {
+        HStack {
+            Spacer()
+            PrivacyPolicyLink()
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+
+    // MARK: - 顶部渐变背景
+
+    private var loginBackground: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.16, green: 0.44, blue: 0.94).opacity(0.34), location: 0),
+                .init(color: Color(red: 0.40, green: 0.66, blue: 0.98).opacity(0.16), location: 0.55),
+                .init(color: Color(.systemGroupedBackground).opacity(0), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 300)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
     }
 
     private func submit() {
@@ -125,6 +324,11 @@ struct LoginView: View {
         focused = nil
         Task { await app.login(student: username.trimmingCharacters(in: .whitespacesAndNewlines), password: password) }
     }
+}
+
+#Preview {
+    LoginView()
+        .environmentObject(AppState())
 }
 
 struct AboutSheet: View {
