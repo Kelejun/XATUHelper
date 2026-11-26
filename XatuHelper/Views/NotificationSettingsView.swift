@@ -188,11 +188,18 @@ private struct PromptActions: View {
 
     var body: some View {
         let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
-        layout {
-            Button(action: skip) { Text("先不用").frame(maxWidth: .infinity) }
-            Button(action: enable) { Text(title).frame(maxWidth: .infinity) }.disabled(!canEnable)
+        VStack(spacing: 0) {
+            Divider()
+            layout {
+                Button(action: skip) { Text("先不用").frame(maxWidth: .infinity) }
+                Button(action: enable) { Text(title).frame(maxWidth: .infinity) }.disabled(!canEnable)
+            }
+            .buttonStyle(.borderedProminent).tint(.blue).controlSize(.large)
+            .padding(.horizontal, 22)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
         }
-        .buttonStyle(.borderedProminent).tint(.blue).controlSize(.large)
+        .background(.bar)
     }
 }
 
@@ -217,8 +224,14 @@ struct NotificationSetupSheet: View {
                     else { courseContent }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 22).padding(.vertical, 30)
+                .padding(.horizontal, 22)
+                .padding(.top, 30)
+                .padding(.bottom, 18)
                 .id("promptTop")
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if activityStep { activityActions }
+                else { courseActions }
             }
             .onChange(of: activityStep) { _, _ in
                 proxy.scrollTo("promptTop", anchor: .top)
@@ -246,20 +259,23 @@ struct NotificationSetupSheet: View {
             CourseActivityPreview(phase: .between)
             Toggle("课中", isOn: $during)
             CourseActivityPreview(phase: .during)
-            PromptActions(title: "完成", skip: {
-                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
-                UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
-                finishActivity()
-            }) {
-                UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
-                if before {
-                    UserDefaults.standard.set(beforeLead, forKey: CourseActivityController.beforeLeadKey)
-                }
-                UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
-                finishActivity()
-            }
         }
         .transition(.opacity)
+    }
+
+    private var activityActions: some View {
+        PromptActions(title: "完成", skip: {
+            UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
+            UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
+            finishActivity()
+        }) {
+            UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
+            if before {
+                UserDefaults.standard.set(beforeLead, forKey: CourseActivityController.beforeLeadKey)
+            }
+            UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
+            finishActivity()
+        }
     }
 
     private var courseContent: some View {
@@ -275,26 +291,29 @@ struct NotificationSetupSheet: View {
                     }
                 }.pickerStyle(.menu).labelsHidden()
             }
-            PromptActions(title: "开启课程提醒", skip: {
-                UserDefaults.standard.set(false, forKey: NotificationSettings.classEnabled)
-                Task { await app.rescheduleNotifications() }
-                next()
-            }) {
-                guard !requesting else { return }
-                requesting = true
-                Task {
-                    let allowed = await NotificationService.requestAuthorization()
-                    if allowed {
-                        UserDefaults.standard.set(lead, forKey: NotificationSettings.classLead)
-                        UserDefaults.standard.set(true, forKey: NotificationSettings.classEnabled)
-                        await app.rescheduleNotifications()
-                    }
-                    requesting = false
-                    if allowed { next() } else { denied = true }
-                }
-            }.disabled(requesting)
         }
         .transition(.opacity)
+    }
+
+    private var courseActions: some View {
+        PromptActions(title: "开启课程提醒", skip: {
+            UserDefaults.standard.set(false, forKey: NotificationSettings.classEnabled)
+            Task { await app.rescheduleNotifications() }
+            next()
+        }) {
+            guard !requesting else { return }
+            requesting = true
+            Task {
+                let allowed = await NotificationService.requestAuthorization()
+                if allowed {
+                    UserDefaults.standard.set(lead, forKey: NotificationSettings.classLead)
+                    UserDefaults.standard.set(true, forKey: NotificationSettings.classEnabled)
+                    await app.rescheduleNotifications()
+                }
+                requesting = false
+                if allowed { next() } else { denied = true }
+            }
+        }.disabled(requesting)
     }
 
     private func next() {
@@ -335,8 +354,14 @@ struct ExamNotificationSetupSheet: View {
                     else { examNotificationContent }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 22).padding(.vertical, 30)
+                .padding(.horizontal, 22)
+                .padding(.top, 30)
+                .padding(.bottom, 18)
                 .id("examPromptTop")
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if activityStep { examActivityActions }
+                else { examNotificationActions }
             }
             .onChange(of: activityStep) { _, _ in
                 proxy.scrollTo("examPromptTop", anchor: .top)
@@ -387,26 +412,29 @@ struct ExamNotificationSetupSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 8)
             }
-            PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
-                UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
-                Task { await app.rescheduleNotifications() }
-                next()
-            }) {
-                guard !requesting else { return }
-                requesting = true
-                Task {
-                    let allowed = await NotificationService.requestAuthorization()
-                    if allowed {
-                        times.save()
-                        UserDefaults.standard.set(true, forKey: NotificationSettings.examEnabled)
-                        await app.rescheduleNotifications()
-                    }
-                    requesting = false
-                    if allowed { next() } else { denied = true }
-                }
-            }.disabled(requesting)
         }
         .transition(.opacity)
+    }
+
+    private var examNotificationActions: some View {
+        PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
+            UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
+            Task { await app.rescheduleNotifications() }
+            next()
+        }) {
+            guard !requesting else { return }
+            requesting = true
+            Task {
+                let allowed = await NotificationService.requestAuthorization()
+                if allowed {
+                    times.save()
+                    UserDefaults.standard.set(true, forKey: NotificationSettings.examEnabled)
+                    await app.rescheduleNotifications()
+                }
+                requesting = false
+                if allowed { next() } else { denied = true }
+            }
+        }.disabled(requesting)
     }
 
     private var examActivityContent: some View {
@@ -419,18 +447,21 @@ struct ExamNotificationSetupSheet: View {
                 LeadPicker(title: "提前", options: CourseActivityController.examLeadOptions, minutes: $examLead)
             }
             CourseActivityPreview(phase: .exam(examLead))
-            PromptActions(title: "完成", skip: {
-                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeExamKey)
-                finishActivity()
-            }) {
-                UserDefaults.standard.set(beforeExam, forKey: CourseActivityController.beforeExamKey)
-                if beforeExam {
-                    UserDefaults.standard.set(examLead, forKey: CourseActivityController.examLeadKey)
-                }
-                finishActivity()
-            }
         }
         .transition(.opacity)
+    }
+
+    private var examActivityActions: some View {
+        PromptActions(title: "完成", skip: {
+            UserDefaults.standard.set(false, forKey: CourseActivityController.beforeExamKey)
+            finishActivity()
+        }) {
+            UserDefaults.standard.set(beforeExam, forKey: CourseActivityController.beforeExamKey)
+            if beforeExam {
+                UserDefaults.standard.set(examLead, forKey: CourseActivityController.examLeadKey)
+            }
+            finishActivity()
+        }
     }
 
     private func next() {
