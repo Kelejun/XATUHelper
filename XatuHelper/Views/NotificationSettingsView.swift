@@ -139,6 +139,7 @@ struct ExamNotificationSection: View {
 
 struct CourseActivitySettingsSection: View {
     @AppStorage(CourseActivityController.beforeKey) private var before = false
+    @AppStorage(CourseActivityController.beforeLeadKey) private var beforeLead = CourseActivityController.defaultBeforeLeadMinutes
     @AppStorage(CourseActivityController.duringKey) private var during = false
     @AppStorage(CourseActivityController.beforeExamKey) private var beforeExam = false
     @AppStorage(CourseActivityController.examLeadKey) private var examLead = CourseActivityController.defaultExamLeadMinutes
@@ -148,7 +149,10 @@ struct CourseActivitySettingsSection: View {
     var body: some View {
         Section {
             Toggle("课前", isOn: $before)
-            CourseActivityPreview(phase: .before)
+            if before {
+                LeadPicker(title: "提前", options: CourseActivityController.beforeLeadOptions, minutes: $beforeLead)
+            }
+            CourseActivityPreview(phase: .before(beforeLead))
             CourseActivityPreview(phase: .between)
         } footer: {
             if (before || during || beforeExam) && !activitiesEnabled {
@@ -200,9 +204,8 @@ struct NotificationSetupSheet: View {
     @State private var detent: PresentationDetent = NotificationSettings.hasPrompted ? .large : .height(420)
     @State private var lead = NotificationSettings.classLeadMinutes
     @State private var before = UserDefaults.standard.bool(forKey: CourseActivityController.beforeKey)
+    @State private var beforeLead = CourseActivityController.beforeLeadMinutes
     @State private var during = UserDefaults.standard.bool(forKey: CourseActivityController.duringKey)
-    @State private var beforeExam = UserDefaults.standard.bool(forKey: CourseActivityController.beforeExamKey)
-    @State private var examLead = CourseActivityController.examLeadMinutes
     @State private var requesting = false
     @State private var denied = false
 
@@ -233,24 +236,26 @@ struct NotificationSetupSheet: View {
     private var activityContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("开启实时活动与灵动岛？").font(.title2.bold())
-            Text("在锁定屏幕上查看课程和考试，支持灵动岛的机型也会在岛上显示。")
+            Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
                 .font(.subheadline).foregroundStyle(.secondary)
             Toggle("课前", isOn: $before)
-            CourseActivityPreview(phase: .before)
+            if before {
+                LeadPicker(title: "提前", options: CourseActivityController.beforeLeadOptions, minutes: $beforeLead)
+            }
+            CourseActivityPreview(phase: .before(beforeLead))
             CourseActivityPreview(phase: .between)
             Toggle("课中", isOn: $during)
             CourseActivityPreview(phase: .during)
-            Toggle("考前", isOn: $beforeExam)
-            CourseActivityPreview(phase: .exam(examLead))
             PromptActions(title: "完成", skip: {
                 UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
                 UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
-                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeExamKey)
                 finishActivity()
             }) {
                 UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
+                if before {
+                    UserDefaults.standard.set(beforeLead, forKey: CourseActivityController.beforeLeadKey)
+                }
                 UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
-                UserDefaults.standard.set(beforeExam, forKey: CourseActivityController.beforeExamKey)
                 finishActivity()
             }
         }
@@ -313,67 +318,33 @@ struct ExamNotificationSetupSheet: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var activityStep = NotificationSettings.hasPromptedExam
     @State private var times = ExamTimes()
     @State private var editing = false
-    @State private var detent: PresentationDetent = .height(450)
+    @State private var beforeExam = UserDefaults.standard.bool(forKey: CourseActivityController.beforeExamKey)
+    @State private var examLead = CourseActivityController.examLeadMinutes
+    @State private var detent: PresentationDetent = NotificationSettings.hasPromptedExam ? .large : .height(450)
     @State private var requesting = false
     @State private var denied = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("考试前，要提醒你吗？").font(.title2.bold())
-                Text("到点查看开考时间、考场和座位号。").font(.subheadline).foregroundStyle(.secondary)
-                if times.eve { times.eveSample }
-                else if times.morning { times.morningSample }
-                else if times.before { times.leadSample }
-                Button {
-                    withAnimation { editing.toggle() }
-                } label: {
-                    HStack {
-                        Text("提醒时间")
-                        Spacer()
-                        Text("\(times.count) 个时段").foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(editing ? 90 : 0))
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+        ScrollViewReader { proxy in
+            ScrollView {
+                Group {
+                    if activityStep { examActivityContent }
+                    else { examNotificationContent }
                 }
-                .buttonStyle(.plain)
-                .accessibilityValue(editing ? "已展开" : "已折叠")
-                if editing {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ExamTimeRows(times: $times, previews: false)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                }
-                PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
-                    UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
-                    Task { await app.rescheduleNotifications() }
-                    finish()
-                }) {
-                    guard !requesting else { return }
-                    requesting = true
-                    Task {
-                        let allowed = await NotificationService.requestAuthorization()
-                        if allowed {
-                            times.save()
-                            UserDefaults.standard.set(true, forKey: NotificationSettings.examEnabled)
-                            await app.rescheduleNotifications()
-                        }
-                        requesting = false
-                        if allowed { finish() } else { denied = true }
-                    }
-                }.disabled(requesting)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 22).padding(.vertical, 30)
+                .id("examPromptTop")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 22).padding(.vertical, 30)
+            .onChange(of: activityStep) { _, _ in
+                proxy.scrollTo("examPromptTop", anchor: .top)
+            }
         }
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(450), .large], selection: $detent)
         .onChange(of: editing) { _, expanded in
+            guard !activityStep else { return }
             withAnimation {
                 detent = expanded || typeSize.isAccessibilitySize ? .large : .height(450)
             }
@@ -382,12 +353,99 @@ struct ExamNotificationSetupSheet: View {
         .withReminderPreviewData()
         .interactiveDismissDisabled(requesting)
         .alert("通知权限未开启", isPresented: $denied) {
-            Button("完成", action: finish)
+            Button("继续", action: next)
         } message: { Text("可在系统设置中允许 XATune 发送通知。") }
     }
 
-    private func finish() {
+    private var examNotificationContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("考试前，要提醒你吗？").font(.title2.bold())
+            Text("到点查看开考时间、考场和座位号。").font(.subheadline).foregroundStyle(.secondary)
+            if times.eve { times.eveSample }
+            else if times.morning { times.morningSample }
+            else if times.before { times.leadSample }
+            Button {
+                withAnimation { editing.toggle() }
+            } label: {
+                HStack {
+                    Text("提醒时间")
+                    Spacer()
+                    Text("\(times.count) 个时段").foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(editing ? 90 : 0))
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(editing ? "已展开" : "已折叠")
+            if editing {
+                VStack(alignment: .leading, spacing: 12) {
+                    ExamTimeRows(times: $times, previews: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            }
+            PromptActions(title: "开启考前提醒", canEnable: times.count > 0, skip: {
+                UserDefaults.standard.set(false, forKey: NotificationSettings.examEnabled)
+                Task { await app.rescheduleNotifications() }
+                next()
+            }) {
+                guard !requesting else { return }
+                requesting = true
+                Task {
+                    let allowed = await NotificationService.requestAuthorization()
+                    if allowed {
+                        times.save()
+                        UserDefaults.standard.set(true, forKey: NotificationSettings.examEnabled)
+                        await app.rescheduleNotifications()
+                    }
+                    requesting = false
+                    if allowed { next() } else { denied = true }
+                }
+            }.disabled(requesting)
+        }
+        .transition(.opacity)
+    }
+
+    private var examActivityContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("开启实时活动与灵动岛？").font(.title2.bold())
+            Text("在锁定屏幕上查看考试倒计时与考场，支持灵动岛的机型也会在岛上显示。")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Toggle("考前", isOn: $beforeExam)
+            if beforeExam {
+                LeadPicker(title: "提前", options: CourseActivityController.examLeadOptions, minutes: $examLead)
+            }
+            CourseActivityPreview(phase: .exam(examLead))
+            PromptActions(title: "完成", skip: {
+                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeExamKey)
+                finishActivity()
+            }) {
+                UserDefaults.standard.set(beforeExam, forKey: CourseActivityController.beforeExamKey)
+                if beforeExam {
+                    UserDefaults.standard.set(examLead, forKey: CourseActivityController.examLeadKey)
+                }
+                finishActivity()
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func next() {
         NotificationSettings.hasPromptedExam = true
+        if UserDefaults.standard.bool(forKey: CourseActivityController.examPromptedKey) { dismiss() }
+        else {
+            withAnimation {
+                detent = .large
+                activityStep = true
+            }
+        }
+    }
+
+    private func finishActivity() {
+        UserDefaults.standard.set(true, forKey: CourseActivityController.examPromptedKey)
         dismiss()
     }
 }

@@ -18,6 +18,7 @@ struct ReminderPreviewTests {
         }
         let result = preview()
         precondition(result.before == b && result.during?.lesson == a && result.preparation?.lesson == a)
+        precondition(result.preparationSlot(leadMinutes: 45)?.begins == at(435))
         precondition(result.between?.lesson == b && result.between?.previousRoom == a.room && result.between?.begins == a.end)
         precondition(result.exam?.name == a.name && result.exam?.simulated == true)
         precondition(result.examActivitySlot()?.exam.name == a.name)

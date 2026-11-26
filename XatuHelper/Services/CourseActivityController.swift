@@ -6,11 +6,20 @@ final class CourseActivityController {
     static let shared = CourseActivityController()
     static let beforeKey = "courseProgress.beforeClass"
     static let duringKey = "courseProgress.duringClass"
+    static let beforeLeadKey = "courseProgress.beforeClassLeadMinutes"
+    static let defaultBeforeLeadMinutes = CourseActivitySlot.defaultBeforeLeadMinutes
+    static let beforeLeadOptions = [10, 15, 20, 30, 45, 60]
     static let beforeExamKey = "courseProgress.beforeExam"
     static let examLeadKey = "courseProgress.examLeadMinutes"
     static let defaultExamLeadMinutes = ExamActivitySlot.defaultLeadMinutes
     static let examLeadOptions = [15, 30, 45, 60, 90, 120]
-    static let promptedKey = "courseProgress.prompted.2026-11-25"
+    static let promptedKey = "courseProgress.prompted.2026-11-26"
+    static let examPromptedKey = "courseProgress.examPrompted.2026-11-26"
+
+    static var beforeLeadMinutes: Int {
+        let value = UserDefaults.standard.integer(forKey: beforeLeadKey)
+        return value > 0 ? value : defaultBeforeLeadMinutes
+    }
 
     static var examLeadMinutes: Int {
         let value = UserDefaults.standard.integer(forKey: examLeadKey)
@@ -108,7 +117,8 @@ final class CourseActivityController {
         let enabled = (before || during || beforeExam) && ActivityAuthorizationInfo().areActivitiesEnabled
         var slots: [ScheduledSlot] = []
         if enabled && (before || during) {
-            slots += CourseActivitySlot.upcoming(in: snapshot, at: now, beforeClass: before, duringClass: during)
+            slots += CourseActivitySlot.upcoming(in: snapshot, at: now, beforeClass: before, duringClass: during,
+                                                 beforeLeadMinutes: Self.beforeLeadMinutes)
                 .map(ScheduledSlot.init)
         }
         if enabled && beforeExam {

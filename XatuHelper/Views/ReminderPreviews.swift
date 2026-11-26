@@ -133,7 +133,7 @@ struct NotificationSample: View {
 }
 
 struct CourseActivityPreview: View {
-    enum Phase { case before, between, during, exam(Int) }
+    enum Phase { case before(Int), between, during, exam(Int) }
     let phase: Phase
     @Environment(\.reminderPreview) private var data
     @Environment(\.colorScheme) private var scheme
@@ -141,7 +141,7 @@ struct CourseActivityPreview: View {
 
     private var courseSlot: CourseActivitySlot? {
         switch phase {
-        case .before: data?.preparation
+        case .before(let lead): data?.preparationSlot(leadMinutes: lead)
         case .between: data?.between
         case .during: data?.during
         case .exam: nil

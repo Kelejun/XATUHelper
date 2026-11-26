@@ -136,6 +136,16 @@ struct WatchHomeTests {
             let nextStart = state(at: 600 + gap)
             precondition(nextStart.lesson == next && nextStart.preparationInterval == nil)
         }
+        // Custom before-class lead time applies before first class, while between-class breaks stay automatic.
+        let shortBreakNext = lesson("3A201", 620, 700)
+        snapshot.lessons = [first, shortBreakNext]
+        let customFirst = CourseActivitySlot.upcoming(in: snapshot, at: time(400), beforeLeadMinutes: 45)
+        precondition(customFirst.first?.visibleFrom == time(455) && customFirst.first?.begins == time(455))
+        precondition(customFirst.last?.visibleFrom == time(600) && customFirst.last?.previousRoom == first.displayRoom)
+        let shortLead = CourseActivitySlot.upcoming(in: snapshot, at: time(400), beforeLeadMinutes: 15)
+        precondition(shortLead.first?.visibleFrom == time(485))
+        precondition(shortLead.last?.visibleFrom == time(600) && shortLead.last?.previousRoom == first.displayRoom)
+
         let afternoon = lesson("3A201", 730, 790)
         snapshot.lessons = [lesson("5B502", 660, 720), afternoon]
         let lunch = WatchCourseProgress(snapshot: snapshot, at: time(720))

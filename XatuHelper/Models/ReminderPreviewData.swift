@@ -15,6 +15,15 @@ struct ReminderPreviewData {
     let exam: Exam?
     let examActivity: WatchSnapshot.Exam?
 
+    func preparationSlot(leadMinutes: Int = CourseActivitySlot.defaultBeforeLeadMinutes) -> CourseActivitySlot? {
+        guard let lesson = preparation?.lesson else { return nil }
+        var single = WatchSnapshot.empty
+        single.loggedIn = true
+        single.lessons = [lesson]
+        return CourseActivitySlot(snapshot: single, at: lesson.start.addingTimeInterval(-1),
+                                  beforeLeadMinutes: leadMinutes)
+    }
+
     func examActivitySlot(leadMinutes: Int = ExamActivitySlot.defaultLeadMinutes) -> ExamActivitySlot? {
         examActivity.flatMap { ExamActivitySlot(exam: $0, leadMinutes: leadMinutes) }
     }

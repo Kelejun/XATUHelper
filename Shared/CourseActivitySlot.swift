@@ -2,6 +2,8 @@ import Foundation
 
 /// The current or next course that can occupy the Dynamic Island.
 struct CourseActivitySlot: Equatable {
+    static let defaultBeforeLeadMinutes = WatchCourseProgress.defaultPreparationMinutes
+
     let lesson: WatchSnapshot.Lesson
     let begins: Date
     let visibleFrom: Date
@@ -9,8 +11,9 @@ struct CourseActivitySlot: Equatable {
     let includesClass: Bool
 
     init?(snapshot: WatchSnapshot, at date: Date, after boundary: Date = .distantPast,
-          beforeClass: Bool = true, duringClass: Bool = true) {
-        let progress = WatchCourseProgress(snapshot: snapshot, at: date)
+          beforeClass: Bool = true, duringClass: Bool = true,
+          beforeLeadMinutes: Int = defaultBeforeLeadMinutes) {
+        let progress = WatchCourseProgress(snapshot: snapshot, at: date, preparationMinutes: beforeLeadMinutes)
         guard let lesson = progress.lesson else { return nil }
         self.lesson = lesson
         includesClass = duringClass
@@ -20,12 +23,15 @@ struct CourseActivitySlot: Equatable {
     }
 
     static func upcoming(in snapshot: WatchSnapshot, at now: Date,
-                         beforeClass: Bool = true, duringClass: Bool = true) -> [Self] {
+                         beforeClass: Bool = true, duringClass: Bool = true,
+                         beforeLeadMinutes: Int = defaultBeforeLeadMinutes) -> [Self] {
         guard beforeClass || duringClass,
-              let first = Self(snapshot: snapshot, at: now, beforeClass: beforeClass, duringClass: duringClass) else { return [] }
+              let first = Self(snapshot: snapshot, at: now, beforeClass: beforeClass, duringClass: duringClass,
+                               beforeLeadMinutes: beforeLeadMinutes) else { return [] }
         // Reserve the following course too, so a short break can start with the phone locked.
         let next = Self(snapshot: snapshot, at: first.lesson.end, after: first.lesson.end,
-                        beforeClass: beforeClass, duringClass: duringClass)
+                        beforeClass: beforeClass, duringClass: duringClass,
+                        beforeLeadMinutes: beforeLeadMinutes)
         return [first, next].compactMap { $0 }.filter {
             duringClass || ($0.visibleFrom < $0.lesson.start && now < $0.lesson.start)
         }

@@ -172,7 +172,7 @@ struct ExamView: View {
         }
         .task(id: reviewPending) {
             guard !reviewPending else { return }
-            if !app.isDemoMode && !NotificationSettings.hasPromptedExam {
+            if !app.isDemoMode && (!NotificationSettings.hasPromptedExam || !UserDefaults.standard.bool(forKey: CourseActivityController.examPromptedKey)) {
                 showNotificationSetup = true
             }
         }
