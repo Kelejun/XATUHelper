@@ -6,7 +6,6 @@ struct LoginView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var username = ""
     @State private var password = ""
-    @State private var showsPassword = false
     @State private var showAbout = false
     @State private var appeared = false
     @FocusState private var focused: Field?
@@ -34,18 +33,20 @@ struct LoginView: View {
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 24)
 
-                        VStack(spacing: 16) {
-                            demoCard
-                            footerLinks
-                        }
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 28)
+                        demoCard
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 28)
+
+                        Spacer(minLength: 20)
+
+                        footerLinks
+                            .opacity(appeared ? 1 : 0)
                     }
                     .padding(.horizontal, proxy.size.width >= 600 ? 28 : 20)
                     .padding(.top, proxy.size.height < 640 ? 20 : 56)
-                    .padding(.bottom, 32)
-                    .frame(maxWidth: 460, alignment: .leading)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                    .padding(.bottom, 20)
+                    .frame(maxWidth: 460, minHeight: proxy.size.height, alignment: .top)
+                    .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -166,32 +167,12 @@ struct LoginView: View {
 
             HStack(spacing: 12) {
                 fieldIcon("lock.fill", active: focused == .password)
-                Group {
-                    if showsPassword {
-                        TextField("统一身份认证密码", text: $password)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
-                        SecureField("统一身份认证密码", text: $password)
-                    }
-                }
-                .textContentType(.password)
-                .focused($focused, equals: .password)
-                .submitLabel(.go)
-                .onSubmit(submit)
-                .accessibilityLabel("统一身份认证密码")
-
-                Button {
-                    showsPassword.toggle()
-                } label: {
-                    Image(systemName: showsPassword ? "eye.slash" : "eye")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(showsPassword ? "隐藏密码" : "显示密码")
+                SecureField("统一身份认证密码", text: $password)
+                    .textContentType(.password)
+                    .focused($focused, equals: .password)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+                    .accessibilityLabel("统一身份认证密码")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -296,10 +277,9 @@ struct LoginView: View {
             Spacer()
             PrivacyPolicyLink()
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.blue)
             Spacer()
         }
-        .padding(.top, 4)
     }
 
     // MARK: - 顶部渐变背景
