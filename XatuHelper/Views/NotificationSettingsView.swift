@@ -140,6 +140,8 @@ struct ExamNotificationSection: View {
 struct CourseActivitySettingsSection: View {
     @AppStorage(CourseActivityController.beforeKey) private var before = false
     @AppStorage(CourseActivityController.duringKey) private var during = false
+    @AppStorage(CourseActivityController.beforeExamKey) private var beforeExam = false
+    @AppStorage(CourseActivityController.examLeadKey) private var examLead = CourseActivityController.defaultExamLeadMinutes
     @Environment(\.scenePhase) private var scenePhase
     @State private var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
@@ -149,13 +151,20 @@ struct CourseActivitySettingsSection: View {
             CourseActivityPreview(phase: .before)
             CourseActivityPreview(phase: .between)
         } footer: {
-            if (before || during) && !activitiesEnabled {
+            if (before || during || beforeExam) && !activitiesEnabled {
                 Text("系统设置中未开启实时活动，开启后才会显示。")
             }
         }
         Section {
             Toggle("课中", isOn: $during)
             CourseActivityPreview(phase: .during)
+        }
+        Section {
+            Toggle("考前", isOn: $beforeExam)
+            if beforeExam {
+                LeadPicker(title: "提前", options: CourseActivityController.examLeadOptions, minutes: $examLead)
+            }
+            CourseActivityPreview(phase: .exam(examLead))
         }
         .onAppear { activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled }
         .onChange(of: scenePhase) { _, phase in
@@ -192,6 +201,8 @@ struct NotificationSetupSheet: View {
     @State private var lead = NotificationSettings.classLeadMinutes
     @State private var before = UserDefaults.standard.bool(forKey: CourseActivityController.beforeKey)
     @State private var during = UserDefaults.standard.bool(forKey: CourseActivityController.duringKey)
+    @State private var beforeExam = UserDefaults.standard.bool(forKey: CourseActivityController.beforeExamKey)
+    @State private var examLead = CourseActivityController.examLeadMinutes
     @State private var requesting = false
     @State private var denied = false
 
@@ -222,20 +233,24 @@ struct NotificationSetupSheet: View {
     private var activityContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("开启实时活动与灵动岛？").font(.title2.bold())
-            Text("在锁定屏幕上查看课程，支持灵动岛的机型也会在岛上显示。")
+            Text("在锁定屏幕上查看课程和考试，支持灵动岛的机型也会在岛上显示。")
                 .font(.subheadline).foregroundStyle(.secondary)
             Toggle("课前", isOn: $before)
             CourseActivityPreview(phase: .before)
             CourseActivityPreview(phase: .between)
             Toggle("课中", isOn: $during)
             CourseActivityPreview(phase: .during)
+            Toggle("考前", isOn: $beforeExam)
+            CourseActivityPreview(phase: .exam(examLead))
             PromptActions(title: "完成", skip: {
                 UserDefaults.standard.set(false, forKey: CourseActivityController.beforeKey)
                 UserDefaults.standard.set(false, forKey: CourseActivityController.duringKey)
+                UserDefaults.standard.set(false, forKey: CourseActivityController.beforeExamKey)
                 finishActivity()
             }) {
                 UserDefaults.standard.set(before, forKey: CourseActivityController.beforeKey)
                 UserDefaults.standard.set(during, forKey: CourseActivityController.duringKey)
+                UserDefaults.standard.set(beforeExam, forKey: CourseActivityController.beforeExamKey)
                 finishActivity()
             }
         }

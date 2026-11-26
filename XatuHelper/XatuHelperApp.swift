@@ -6,6 +6,8 @@ struct XatuHelperApp: App {
     @StateObject private var app: AppState
     @AppStorage(CourseActivityController.beforeKey) private var beforeClass = false
     @AppStorage(CourseActivityController.duringKey) private var duringClass = false
+    @AppStorage(CourseActivityController.beforeExamKey) private var beforeExam = false
+    @AppStorage(CourseActivityController.examLeadKey) private var examActivityLead = CourseActivityController.defaultExamLeadMinutes
     @StateObject private var permissionReview: NotificationPermissionReview
     @StateObject private var announcements = AnnouncementCenter()
     @Environment(\.scenePhase) private var scenePhase
@@ -25,7 +27,10 @@ struct XatuHelperApp: App {
                 .environmentObject(app)
                 .environmentObject(announcements)
                 .environmentObject(permissionReview)
-                .onChange(of: [beforeClass, duringClass]) { _, _ in
+                .onChange(of: [beforeClass, duringClass, beforeExam]) { _, _ in
+                    CourseActivityController.shared.refresh()
+                }
+                .onChange(of: examActivityLead) { _, _ in
                     CourseActivityController.shared.refresh()
                 }
                 .task(id: scenePhase) {

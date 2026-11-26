@@ -40,6 +40,22 @@ struct WatchSnapshot: Codable, Equatable {
         var room: String
         var seat: String
         var note: String
+        var hasStartTime: Bool? = nil
+
+        var knowsStartTime: Bool {
+            if let hasStartTime { return hasStartTime }
+            return time.range(of: #"\d{1,2}\s*[:：]\s*\d{2}"#, options: .regularExpression) != nil
+        }
+
+        var displayRoom: String {
+            let location = room.trimmingCharacters(in: .whitespacesAndNewlines)
+            return location.isEmpty ? "考场待定" : location
+        }
+
+        var displaySeat: String? {
+            let value = seat.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
     }
 
     struct Holiday: Codable, Identifiable, Equatable {

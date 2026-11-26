@@ -50,7 +50,49 @@ struct WatchHomeTests {
         guard case .aboveCourses = snapshot.homeExam(at: lateFriday) else { preconditionFailure("Ongoing exam") }
         precondition(snapshot.homeExam(at: day(1)) == nil)
         checkCourseProgress(on: friday)
+        checkExamActivity(on: friday)
         print("Passed Watch home and timetable checks")
+    }
+
+    static func checkExamActivity(on day: Date) {
+        func time(_ minute: Int) -> Date { day.addingTimeInterval(Double(minute * 60)) }
+        let morning = WatchSnapshot.Exam(id: "e1", name: "数据结构", start: time(540), end: time(660),
+                                         time: "09:00-11:00", room: "教3-402", seat: "28", note: "", hasStartTime: true)
+        let afternoon = WatchSnapshot.Exam(id: "e2", name: "大学英语", start: time(840), end: time(960),
+                                           time: "14:00-16:00", room: "", seat: "", note: "", hasStartTime: true)
+        let untimed = WatchSnapshot.Exam(id: "e3", name: "体育", start: time(0), end: time(1440),
+                                         time: "", room: "操场", seat: "", note: "", hasStartTime: false)
+        let third = WatchSnapshot.Exam(id: "e4", name: "计算机网络", start: time(1080), end: time(1200),
+                                       time: "18:00-20:00", room: "教2-101", seat: "12", note: "", hasStartTime: true)
+
+        var snapshot = WatchSnapshot.empty
+        snapshot.loggedIn = true
+        snapshot.exams = [third, afternoon, untimed, morning]
+
+        let before = ExamActivitySlot.upcoming(in: snapshot, at: time(470))
+        precondition(before.map(\.exam.id) == ["e1", "e2"])
+        precondition(before[0].visibleFrom == time(480) && before[0].begins == time(480))
+        precondition(before[0].activityID == "exam-e1")
+        precondition(before[1].visibleFrom == time(780))
+        precondition(morning.displayRoom == "教3-402" && morning.displaySeat == "28")
+        precondition(afternoon.displayRoom == "考场待定" && afternoon.displaySeat == nil)
+
+        // Custom lead time (e.g. 45 minutes)
+        let customLead = ExamActivitySlot.upcoming(in: snapshot, at: time(470), leadMinutes: 45)
+        precondition(customLead.first?.visibleFrom == time(495))
+
+        // No "in-exam" state: once start time is reached, it is excluded immediately.
+        let atStart = ExamActivitySlot.upcoming(in: snapshot, at: time(540))
+        precondition(atStart.map(\.exam.id) == ["e2", "e4"])
+
+        // Untimed exams are never scheduled.
+        snapshot.exams = [untimed]
+        precondition(ExamActivitySlot.upcoming(in: snapshot, at: time(-30)).isEmpty)
+
+        // Signed-out snapshot returns nothing.
+        snapshot.exams = [morning]
+        snapshot.loggedIn = false
+        precondition(ExamActivitySlot.upcoming(in: snapshot, at: time(470)).isEmpty)
     }
 
     static func checkCourseProgress(on day: Date) {

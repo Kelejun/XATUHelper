@@ -13,6 +13,11 @@ struct ReminderPreviewData {
     let between: CourseActivitySlot?
     let during: CourseActivitySlot?
     let exam: Exam?
+    let examActivity: WatchSnapshot.Exam?
+
+    func examActivitySlot(leadMinutes: Int = ExamActivitySlot.defaultLeadMinutes) -> ExamActivitySlot? {
+        examActivity.flatMap { ExamActivitySlot(exam: $0, leadMinutes: leadMinutes) }
+    }
 
     init(snapshot: WatchSnapshot, exams: [ExamRecord], fallbackCourses: [CourseOccurrence],
          sampleIndex: UInt64, now: Date = Date()) {
@@ -45,19 +50,40 @@ struct ReminderPreviewData {
         }
 
         let scheduled = snapshot.upcomingExams(at: now).first ?? snapshot.exams.max { $0.start < $1.start }
+        let timedScheduled = snapshot.upcomingExams(at: now).first(where: \.knowsStartTime)
+            ?? snapshot.exams.filter(\.knowsStartTime).max { $0.start < $1.start }
         if let record = exams.first(where: { $0.id == scheduled?.id }) ?? exams.first {
             exam = Exam(name: record.course, detail: record.reminderBody, startMinutes: record.startMinutes,
                         simulated: false, leadDetail: record.leadReminderBody)
+            if let timedScheduled {
+                examActivity = timedScheduled
+            } else {
+                let start = record.startMinutes != nil ? (record.startDate() ?? now.addingTimeInterval(3600)) : now.addingTimeInterval(3600)
+                let end = record.endMinutes != nil ? (record.endDate() ?? start.addingTimeInterval(7200)) : start.addingTimeInterval(7200)
+                examActivity = WatchSnapshot.Exam(id: record.id, name: record.course, start: start, end: end,
+                                                  time: record.timeWithoutDate, room: record.room, seat: record.seat,
+                                                  note: record.note, hasStartTime: true)
+            }
         } else if !lessons.isEmpty {
             let lesson = lessons[Int(sampleIndex % UInt64(lessons.count))]
             exam = Exam(name: lesson.name, detail: "课程教室：\(lesson.displayRoom)",
                         startMinutes: Self.minutes(of: lesson.start), simulated: true)
+            examActivity = WatchSnapshot.Exam(id: "preview-\(lesson.id)", name: lesson.name,
+                                              start: lesson.start, end: lesson.end,
+                                              time: "", room: lesson.displayRoom, seat: "", note: "",
+                                              hasStartTime: true)
         } else {
             let courses = fallbackCourses.filter { !$0.isPlaceholder && !$0.name.isEmpty }
-            if courses.isEmpty { exam = nil }
-            else {
+            if courses.isEmpty {
+                exam = nil
+                examActivity = nil
+            } else {
                 let course = courses[Int(sampleIndex % UInt64(courses.count))]
                 exam = Exam(name: course.name, detail: "考试安排待定", startMinutes: nil, simulated: true)
+                let start = now.addingTimeInterval(3600)
+                examActivity = WatchSnapshot.Exam(id: "preview-\(course.courseKey)", name: course.name,
+                                                  start: start, end: start.addingTimeInterval(7200),
+                                                  time: "", room: "", seat: "", note: "", hasStartTime: true)
             }
         }
     }

@@ -133,23 +133,37 @@ struct NotificationSample: View {
 }
 
 struct CourseActivityPreview: View {
-    enum Phase { case before, between, during }
+    enum Phase { case before, between, during, exam(Int) }
     let phase: Phase
     @Environment(\.reminderPreview) private var data
     @Environment(\.colorScheme) private var scheme
     @State private var anchor = Date()
 
-    private var slot: CourseActivitySlot? {
+    private var courseSlot: CourseActivitySlot? {
         switch phase {
         case .before: data?.preparation
         case .between: data?.between
         case .during: data?.during
+        case .exam: nil
+        }
+    }
+
+    private var examSlot: ExamActivitySlot? {
+        guard case .exam(let lead) = phase else { return nil }
+        return data?.examActivitySlot(leadMinutes: lead)
+    }
+
+    private var emptyMessage: String {
+        switch phase {
+        case .between: "本地课表暂无课间安排"
+        case .exam: "暂无可预览的本地安排"
+        case .before, .during: "暂无可预览的本地课程"
         }
     }
 
     var body: some View {
-        if let slot {
-            let end = phase == .during ? slot.lesson.end : slot.lesson.start
+        if let slot = courseSlot {
+            let end = isDuring ? slot.lesson.end : slot.lesson.start
             let remaining = end.timeIntervalSince(slot.begins) / 2
             TimelineView(.periodic(from: anchor, by: remaining)) { tick in
                 let offset = tick.date.addingTimeInterval(remaining).timeIntervalSince(end)
@@ -157,9 +171,23 @@ struct CourseActivityPreview: View {
                 CourseActivityCard(course: CoursePresentation(state: state, colorScheme: scheme, now: tick.date))
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             }
+        } else if let slot = examSlot {
+            let end = slot.exam.start
+            let remaining = end.timeIntervalSince(slot.begins) / 2
+            TimelineView(.periodic(from: anchor, by: remaining)) { tick in
+                let offset = tick.date.addingTimeInterval(remaining).timeIntervalSince(end)
+                let state = CourseActivityAttributes.ContentState(examSlot: slot, timeOffset: offset)
+                CourseActivityCard(course: CoursePresentation(state: state, colorScheme: scheme, now: tick.date))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
         } else {
-            Text(phase == .between ? "本地课表暂无课间安排" : "暂无可预览的本地课程")
+            Text(emptyMessage)
                 .font(.footnote).foregroundStyle(.secondary)
         }
+    }
+
+    private var isDuring: Bool {
+        if case .during = phase { return true }
+        return false
     }
 }

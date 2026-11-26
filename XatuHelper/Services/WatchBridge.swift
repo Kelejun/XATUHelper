@@ -104,7 +104,8 @@ extension AppState {
             guard let start = exam.startDate(in: calendar),
                   let end = exam.endDate(in: calendar) else { return nil }
             return .init(id: exam.id, name: exam.course, start: start, end: end,
-                         time: exam.timeWithoutDate, room: exam.room, seat: exam.seat, note: exam.note)
+                         time: exam.timeWithoutDate, room: exam.room, seat: exam.seat, note: exam.note,
+                         hasStartTime: exam.startMinutes != nil)
         }
     }
 

@@ -32,6 +32,35 @@ struct CourseActivitySlot: Equatable {
     }
 }
 
+/// An upcoming exam that can occupy the Dynamic Island before it starts.
+struct ExamActivitySlot: Equatable {
+    static let defaultLeadMinutes = 60
+
+    let exam: WatchSnapshot.Exam
+    let begins: Date
+    let visibleFrom: Date
+
+    var activityID: String { "exam-\(exam.id)" }
+
+    init?(exam: WatchSnapshot.Exam, leadMinutes: Int = defaultLeadMinutes) {
+        guard exam.knowsStartTime else { return nil }
+        let lead = max(1, leadMinutes)
+        self.exam = exam
+        begins = exam.start.addingTimeInterval(-Double(lead * 60))
+        visibleFrom = begins
+    }
+
+    static func upcoming(in snapshot: WatchSnapshot, at now: Date,
+                         leadMinutes: Int = defaultLeadMinutes) -> [Self] {
+        guard snapshot.loggedIn else { return [] }
+        return snapshot.exams
+            .filter { $0.knowsStartTime && $0.start > now }
+            .sorted { $0.start < $1.start }
+            .prefix(2)
+            .compactMap { Self(exam: $0, leadMinutes: leadMinutes) }
+    }
+}
+
 extension WatchSnapshot.Lesson {
     var displayRoom: String {
         let location = room.isEmpty ? fullRoom : room

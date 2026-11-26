@@ -33,15 +33,26 @@ struct CourseDetails: View {
                 .fixedSize(horizontal: false, vertical: true)
             if course.routeOrigin == nil {
                 Spacer(minLength: 0)
-                Text(course.state.room)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(course.tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(course.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: 96, alignment: .trailing)
+                HStack(spacing: 4) {
+                    Text(course.state.room)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(course.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                    if let seat = course.examSeat {
+                        Text(seat)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(course.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                            .layoutPriority(1)
+                    }
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(course.tint)
+                .frame(maxWidth: course.examSeat == nil ? 96 : 156, alignment: .trailing)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,8 +108,23 @@ struct CoursePresentation {
         finished = (state.preparationOnly == true && !preparing) || now >= state.end || (!hasPreparation && isStale)
     }
 
+    var isExam: Bool { state.isExam == true }
+
+    var examSeat: String? {
+        guard isExam, let seat = state.seat?.trimmingCharacters(in: .whitespacesAndNewlines), !seat.isEmpty else { return nil }
+        return "座位 \(seat)"
+    }
+
+    var watchVenue: String {
+        examSeat.map { "\(state.room) · \($0)" } ?? state.room
+    }
+
     var phase: String {
-        if finished { return state.preparationOnly == true ? "已上课" : "已下课" }
+        if finished {
+            if isExam { return "已开考" }
+            return state.preparationOnly == true ? "已上课" : "已下课"
+        }
+        if isExam { return "考前" }
         if !preparing { return "上课中" }
         return state.previousRoom == nil ? "课前" : "课间"
     }
@@ -108,9 +134,15 @@ struct CoursePresentation {
         return previous
     }
 
-    var countdownLabel: String { preparing ? "距上课" : "距下课" }
+    var countdownLabel: String {
+        if isExam { return "距开考" }
+        return preparing ? "距上课" : "距下课"
+    }
+
     var mark: Image {
-        Image(systemName: finished ? "checkmark" : preparing ? "figure.walk" : "book.fill")
+        if finished { return Image(systemName: "checkmark") }
+        if isExam { return Image(systemName: "pencil.and.list.clipboard") }
+        return Image(systemName: preparing ? "figure.walk" : "book.fill")
     }
     var foreground: Color { colorScheme == .dark ? .white : Color(white: 0.12) }
 
@@ -121,7 +153,7 @@ struct CoursePresentation {
     }
 
     var tint: Color {
-        let color = CampusCourseColors.color(index: state.colorIndex)
+        let color = isExam ? CampusFeatureColors.exam : CampusCourseColors.color(index: state.colorIndex)
         if colorScheme == .light {
             let resolved = color.resolve(in: EnvironmentValues())
             return Color(red: Double(resolved.red) * 0.72,
@@ -184,7 +216,7 @@ struct CoursePresentation {
             .frame(height: height)
             .background(foreground.opacity(0.15), in: Capsule())
             .clipShape(Capsule())
-            .accessibilityLabel(Text(preparing ? "课前进度" : "课程进度"))
+            .accessibilityLabel(Text(isExam ? "考前进度" : (preparing ? "课前进度" : "课程进度")))
     }
 
     private var progress: ProgressView<EmptyView, EmptyView> {

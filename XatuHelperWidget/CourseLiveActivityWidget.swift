@@ -4,6 +4,11 @@ import WidgetKit
 
 struct CourseLiveActivityWidget: Widget {
     private let timetable = URL(string: "xatuhelper://timetable")
+    private let exam = URL(string: "xatuhelper://exam")
+
+    private func destination(for state: CourseActivityAttributes.ContentState) -> URL? {
+        state.isExam == true ? exam : timetable
+    }
 
     var body: some WidgetConfiguration {
         if #available(iOS 18, *) {
@@ -22,7 +27,7 @@ struct CourseLiveActivityWidget: Widget {
                     CourseLockScreen(context: context)
                 }
             }
-            .widgetURL(timetable)
+            .widgetURL(destination(for: context.state))
         } dynamicIsland: { context in
             let course = CoursePresentation(context)
             return DynamicIsland {
@@ -62,7 +67,7 @@ struct CourseLiveActivityWidget: Widget {
                 .padding(.leading, 3)
                 .foregroundStyle(course.tint)
                 .privacySensitive()
-                .accessibilityLabel(Text("\(course.phase)，\(course.state.room)"))
+                .accessibilityLabel(Text("\(course.phase)，\(course.watchVenue)"))
             } compactTrailing: {
                 CourseCompactTimer(course: course)
                     .padding(.trailing, 3)
@@ -70,7 +75,7 @@ struct CourseLiveActivityWidget: Widget {
                 CourseActivityEmblem(course: course)
             }
             .keylineTint(course.tint)
-            .widgetURL(timetable)
+            .widgetURL(destination(for: context.state))
         }
     }
 }
@@ -112,7 +117,7 @@ private struct CourseWatchActivityView: View {
                         .foregroundStyle(course.foreground.opacity(0.72))
                         .layoutPriority(1)
                     Spacer(minLength: 0)
-                    Text(course.state.room)
+                    Text(course.watchVenue)
                         .foregroundStyle(course.tint)
                         .truncationMode(.head)
                         .privacySensitive()
@@ -211,7 +216,7 @@ private struct CourseActivityEmblem: View {
         .foregroundStyle(course.tint)
         .frame(width: 23, height: 23)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("课程进度，\(course.phase)"))
+        .accessibilityLabel(Text(course.isExam ? "考试进度，\(course.phase)" : "课程进度，\(course.phase)"))
     }
 }
 
