@@ -291,7 +291,7 @@ struct InfoView: View {
 
     private func subtitle(for entry: Entry) -> String {
         guard entry == .bill, let balance = app.electricityBalance else { return entry.subtitle }
-        return "剩 \(balance) 度"
+        return "剩 \(balance) \(app.electricityUnit)"
     }
 
     @ViewBuilder

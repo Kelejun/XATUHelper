@@ -62,6 +62,7 @@ extension AppState {
             tomorrowCourses: tomorrowCourses,
             tomorrowWeekday: tomorrowWeekday,
             balance: electricityBalance.flatMap(Double.init),
+            balanceUnit: dorm?.balanceUnit,
             balanceUpdatedAt: electricityCheckedAt,
             roomName: dorm?.roomName,
             upcomingBreak: upcomingBreakForWidget(),

@@ -337,10 +337,10 @@ private struct WatchElectricityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 WatchPageHeading(title: "宿舍电费", tint: .orange)
-                Text("剩余电量").font(.caption).foregroundStyle(.secondary)
+                Text(snapshot.electricityBalanceLabel).font(.caption).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(snapshot.balance ?? "—").font(.system(size: 42, weight: .bold, design: .rounded)).minimumScaleFactor(0.5).lineLimit(1).foregroundStyle(.orange)
-                    Text("度").font(.callout).foregroundStyle(.secondary)
+                    Text(snapshot.resolvedBalanceUnit).font(.callout).foregroundStyle(.secondary)
                 }
                 Text(snapshot.roomName ?? "请在手机端绑定宿舍").font(.callout)
                 WatchUpdateLabel(title: "手机查询", date: snapshot.balanceUpdatedAt)

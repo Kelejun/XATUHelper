@@ -504,7 +504,7 @@ struct CampusOverviewWidgetView: View {
                 Image(systemName: "bolt.fill")
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
-                Text("宿舍电量")
+                Text(entry.snapshot.electricityWidgetTitle)
                     .foregroundStyle(.secondary)
             }
             .font(.system(size: 11, weight: .medium))
@@ -519,21 +519,21 @@ struct CampusOverviewWidgetView: View {
                         .monospacedDigit()
                         .minimumScaleFactor(0.55)
                         .layoutPriority(1)
-                    Text("度")
+                    Text(entry.snapshot.resolvedBalanceUnit)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(isLowElectricity ? Color.orange : Color.primary)
                 .lineLimit(1)
 
-                Text(isLowElectricity ? "电量偏低，记得充值" : "剩余可用电量")
+                Text(isLowElectricity ? entry.snapshot.electricityLowHint : entry.snapshot.electricityAvailableHint)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(isLowElectricity ? Color.orange : Color.secondary)
                     .lineLimit(1)
             } else {
                 Text("待查询")
                     .font(.system(size: 22, weight: .semibold))
-                Text("打开 App 查询电量")
+                Text("打开 App 查询电费")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

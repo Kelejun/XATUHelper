@@ -16,7 +16,9 @@ swiftc -module-cache-path "$build_dir/modules" \
   -o "$build_dir/repository"
 "$build_dir/repository"
 swiftc -module-cache-path "$build_dir/modules" \
-  XatuHelper/Models/ElectricityRecord.swift tests/ElectricityUsageTests.swift \
+  XatuHelper/Models/ElectricityRecord.swift XatuHelper/Models/Dorm.swift \
+  XatuHelper/Services/WidgetSnapshot.swift Shared/WatchSnapshot.swift \
+  tests/ElectricityUsageTests.swift \
   -o "$build_dir/electricity"
 "$build_dir/electricity"
 swiftc -module-cache-path "$build_dir/modules" \

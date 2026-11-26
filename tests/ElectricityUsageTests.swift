@@ -33,6 +33,43 @@ struct ElectricityUsageTests {
         let boundary = ElectricityUsagePoint.make(history: [record(1, 20), record(5, 8)],
                                                   from: record(3, 0).date, through: record(6, 0).date)
         check(boundary.map(\.usage) == [3, 3, 3], "interval clipped to visible range after averaging")
+
+        // 16 公寓 (E051) 与普通公寓 (E017) 模型及向后兼容回归检查
+        let legacyJSON = #"{"areaID":"1","areaName":"未央校区","buildID":"9","buildName":"9号公寓","roomID":"320","roomName":"320"}"#
+        let legacyDorm = try! JSONDecoder().decode(DormSelection.self, from: Data(legacyJSON.utf8))
+        check(legacyDorm.projectID == nil && !legacyDorm.usesNestedJsonData, "legacy dorm decodes without project fields")
+        check(legacyDorm.balanceUnit == "度" && legacyDorm.balanceLabel == "剩余电量", "legacy dorm defaults to kWh unit")
+
+        let b16Dorm = DormSelection(
+            projectID: "68e3d0aff9a04590a1e3e871d9cd9b26",
+            projectName: "16公寓电费充值",
+            factoryCode: "E051",
+            areaID: "1",
+            areaName: "西安工业大学",
+            buildID: "B1",
+            buildName: "B1-16#公寓",
+            roomID: "H101",
+            roomName: "1-101"
+        )
+        check(b16Dorm.usesNestedJsonData && b16Dorm.isAmountBalance, "E051 uses nested jsonData and amount balance")
+        check(b16Dorm.balanceUnit == "元" && b16Dorm.balanceLabel == "剩余金额", "E051 displays yuan and amount label")
+        check(b16Dorm.lowBalanceNotice == "余额偏低，请及时充值", "E051 uses amount low-balance wording")
+
+        let e017Project = PayProject(id: "p1", name: "电费充值", modelURL: "electric", factoryCode: "E017")
+        let e051Project = PayProject(id: "p2", name: "16公寓电费充值", modelURL: "electric", factoryCode: "E051")
+        check(!e017Project.usesNestedJsonData && e051Project.usesNestedJsonData, "project factoryCode routing")
+
+        var widgetSnap = WidgetSnapshot.empty
+        check(widgetSnap.resolvedBalanceUnit == "度" && !widgetSnap.isAmountBalance, "widget snapshot defaults to kWh")
+        widgetSnap.balanceUnit = "元"
+        check(widgetSnap.resolvedBalanceUnit == "元" && widgetSnap.isAmountBalance, "widget snapshot supports yuan")
+        check(widgetSnap.electricityWidgetTitle == "宿舍电费" && widgetSnap.electricityAvailableHint == "剩余可用金额", "widget snapshot uses amount copy")
+
+        var watchSnap = WatchSnapshot.empty
+        check(watchSnap.resolvedBalanceUnit == "度" && watchSnap.electricityBalanceLabel == "剩余电量", "watch snapshot defaults to kWh")
+        watchSnap.balanceUnit = "元"
+        check(watchSnap.resolvedBalanceUnit == "元" && watchSnap.electricityBalanceLabel == "剩余金额", "watch snapshot supports yuan")
+
         print("Passed \(count) electricity usage checks")
     }
 }

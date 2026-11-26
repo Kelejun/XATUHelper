@@ -34,7 +34,7 @@ struct ElectricityView: View {
                         Label("历史余额", systemImage: "clock.arrow.circlepath")
                     }
                 } header: {
-                    Text("近30天用量")
+                    Text(app.isAmountElectricity ? "近30天消费" : "近30天用量")
                 } footer: {
                     Text("每天第一次查到余额时记一条，同一天刷新多次只留一条。")
                 }
@@ -61,7 +61,7 @@ struct ElectricityView: View {
                     ContentUnavailableView {
                         Label("选择宿舍", systemImage: "building.2")
                     } description: {
-                        Text("选择楼栋和房间后，即可查看剩余电量。")
+                        Text("选择楼栋和房间后，即可查看电费余额。")
                     } actions: {
                         Button("选择宿舍") { editing = true }
                             .buttonStyle(.borderedProminent)
@@ -167,13 +167,13 @@ struct ElectricityView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("剩余电量")
+                Text(app.electricityBalanceLabel)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.orange)
                 balanceValue
                     .accessibilityElement(children: .combine)
                 if app.isLowBalance {
-                    Label("电量偏低，请及时充值", systemImage: "exclamationmark.triangle.fill")
+                    Label(app.dorm?.lowBalanceNotice ?? "电量偏低，请及时充值", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.orange)
                 }
@@ -217,12 +217,15 @@ struct ElectricityView: View {
         let axisStride = dayCount <= 7 ? 1 : (dayCount <= 14 ? 2 : 7)
         let selected = points.first { $0.date == selectedUsageDate }
 
+        let unit = app.electricityUnit
+        let isAmount = app.isAmountElectricity
+
         if points.isEmpty {
             VStack(spacing: 10) {
                 Image(systemName: "chart.xyaxis.line")
                     .font(.title2)
                     .foregroundStyle(.orange)
-                Text("再攒几天就能看到每天用多少了")
+                Text(isAmount ? "再攒几天就能看到每天花多少了" : "再攒几天就能看到每天用多少了")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -261,7 +264,7 @@ struct ElectricityView: View {
                             .foregroundStyle(.orange)
                             .symbolSize(14)
                             .accessibilityLabel(point.date.formatted(.dateTime.month().day()))
-                            .accessibilityValue(String(format: "%.2f 度", usage) + (point.hasRecharge ? "，充值日估算" : ""))
+                            .accessibilityValue(String(format: "%.2f %@", usage, unit) + (point.hasRecharge ? "，充值日估算" : ""))
                         }
                     }
                     if let selected {
@@ -289,7 +292,7 @@ struct ElectricityView: View {
                         AxisGridLine()
                         AxisValueLabel {
                             if let amount = value.as(Double.self) {
-                                Text(String(format: amount < 10 ? "%.1f 度" : "%.0f 度", amount))
+                                Text(String(format: amount < 10 ? "%.1f %@" : "%.0f %@", amount, unit))
                             }
                         }
                     }
@@ -300,12 +303,13 @@ struct ElectricityView: View {
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(selected.date.formatted(.dateTime.month().day()))
                                 .foregroundStyle(.secondary)
-                            Text(selected.usage.map { String(format: "%.2f 度", $0) } ?? "暂无用量估算")
+                            Text(selected.usage.map { String(format: "%.2f %@", $0, unit) }
+                                 ?? (isAmount ? "暂无消费估算" : "暂无用量估算"))
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
                                 .foregroundStyle(.orange)
                             if selected.hasRecharge {
-                                Text(selected.usage == nil ? "有电费充值" : "充值日·平均用量估算")
+                                Text(selected.usage == nil ? "有电费充值" : (isAmount ? "充值日·平均消费估算" : "充值日·平均用量估算"))
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.orange)
                                     .padding(.horizontal, 8)
@@ -362,8 +366,11 @@ struct ElectricityView: View {
     private var averageUsageText: String? {
         let values = usagePoints.compactMap(\.usage)
         guard !values.isEmpty else { return nil }
-        return String(format: "有记录的 %d 天，平均每天用 %.2f 度", values.count,
-                      values.reduce(0, +) / Double(values.count))
+        let average = values.reduce(0, +) / Double(values.count)
+        if app.isAmountElectricity {
+            return String(format: "有记录的 %d 天，平均每天花 %.2f 元", values.count, average)
+        }
+        return String(format: "有记录的 %d 天，平均每天用 %.2f 度", values.count, average)
     }
 
     @ViewBuilder
@@ -374,7 +381,7 @@ struct ElectricityView: View {
                     .font(.system(.largeTitle, design: .rounded, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(.orange)
-                Text("度")
+                Text(app.electricityUnit)
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -486,16 +493,13 @@ private struct ElectricityChartTouchOverlay: UIViewRepresentable {
     }
 }
 
-/// 选宿舍：校区只有一个就自动选掉，楼栋和房间各自一页
+/// 选宿舍：直接按电费入口分组展示楼栋，点进去选房间
 struct DormPickerView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage("showDiagnostics") private var showDiagnostics = false
 
-    @State private var schools: [DormOption] = []
-    @State private var buildings: [DormOption] = []
-    @State private var area: DormOption?
-
+    @State private var sections: [DormBuildingSection] = []
     @State private var loading = false
     @State private var error: String?
 
@@ -504,7 +508,7 @@ struct DormPickerView: View {
             if let error {
                 Section {
                     Text(error).font(.footnote).foregroundStyle(.red)
-                    Button("重试") { Task { await loadSchools() } }
+                    Button("重试") { Task { await loadSections() } }
                     if showDiagnostics {
                         DiagnosticExportButton(filenamePrefix: "XATune-electricity-diagnostics") {
                             [
@@ -517,26 +521,18 @@ struct DormPickerView: View {
                 }
             }
 
-            if area == nil {
-                Section("校区") {
-                    if loading && schools.isEmpty { ProgressView() }
-                    ForEach(schools) { option in
-                        Button(option.name) {
-                            area = option
-                            buildings = []
-                            Task { await loadBuildings(area: option) }
-                        }
-                    }
+            if loading && sections.isEmpty {
+                Section("楼栋") {
+                    ProgressView()
                 }
             } else {
-                Section("楼栋") {
-                    if loading && buildings.isEmpty {
-                        ProgressView()
-                    }
-                    ForEach(buildings) { option in
-                        NavigationLink(option.name) {
-                            RoomPickerPage(area: area!, build: option) { room in
-                                save(area: area!, build: option, room: room)
+                ForEach(sections) { section in
+                    Section(sectionTitle(for: section)) {
+                        ForEach(section.buildings) { option in
+                            NavigationLink(option.name) {
+                                RoomPickerPage(project: section.project, area: section.area, build: option) { room in
+                                    save(project: section.project, area: section.area, build: option, room: room)
+                                }
                             }
                         }
                     }
@@ -550,37 +546,34 @@ struct DormPickerView: View {
                 Button("取消") { dismiss() }
             }
         }
-        .task { await loadSchools() }
+        .task { await loadSections() }
     }
 
-    private func loadSchools() async {
+    private func sectionTitle(for section: DormBuildingSection) -> String {
+        guard sections.count > 1 else { return "楼栋" }
+        let sameProjectCount = sections.filter { $0.project.id == section.project.id }.count
+        if sameProjectCount > 1, !section.area.name.isEmpty {
+            return "\(section.project.name) · \(section.area.name)"
+        }
+        return section.project.name
+    }
+
+    private func loadSections() async {
         loading = true
         error = nil
         do {
-            schools = try await app.loadSchools()
-            // 只有一个校区就直接选掉，别让用户多点一步
-            if schools.count == 1, let only = schools.first {
-                area = only
-                await loadBuildings(area: only)
-            }
+            sections = try await app.loadDormBuildingSections()
         } catch {
             self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
     }
 
-    private func loadBuildings(area: DormOption) async {
-        loading = true
-        do {
-            buildings = try await app.loadBuildings(areaID: area.id)
-        } catch {
-            self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
-        }
-        loading = false
-    }
-
-    private func save(area: DormOption, build: DormOption, room: DormOption) {
+    private func save(project: PayProject, area: DormOption, build: DormOption, room: DormOption) {
         let selection = DormSelection(
+            projectID: project.id,
+            projectName: project.name,
+            factoryCode: project.factoryCode,
             areaID: area.id,
             areaName: area.name,
             buildID: build.id,
@@ -598,6 +591,7 @@ private struct RoomPickerPage: View {
     @EnvironmentObject var app: AppState
     @Environment(\.dismiss) private var dismiss
 
+    let project: PayProject
     let area: DormOption
     let build: DormOption
     let onPick: (DormOption) -> Void
@@ -642,7 +636,7 @@ private struct RoomPickerPage: View {
         loading = true
         error = nil
         do {
-            rooms = try await app.loadRooms(areaID: area.id, buildID: build.id)
+            rooms = try await app.loadRooms(project: project, areaID: area.id, buildID: build.id)
         } catch {
             self.error = (error as? AppError)?.errorDescription ?? error.localizedDescription
         }

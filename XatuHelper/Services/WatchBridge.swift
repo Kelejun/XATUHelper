@@ -145,7 +145,8 @@ extension AppState {
         return WatchSnapshot(generatedAt: Date(), accountID: studentID, loggedIn: true, semester: semesterName,
                              weekOneMonday: base, timetableUpdatedAt: fetchedAt, examsUpdatedAt: examsFetchedAt,
                              lessons: lessons.sorted { $0.start < $1.start }, exams: datedExams,
-                             balance: electricityBalance, balanceUpdatedAt: electricityCheckedAt,
+                             balance: electricityBalance, balanceUnit: dorm?.balanceUnit,
+                             balanceUpdatedAt: electricityCheckedAt,
                              roomName: dorm?.roomName, holidays: holidays.sorted { $0.date < $1.date })
     }
 }

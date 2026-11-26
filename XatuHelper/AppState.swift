@@ -159,7 +159,7 @@ final class AppState: ObservableObject {
     private let cas = CASService()
     private let eams = EamsService()
     private let pay = PayService()
-    private var electricProject: PayProject?
+    private var electricProjectsCache: [PayProject] = []
 
     /// 正在进行的自动登录任务，多个请求共用
     private var reloginTask: Task<Void, Error>?
@@ -545,7 +545,7 @@ final class AppState: ObservableObject {
         examContext = ""
         gradeContext = ""
         gradeSummary = nil
-        electricProject = nil
+        electricProjectsCache = []
         examStore.clear()
         gradeStore.clear()
         planStore.clear()
@@ -1094,9 +1094,10 @@ final class AppState: ObservableObject {
             scheduleBackgroundElectricityRefresh()
         }
         do {
-            let balance = try await withPay { project -> String in
+            let balance = try await withReloginValue {
+                let project = try await self.resolveElectricProject(for: dorm)
                 try Task.checkCancellation()
-                return try await self.pay.balance(projectID: project.id, dorm: dorm)
+                return try await self.pay.balance(projectID: project.id, factoryCode: project.factoryCode, dorm: dorm)
             }
             try Task.checkCancellation()
             // 查询途中关掉自动刷新、退出账号或更换宿舍，不能把旧结果写回去。
@@ -1138,7 +1139,11 @@ final class AppState: ObservableObject {
         return previous.balance - record.balance
     }
 
-    /// 余额低于十度就当快没电了，用橙色提醒一下
+    var isAmountElectricity: Bool { dorm?.isAmountBalance ?? false }
+    var electricityUnit: String { dorm?.balanceUnit ?? "度" }
+    var electricityBalanceLabel: String { dorm?.balanceLabel ?? "剩余电量" }
+
+    /// 余额低于十度（或十元）就当快没电了，用橙色提醒一下
     var isLowBalance: Bool {
         guard let text = electricityBalance else { return false }
         let cleaned = text.replacingOccurrences(of: "¥", with: "").trimmingCharacters(in: .whitespaces)
@@ -1182,40 +1187,90 @@ final class AppState: ObservableObject {
         return (url: "https://jfpay.xatu.edu.cn/casLogin/", hash: nil)
     }
 
-    func loadSchools() async throws -> [DormOption] {
-        if isDemoMode { return [DormOption(id: "demo-area", name: "未央校区")] }
-        return try await withPay { try await self.pay.schools(projectID: $0.id) }
-    }
-
-    func loadBuildings(areaID: String) async throws -> [DormOption] {
-        if isDemoMode { return [DormOption(id: "demo-build", name: "9号公寓")] }
-        return try await withPay { try await self.pay.buildings(projectID: $0.id, areaID: areaID) }
-    }
-
-    func loadRooms(areaID: String, buildID: String) async throws -> [DormOption] {
-        if isDemoMode { return [DormOption(id: "demo-room", name: "320宿舍")] }
-        return try await withPay { try await self.pay.rooms(projectID: $0.id, areaID: areaID, buildID: buildID) }
-    }
-
-    /// 借统一认证的登录态进 jfpay，顺手找到电费项目；会话过期会走一次自动重登
-    private func withPay<T>(_ operation: (PayProject) async throws -> T) async throws -> T {
-        try await withReloginValue {
-            let project = try await self.electricProjectOrLoad()
-            return try await operation(project)
+    func loadDormBuildingSections() async throws -> [DormBuildingSection] {
+        if isDemoMode {
+            return [
+                DormBuildingSection(
+                    project: PayProject(id: "demo-project", name: "电费充值", modelURL: "electric", factoryCode: "E017"),
+                    area: DormOption(id: "demo-area", name: "未央校区"),
+                    buildings: [DormOption(id: "demo-build", name: "9号公寓")]
+                )
+            ]
+        }
+        return try await withReloginValue {
+            let projects = try await self.electricProjectsOrLoad()
+            var sections: [DormBuildingSection] = []
+            var firstError: Error?
+            for project in projects {
+                try Task.checkCancellation()
+                do {
+                    let areas = try await self.pay.schools(projectID: project.id)
+                    for area in areas {
+                        try Task.checkCancellation()
+                        let buildings = try await self.pay.buildings(
+                            projectID: project.id,
+                            factoryCode: project.factoryCode,
+                            areaID: area.id
+                        )
+                        if !buildings.isEmpty {
+                            sections.append(DormBuildingSection(project: project, area: area, buildings: buildings))
+                        }
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    if firstError == nil { firstError = error }
+                }
+            }
+            if sections.isEmpty, let firstError {
+                throw firstError
+            }
+            return sections
         }
     }
 
-    private func electricProjectOrLoad() async throws -> PayProject {
-        if let project = electricProject { return project }
+    func loadRooms(project: PayProject, areaID: String, buildID: String) async throws -> [DormOption] {
+        if isDemoMode { return [DormOption(id: "demo-room", name: "320宿舍")] }
+        return try await withReloginValue {
+            try await self.pay.rooms(
+                projectID: project.id,
+                factoryCode: project.factoryCode,
+                areaID: areaID,
+                buildID: buildID
+            )
+        }
+    }
+
+    private func electricProjectsOrLoad() async throws -> [PayProject] {
+        if !electricProjectsCache.isEmpty { return electricProjectsCache }
         let generation = sessionGeneration
         let list = try await pay.electricProjects()
         try Task.checkCancellation()
         guard generation == sessionGeneration else { throw CancellationError() }
-        guard let first = list.first else {
+        guard !list.isEmpty else {
             throw AppError.loginFailed("缴费平台里没找到电费项目，可能学校还没开这个入口")
         }
-        electricProject = first
-        return first
+        electricProjectsCache = list
+        return list
+    }
+
+    private func resolveElectricProject(for dorm: DormSelection) async throws -> PayProject {
+        let list = try await electricProjectsOrLoad()
+        if let id = dorm.projectID, !id.isEmpty {
+            if let matched = list.first(where: { $0.id == id }) {
+                return matched
+            }
+            return PayProject(
+                id: id,
+                name: dorm.projectName ?? "电费",
+                modelURL: "electric",
+                factoryCode: dorm.factoryCode ?? ""
+            )
+        }
+        if let standard = list.first(where: { $0.factoryCode.caseInsensitiveCompare("E017") == .orderedSame }) {
+            return standard
+        }
+        return list[0]
     }
 
     /// 冷启动后补一次外壳信息：学生/班级记录 ID、学期 tagId，顺便刷新学期列表
@@ -1328,7 +1383,7 @@ final class AppState: ObservableObject {
         examsFetchedAt = nil; gradesFetchedAt = nil; planFetchedAt = nil
         currentExamsFetchedAt = nil
         examContext = ""; gradeContext = ""; currentTable = nil
-        electricProject = nil
+        electricProjectsCache = []
         studentTableID = nil; classTableID = nil
         semesters = []; currentSemesterID = ""
         examStore.clear(); gradeStore.clear(); planStore.clear(); PlanCatalogStore.clear()

@@ -527,7 +527,7 @@ struct HomeView: View {
     private var electricityCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("剩余电量")
+                Text(app.electricityBalanceLabel)
                     .font(.headline)
                 if app.electricityLoading {
                     ProgressView().controlSize(.mini)
@@ -541,7 +541,7 @@ struct HomeView: View {
                         .foregroundStyle(app.isLowBalance ? Color.orange : Color.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
-                    Text("度")
+                    Text(app.electricityUnit)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

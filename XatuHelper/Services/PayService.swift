@@ -185,33 +185,60 @@ struct PayService {
 
     // MARK: - 校区 / 楼栋 / 房间
 
+    static func requestBody(projectID: String, factoryCode: String?, params: [String: String]) -> [String: Any] {
+        guard !params.isEmpty else { return ["projectId": projectID] }
+        if DormSelection.usesNestedJsonData(factoryCode: factoryCode) {
+            return ["projectId": projectID, "jsonData": params]
+        }
+        var body: [String: Any] = ["projectId": projectID]
+        for (key, value) in params {
+            body[key] = value
+        }
+        return body
+    }
+
     func schools(projectID: String) async throws -> [DormOption] {
         let data = try await post("pay/web/payEleCostController/querySchoolList", ["projectId": projectID])
         return options(data, idKey: "schoolid", nameKey: "schoolname")
     }
 
-    func buildings(projectID: String, areaID: String) async throws -> [DormOption] {
-        let data = try await post("pay/web/payEleCostController/queryBuildingList",
-                                  ["projectId": projectID, "areaid": areaID])
+    func buildings(projectID: String, factoryCode: String? = nil, areaID: String) async throws -> [DormOption] {
+        let data = try await post(
+            "pay/web/payEleCostController/queryBuildingList",
+            Self.requestBody(projectID: projectID, factoryCode: factoryCode, params: ["areaid": areaID])
+        )
         return options(data, idKey: "buildid", nameKey: "buildname")
     }
 
-    func rooms(projectID: String, areaID: String, buildID: String) async throws -> [DormOption] {
-        let data = try await post("pay/web/payEleCostController/queryRoomList",
-                                  ["projectId": projectID, "areaid": areaID, "buildid": buildID])
+    func rooms(projectID: String, factoryCode: String? = nil, areaID: String, buildID: String) async throws -> [DormOption] {
+        let data = try await post(
+            "pay/web/payEleCostController/queryRoomList",
+            Self.requestBody(projectID: projectID, factoryCode: factoryCode, params: ["areaid": areaID, "buildid": buildID])
+        )
         return options(data, idKey: "roomid", nameKey: "roomname")
     }
 
-    /// 剩余电量（度）
+    /// 剩余电量（度）或剩余金额（元，如 16 公寓 E051）
     /// 平台前端有两种口径：多数项目直接显示 oddl，但部分项目显示 suml - oddl。
-    /// 实测本校：oddl=9183.18 是累计已用电量，suml=9237.05 是累计补充电量，差 53.87 才是余额。
-    func balance(projectID: String, dorm: DormSelection) async throws -> String {
-        let data = try await post("pay/web/payEleCostController/querySydl", [
-            "projectId": projectID,
-            "areaid": dorm.areaID,
-            "buildid": dorm.buildID,
-            "roomid": dorm.roomID
-        ])
+    /// 实测本校：普通公寓（E017）oddl 是累计已用电量，suml 是累计补充电量，差值才是余额；
+    /// 16 公寓（E051）suml 为 null，直接取 oddl 作为剩余金额。
+    func balance(projectID: String, factoryCode: String? = nil, dorm: DormSelection) async throws -> String {
+        let data = try await post(
+            "pay/web/payEleCostController/querySydl",
+            Self.requestBody(
+                projectID: projectID,
+                factoryCode: factoryCode ?? dorm.factoryCode,
+                params: [
+                    "areaid": dorm.areaID,
+                    "buildid": dorm.buildID,
+                    "roomid": dorm.roomID
+                ]
+            )
+        )
+        return try Self.parseBalance(data)
+    }
+
+    static func parseBalance(_ data: Any) throws -> String {
         guard let first = Self.array(data).first else {
             throw AppError.loginFailed("余额接口没数据（\(Self.preview(data))）")
         }

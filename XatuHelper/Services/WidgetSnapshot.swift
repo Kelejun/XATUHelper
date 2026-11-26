@@ -36,6 +36,7 @@ struct WidgetSnapshot: Codable {
     var tomorrowWeekday: Int? = nil
     var datedCourses: [Course]? = nil
     var balance: Double?
+    var balanceUnit: String? = nil
     var balanceUpdatedAt: Date?
     var roomName: String?
     var upcomingBreak: Break?
@@ -105,6 +106,30 @@ struct WidgetSnapshot: Codable {
         let exams = upcomingExams ?? nextExam.map { [$0] } ?? []
         dates.append(contentsOf: exams.compactMap(\.end).filter { $0 > now && $0 <= horizon })
         return Array(Set(dates)).sorted()
+    }
+
+    var resolvedBalanceUnit: String {
+        balanceUnit == "元" ? "元" : "度"
+    }
+
+    var isAmountBalance: Bool {
+        resolvedBalanceUnit == "元"
+    }
+
+    var electricityWidgetTitle: String {
+        isAmountBalance ? "宿舍电费" : "宿舍电量"
+    }
+
+    var electricityLowHeading: String {
+        isAmountBalance ? "宿舍余额偏低" : "宿舍电量偏低"
+    }
+
+    var electricityLowHint: String {
+        isAmountBalance ? "余额偏低，记得充值" : "电量偏低，记得充值"
+    }
+
+    var electricityAvailableHint: String {
+        isAmountBalance ? "剩余可用金额" : "剩余可用电量"
     }
 
     var weekdayLabel: String { Self.weekdayLabel(weekday) }

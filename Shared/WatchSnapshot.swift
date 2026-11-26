@@ -14,9 +14,18 @@ struct WatchSnapshot: Codable, Equatable {
     var lessons: [Lesson]
     var exams: [Exam]
     var balance: String?
+    var balanceUnit: String? = nil
     var balanceUpdatedAt: Date?
     var roomName: String?
     var holidays: [Holiday]
+
+    var resolvedBalanceUnit: String {
+        balanceUnit == "元" ? "元" : "度"
+    }
+
+    var electricityBalanceLabel: String {
+        resolvedBalanceUnit == "元" ? "剩余金额" : "剩余电量"
+    }
 
     struct Lesson: Codable, Identifiable, Hashable {
         var id: String

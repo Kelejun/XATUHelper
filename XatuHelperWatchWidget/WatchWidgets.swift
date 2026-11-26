@@ -69,7 +69,7 @@ private struct WatchComplicationView: View {
         switch kind {
         case .exam: return exam?.name ?? (entry.snapshot.examsUpdatedAt == nil ? "考试尚未同步" : "暂无待考科目")
         case .course: return lesson?.name ?? "暂无后续课程"
-        case .electricity: return "\(entry.snapshot.balance ?? "—") 度"
+        case .electricity: return "\(entry.snapshot.balance ?? "—") \(entry.snapshot.resolvedBalanceUnit)"
         case .holiday:
             guard let holiday else { return "请更新校历" }
             let days = WatchSnapshot.days(from: entry.date, to: holiday.date)
@@ -137,7 +137,7 @@ private struct WatchComplicationView: View {
                         } else {
                             Image(systemName: icon).font(.caption2)
                             Text(entry.snapshot.balance ?? "—").font(.system(size: 16, weight: .bold, design: .rounded)).minimumScaleFactor(0.5).lineLimit(1)
-                            Text("度").font(.system(size: 9))
+                            Text(entry.snapshot.resolvedBalanceUnit).font(.system(size: 9))
                         }
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 default:
@@ -207,7 +207,7 @@ private struct WatchComplicationView: View {
     private var rectangularHeading: String {
         switch kind {
         case .course, .exam: return detail
-        case .electricity: return "剩余电量"
+        case .electricity: return entry.snapshot.electricityBalanceLabel
         case .holiday: return "假期倒计时"
         }
     }

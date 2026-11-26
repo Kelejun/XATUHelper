@@ -460,23 +460,24 @@ struct ElectricityWidgetView: View {
 
     private var isLow: Bool { (entry.snapshot.balance ?? .infinity) < 10 }
     private var tint: Color { isLow ? .orange : .primary }
+    private var unit: String { entry.snapshot.resolvedBalanceUnit }
 
     var body: some View {
         if !entry.snapshot.loggedIn {
             EmptyHint()
         } else if family == .accessoryRectangular {
-            LockScreenRows(icon: "bolt.fill", heading: isLow ? "宿舍电量偏低" : "宿舍电量",
-                           title: entry.snapshot.balance.map { String(format: "%.2f 度", $0) } ?? "待查询",
+            LockScreenRows(icon: "bolt.fill", heading: isLow ? entry.snapshot.electricityLowHeading : entry.snapshot.electricityWidgetTitle,
+                           title: entry.snapshot.balance.map { String(format: "%.2f %@", $0, unit) } ?? "待查询",
                            subtitle: lockScreenDetail, titleFont: .system(size: 22, weight: .bold, design: .rounded))
                 .privacySensitive()
         } else if family == .accessoryCircular {
             LockScreenCompactValue(icon: "bolt.fill",
                                    value: entry.snapshot.balance.map { String(format: "%.2f", $0) } ?? "—",
-                                   caption: entry.snapshot.balance == nil ? "待查询" : isLow ? "度 · 偏低" : "度")
+                                   caption: entry.snapshot.balance == nil ? "待查询" : isLow ? "\(unit) · 偏低" : unit)
                 .privacySensitive()
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                SmallWidgetHeader(icon: "bolt.fill", title: "宿舍电量", tint: .orange)
+                SmallWidgetHeader(icon: "bolt.fill", title: entry.snapshot.electricityWidgetTitle, tint: .orange)
 
                 Spacer(minLength: 6)
 
@@ -487,20 +488,20 @@ struct ElectricityWidgetView: View {
                             .monospacedDigit()
                             .minimumScaleFactor(0.55)
                             .layoutPriority(1)
-                        Text("度")
+                        Text(unit)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                     .foregroundStyle(tint)
                     .lineLimit(1)
-                    Text(isLow ? "电量偏低，记得充值" : "剩余可用电量")
+                    Text(isLow ? entry.snapshot.electricityLowHint : entry.snapshot.electricityAvailableHint)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(isLow ? Color.orange : Color.secondary)
                         .lineLimit(1)
                 } else {
                     Text("待查询")
                         .font(.system(size: 27, weight: .semibold))
-                    Text("打开 App 查询宿舍电量")
+                    Text("打开 App 查询宿舍电费")
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
