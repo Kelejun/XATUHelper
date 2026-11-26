@@ -4,6 +4,7 @@ import SwiftUI
 final class NotificationPermissionReview: ObservableObject {
     private static let reviewedKey = "notify.reminderSetupReviewed.2026-11-25"
     @Published private(set) var pending: Bool
+    @Published private(set) var dismissedInSession = false
     @Published private(set) var presenter: UUID?
     private let defaults: UserDefaults
 
@@ -32,7 +33,13 @@ final class NotificationPermissionReview: ObservableObject {
 
     func finish(_ scene: UUID) {
         guard presenter == scene else { return }
-        defaults.set(true, forKey: Self.reviewedKey)
+        let completed = defaults.bool(forKey: NotificationSettings.prompted) &&
+            defaults.bool(forKey: CourseActivityController.promptedKey)
+        if completed {
+            defaults.set(true, forKey: Self.reviewedKey)
+        } else {
+            dismissedInSession = true
+        }
         pending = false
         presenter = nil
     }
@@ -42,10 +49,19 @@ private struct NotificationReviewPendingKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct CourseReminderSuppressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var notificationReviewPending: Bool {
         get { self[NotificationReviewPendingKey.self] }
         set { self[NotificationReviewPendingKey.self] = newValue }
+    }
+
+    var courseReminderSuppressed: Bool {
+        get { self[CourseReminderSuppressedKey.self] }
+        set { self[CourseReminderSuppressedKey.self] = newValue }
     }
 }
 

@@ -171,9 +171,7 @@ struct CampusOverviewWidgetView: View {
     // MARK: - 左侧：课程面板
 
     private var todayRemaining: [WidgetSnapshot.Course] {
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
+        let minutes = WidgetSnapshot.minutes(of: entry.date)
         return entry.snapshot.courses.filter { $0.endMinutes > minutes }
     }
 
@@ -308,6 +306,7 @@ struct CampusOverviewWidgetView: View {
         .background(panelBackground(tint: .blue))
         .overlay(panelBorder(tint: .blue))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .privacySensitive()
     }
 
     private func upcomingCourseRow(_ course: WidgetSnapshot.Course) -> some View {
@@ -337,9 +336,7 @@ struct CampusOverviewWidgetView: View {
     }
 
     private func courseStatus(_ course: WidgetSnapshot.Course) -> String {
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
+        let minutes = WidgetSnapshot.minutes(of: entry.date)
         return !showingTomorrow && minutes >= course.startMinutes
             ? "正在上课 · \(WidgetSnapshot.clock(course.endMinutes)) 下课"
             : "下一节 · \(WidgetSnapshot.clock(course.endMinutes)) 下课"
@@ -627,7 +624,7 @@ struct CampusOverviewWidgetView: View {
 
             Spacer(minLength: 4)
 
-            Text(item?.date.formatted(.dateTime.month().day().weekday(.abbreviated)) ?? "打开 App 更新校历")
+            Text(item.map { BreakWidgetView.formatBreakDate($0.date) } ?? "打开 App 更新校历")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

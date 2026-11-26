@@ -132,5 +132,6 @@ struct ContentView: View {
         }
         .environmentObject(announcements)
         .environment(\.notificationReviewPending, permissionReview.pending)
+        .environment(\.courseReminderSuppressed, permissionReview.dismissedInSession)
     }
 }

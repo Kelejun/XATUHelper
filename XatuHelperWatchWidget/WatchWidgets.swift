@@ -178,7 +178,9 @@ private struct WatchComplicationView: View {
             } else {
                 Label {
                     if kind == .exam, let exam {
-                        let venue = [exam.room, exam.seat.isEmpty ? "" : "座位 " + exam.seat]
+                        let room = exam.room.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let seat = exam.seat.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let venue = [room, seat.isEmpty ? "" : "座位 " + seat]
                             .filter { !$0.isEmpty }.joined(separator: " · ")
                         ViewThatFits(in: .horizontal) {
                             if !venue.isEmpty { Text(rectangularHeading + " · " + venue).fixedSize() }

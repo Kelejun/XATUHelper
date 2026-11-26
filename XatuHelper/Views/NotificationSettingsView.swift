@@ -1,3 +1,4 @@
+import ActivityKit
 import SwiftUI
 import UserNotifications
 
@@ -115,6 +116,12 @@ struct ExamNotificationSection: View {
             }
         }
         .onChange(of: enabled) { _, on in
+            if on && times.count == 0 {
+                times.eve = true
+                times.morning = true
+                times.before = true
+                times.save()
+            }
             Task {
                 if on { await requestAuthorizationIfNeeded() }
                 await app.rescheduleNotifications()
@@ -122,6 +129,9 @@ struct ExamNotificationSection: View {
         }
         .onChange(of: times) { _, value in
             value.save()
+            if value.count == 0 && enabled {
+                enabled = false
+            }
             Task { await app.rescheduleNotifications() }
         }
     }
@@ -130,16 +140,28 @@ struct ExamNotificationSection: View {
 struct CourseActivitySettingsSection: View {
     @AppStorage(CourseActivityController.beforeKey) private var before = false
     @AppStorage(CourseActivityController.duringKey) private var during = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
     var body: some View {
         Section {
             Toggle("课前", isOn: $before)
             CourseActivityPreview(phase: .before)
             CourseActivityPreview(phase: .between)
+        } footer: {
+            if (before || during) && !activitiesEnabled {
+                Text("系统设置中未开启实时活动，开启后才会显示。")
+            }
         }
         Section {
             Toggle("课中", isOn: $during)
             CourseActivityPreview(phase: .during)
+        }
+        .onAppear { activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+            }
         }
     }
 }

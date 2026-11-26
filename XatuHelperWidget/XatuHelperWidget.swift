@@ -212,9 +212,7 @@ struct CourseWidgetView: View {
 
     /// 今天还没上完的课
     private var todayRemaining: [WidgetSnapshot.Course] {
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
+        let minutes = WidgetSnapshot.minutes(of: entry.date)
         return entry.snapshot.courses.filter { $0.endMinutes > minutes }
     }
 
@@ -252,9 +250,7 @@ struct CourseWidgetView: View {
     }
 
     private func lockScreenTime(_ course: WidgetSnapshot.Course) -> String {
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
+        let minutes = WidgetSnapshot.minutes(of: entry.date)
         if !showingTomorrow && minutes >= course.startMinutes {
             return "\(WidgetSnapshot.clock(course.endMinutes)) 下课"
         }
@@ -375,9 +371,7 @@ struct CourseWidgetView: View {
     }
 
     private func courseStatus(_ course: WidgetSnapshot.Course, compact: Bool = false) -> String {
-        let calendar = Calendar.current
-        let minutes = calendar.component(.hour, from: entry.date) * 60
-            + calendar.component(.minute, from: entry.date)
+        let minutes = WidgetSnapshot.minutes(of: entry.date)
         if compact {
             return !showingTomorrow && minutes >= course.startMinutes
                 ? "正在上课" : "\(WidgetSnapshot.clock(course.endMinutes)) 下课"
@@ -567,7 +561,7 @@ struct BreakWidgetView: View {
             if let item = entry.snapshot.upcomingBreak {
                 LockScreenRows(icon: "sun.horizon.fill", heading: item.title,
                                title: item.days <= 0 ? "今天" : "\(item.days) 天",
-                               subtitle: item.date.formatted(.dateTime.month().day().weekday(.abbreviated)),
+                               subtitle: Self.formatBreakDate(item.date),
                                titleFont: .system(size: 22, weight: .bold, design: .rounded))
             } else {
                 LockScreenRows(icon: "calendar", heading: "假期倒计时",
@@ -581,10 +575,16 @@ struct BreakWidgetView: View {
             let item = entry.snapshot.upcomingBreak
             SmallCountdownCard(icon: "sun.horizon.fill", title: "假期倒计时", tint: .teal,
                                days: item?.days, name: item?.title,
-                               detail: item?.date.formatted(.dateTime.month().day().weekday(.abbreviated)),
+                               detail: item.map { Self.formatBreakDate($0.date) },
                                emptyIcon: "calendar.badge.plus", emptyTitle: "期待下一次放假",
                                emptyDetail: "打开 App 查看校历后显示")
         }
+    }
+
+    static func formatBreakDate(_ date: Date) -> String {
+        var format = Date.FormatStyle.dateTime.month().day().weekday(.abbreviated)
+        format.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return date.formatted(format)
     }
 }
 

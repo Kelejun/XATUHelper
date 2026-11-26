@@ -115,6 +115,17 @@ struct WidgetSnapshot: Codable {
         return names[index - 1]
     }
 
+    static var campusCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    static func minutes(of date: Date) -> Int {
+        let calendar = campusCalendar
+        return calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
+    }
+
     static func clock(_ minutes: Int) -> String {
         String(format: "%02d:%02d", minutes / 60, minutes % 60)
     }

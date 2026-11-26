@@ -27,3 +27,8 @@ swiftc -module-cache-path "$build_dir/modules" \
   XatuHelper/Models/Course.swift XatuHelper/Models/Exam.swift XatuHelper/Models/ReminderPreviewData.swift \
   tests/ReminderPreviewTests.swift -o "$build_dir/reminder-preview"
 "$build_dir/reminder-preview"
+swiftc -module-cache-path "$build_dir/modules" \
+  XatuHelper/Models/Course.swift XatuHelper/Models/Exam.swift \
+  XatuHelper/Services/WidgetSnapshot.swift tests/ExamDisplayTests.swift \
+  -o "$build_dir/exam-display"
+"$build_dir/exam-display"
