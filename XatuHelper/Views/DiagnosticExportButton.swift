@@ -50,12 +50,27 @@ struct DiagnosticExportButton: View {
     }
 }
 
-private struct DiagnosticSharedFile: Identifiable {
+struct DiagnosticSharedFile: Identifiable {
     let id = UUID()
     let url: URL
+
+    static func writeTemporary(prefix: String, content: String) throws -> (file: DiagnosticSharedFile, directory: URL) {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DiagnosticExport-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let timestamp = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
+        let url = directory.appendingPathComponent("\(prefix)-\(timestamp).txt")
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            return (DiagnosticSharedFile(url: url), directory)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
 }
 
-private struct DiagnosticShareSheet: UIViewControllerRepresentable {
+struct DiagnosticShareSheet: UIViewControllerRepresentable {
     let url: URL
     let onError: (Error) -> Void
 

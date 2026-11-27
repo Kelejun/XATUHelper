@@ -34,3 +34,8 @@ swiftc -module-cache-path "$build_dir/modules" \
   XatuHelper/Services/WidgetSnapshot.swift tests/ExamDisplayTests.swift \
   -o "$build_dir/exam-display"
 "$build_dir/exam-display"
+swiftc -module-cache-path "$build_dir/modules" \
+  XatuHelper/Services/BuildInfo.swift XatuHelper/Services/LoginDiagnostics.swift \
+  tests/LoginDiagnosticsTests.swift \
+  -o "$build_dir/login-diagnostics"
+"$build_dir/login-diagnostics"

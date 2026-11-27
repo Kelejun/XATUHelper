@@ -21,12 +21,16 @@ struct EamsService {
     static var lastSemesterRaw = ""
     /// 最近一次课表外壳页的原始 HTML
     static var lastShellRaw = ""
+    static var lastShellStatus: Int?
+    static var lastShellURL = ""
     /// 最近一次首页的原始 HTML（用来读"现在是第几周"）
     static var lastHomeRaw = ""
     /// 最后一次请求失败的原因（有的话）
     static var lastError = ""
     /// 最近一次课表接口的原始响应
     static var lastTableRaw = ""
+    static var lastTableStatus: Int?
+    static var lastTableURL = ""
     /// 最近一次考试页外壳（stdExamTable.action）的原始 HTML
     static var lastExamShellRaw = ""
     /// 最近一次考试表（stdExamTable!examTable.action）的原始 HTML
@@ -129,6 +133,8 @@ struct EamsService {
         let host = response.url?.host ?? ""
         let html = String(data: data, encoding: .utf8) ?? ""
         EamsService.lastShellRaw = html
+        EamsService.lastShellStatus = (response as? HTTPURLResponse)?.statusCode
+        EamsService.lastShellURL = response.url?.absoluteString ?? url.absoluteString
         EamsService.lastError = ""
 
         if host.contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
@@ -244,6 +250,8 @@ struct EamsService {
         let finalHost = response.url?.host ?? ""
         let table = String(data: data, encoding: .utf8) ?? ""
         EamsService.lastTableRaw = table
+        EamsService.lastTableStatus = (response as? HTTPURLResponse)?.statusCode
+        EamsService.lastTableURL = response.url?.absoluteString ?? url.absoluteString
 
         if finalHost.contains("authserver") || table.contains("id=\"pwdEncryptSalt\"") {
             throw AppError.sessionExpired

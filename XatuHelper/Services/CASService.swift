@@ -37,18 +37,34 @@ enum AppError: LocalizedError {
 
 /// 记一下每次请求的 302 链，出问题能看出是在哪儿打转
 final class NetRedirectTracer: NSObject, URLSessionTaskDelegate {
-    static var lastHops: [String] = []
+    private static let lock = NSLock()
+    private static var _lastHops: [String] = []
+    static var lastHops: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _lastHops
+        }
+        set {
+            lock.lock()
+            _lastHops = newValue
+            lock.unlock()
+        }
+    }
 
-    private var buffer: [String] = []
+    static func reset() {
+        lastHops = []
+    }
 
     func urlSession(_ session: URLSession,
                     task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        buffer.append(request.url?.absoluteString ?? "")
-        if buffer.count > 16 { buffer.removeFirst() }
-        NetRedirectTracer.lastHops = buffer
+        Self.lock.lock()
+        Self._lastHops.append(request.url?.absoluteString ?? "")
+        if Self._lastHops.count > 16 { Self._lastHops.removeFirst() }
+        Self.lock.unlock()
         completionHandler(request)
     }
 }
@@ -134,35 +150,64 @@ struct CASService {
 
     /// 用学号密码登录，成功后 cookie 落在共享存储里，jwgl2018 那边就能用了。
     func login(username: String, password: String) async throws {
+        var clearedCount = 0
         for cookie in HTTPCookieStorage.shared.cookies ?? []
         where cookie.domain == "xatu.edu.cn" || cookie.domain.hasSuffix(".xatu.edu.cn") {
             HTTPCookieStorage.shared.deleteCookie(cookie)
+            clearedCount += 1
         }
         CookieVault.clear()
+        LoginDiagnostics.shared.record(category: "CAS", message: "清理旧 Cookie count=\(clearedCount)")
         guard var components = URLComponents(string: Self.loginPage) else { throw AppError.badURL }
         components.queryItems = [URLQueryItem(name: "service", value: Self.service)]
         guard let url = components.url else { throw AppError.badURL }
 
-        let (pageData, pageResponse) = try await fetch(url)
-        guard let html = String(data: pageData, encoding: .utf8) else { throw AppError.parseFailed }
+        NetRedirectTracer.reset()
+        let (pageData, pageResponse): (Data, URLResponse)
+        do {
+            (pageData, pageResponse) = try await fetch(url)
+        } catch {
+            LoginDiagnostics.shared.recordRedirectHops(NetRedirectTracer.lastHops, category: "CAS", label: "GET登录页")
+            LoginDiagnostics.shared.record(category: "CAS", message: "GET 登录页失败", url: url, error: error)
+            throw error
+        }
+        let getStatus = (pageResponse as? HTTPURLResponse)?.statusCode
+        LoginDiagnostics.shared.recordRedirectHops(NetRedirectTracer.lastHops, category: "CAS", label: "GET登录页")
+        LoginDiagnostics.shared.record(category: "CAS", message: "GET 登录页完成 bytes=\(pageData.count)", url: pageResponse.url, statusCode: getStatus)
+
+        guard let html = String(data: pageData, encoding: .utf8) else {
+            LoginDiagnostics.shared.record(category: "CAS", message: "GET 登录页非 UTF-8 编码", url: pageResponse.url, statusCode: getStatus)
+            throw AppError.parseFailed
+        }
 
         // 统一认证那边的会话还活着时会带着 ticket 直接跳回业务系统，页面上根本没有登录表单。
         // 这种其实已经登录成功、cookie 也落地了，直接返回。
         let landedHost = pageResponse.url?.host ?? ""
         if !landedHost.contains("authserver"), !html.contains("pwdEncryptSalt") {
+            LoginDiagnostics.shared.record(category: "CAS", message: "GET 登录页直接跳转业务系统（免密复用会话）", url: pageResponse.url, statusCode: getStatus)
             return
         }
 
         // captchaSwitch 打开表示这次一定要填验证码，纯 API 过不去，直接交给网页
         if Self.captchaRequired(in: html) {
+            LoginDiagnostics.shared.recordHTML(category: "CAS", label: "GET 检测到 captchaSwitch 开启", html: html, url: pageResponse.url, statusCode: getStatus)
             throw AppError.needCaptcha
         }
 
-        guard let salt = html.firstMatch(#"id="pwdEncryptSalt"[^>]*value="([^"]*)""#),
-              let execution = html.firstMatch(#"id="execution"[^>]*value="([^"]*)""#) else {
+        let salt = html.firstMatch(#"id="pwdEncryptSalt"[^>]*value="([^"]*)""#)
+        let execution = html.firstMatch(#"id="execution"[^>]*value="([^"]*)""#)
+        guard let salt, let execution else {
+            LoginDiagnostics.shared.recordHTML(
+                category: "CAS",
+                label: "GET 表单解析失败 hasSalt=\(salt != nil) hasExecution=\(execution != nil)",
+                html: html,
+                url: pageResponse.url,
+                statusCode: getStatus
+            )
             throw AppError.parseFailed
         }
         let lt = html.firstMatch(#"id="lt"[^>]*value="([^"]*)""#) ?? ""
+        LoginDiagnostics.shared.record(category: "CAS", message: "表单字段提取完成 saltLen=\(salt.count), hasExecution=true, hasLt=\(!lt.isEmpty)")
 
         let body = Net.formBody([
             ("username", username),
@@ -182,23 +227,37 @@ struct CASService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data(body.utf8)
 
-        let (responseData, response) = try await Net.session.data(for: request)
+        NetRedirectTracer.reset()
+        let (responseData, response): (Data, URLResponse)
+        do {
+            (responseData, response) = try await Net.session.data(for: request)
+        } catch {
+            LoginDiagnostics.shared.recordRedirectHops(NetRedirectTracer.lastHops, category: "CAS", label: "POST登录")
+            LoginDiagnostics.shared.record(category: "CAS", message: "POST 登录请求失败", url: url, error: error)
+            throw error
+        }
+        let postStatus = (response as? HTTPURLResponse)?.statusCode
         let finalHost = response.url?.host ?? ""
         let finalHTML = String(data: responseData, encoding: .utf8) ?? ""
+        LoginDiagnostics.shared.recordRedirectHops(NetRedirectTracer.lastHops, category: "CAS", label: "POST登录")
+        LoginDiagnostics.shared.record(category: "CAS", message: "POST 登录响应完成 bytes=\(responseData.count)", url: response.url, statusCode: postStatus)
 
         if finalHost.contains("authserver") || finalHTML.contains("id=\"pwdEncryptSalt\"") {
             // 登录失败回到的页面本身就带验证码/动态码字样，不能只看提示文案。
             // 先看服务端是不是把验证码开关打开了——这就是"要验证码"最可靠的信号，
             // 这种情况下提示经常只写"用户名或密码错误"，照着显示会把人带沟里。
             if Self.captchaRequired(in: finalHTML) {
+                LoginDiagnostics.shared.recordHTML(category: "CAS", label: "POST 后要求验证码(captchaSwitch)", html: finalHTML, url: response.url, statusCode: postStatus)
                 throw AppError.needCaptcha
             }
             let message = errorMessage(from: finalHTML)
+            LoginDiagnostics.shared.recordHTML(category: "CAS", label: "POST 留在认证页 extractedMsg=\(message)", html: finalHTML, url: response.url, statusCode: postStatus)
             if message.contains("验证码") || message.contains("动态码") {
                 throw AppError.needCaptcha
             }
             throw AppError.loginFailed(message)
         }
+        LoginDiagnostics.shared.record(category: "CAS", message: "CAS 原生登录落地成功", url: response.url, statusCode: postStatus)
     }
 
     private func fetch(_ url: URL) async throws -> (Data, URLResponse) {

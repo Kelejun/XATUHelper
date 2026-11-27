@@ -392,27 +392,34 @@ final class AppState: ObservableObject {
         isLoading = true
         errorMessage = nil
         pendingCredentials = (student, password)
+        LoginDiagnostics.shared.beginAttempt(trigger: "nativeLogin", studentID: student, password: password)
         do {
             try await cas.login(username: student, password: password)
             guard generation == sessionGeneration else { throw CancellationError() }
             pendingPasswordVerified = true
             try Keychain.savePassword(password, account: student)
+            LoginDiagnostics.shared.record(category: "LOGIN", message: "Keychain 保存凭证成功")
             Preferences.studentID = student
             setTimetableAccount(student)
             try await bootstrap()
+            LoginDiagnostics.shared.record(category: "EAMS", message: "bootstrap 完成 semesters=\(semesters.count)")
             selectedSemesterID = currentSemesterID
             await calibrateFromServer()
             try await loadTable()
+            LoginDiagnostics.shared.record(category: "EAMS", message: "loadTable 完成 occurrences=\(officialOccurrences.count)")
             CookieVault.pinAndSave()
             showsWebLogin = false
             dismissNotice()
             isLoggedIn = true
             pendingCredentials = nil
+            LoginDiagnostics.shared.clearPasswordSecret()
+            LoginDiagnostics.shared.record(category: "LOGIN", message: "原生登录全流程完成")
         } catch {
             if generation == sessionGeneration, !Task.isCancelled {
+                LoginDiagnostics.shared.record(category: "LOGIN", message: "原生登录失败，准备处理", error: error)
                 if (error as NSError).domain == NSOSStatusErrorDomain {
                     errorMessage = "无法保存登录凭证，请稍后重试。"
-                } else { presentLoginFailure() }
+                } else { presentLoginFailure(reason: error) }
             }
         }
         isLoading = false
@@ -425,9 +432,12 @@ final class AppState: ObservableObject {
         let session = webLoginSessionID
         defer { isLoading = false }
         errorMessage = nil
+        LoginDiagnostics.shared.registerKnownStudentID(pendingCredentials?.student ?? studentID)
+        LoginDiagnostics.shared.record(category: "WEB_COMPLETE", message: "开始网页登录后同步 hasPendingCredentials=\(pendingCredentials != nil)")
         do {
             if let credentials = pendingCredentials { setTimetableAccount(credentials.student) }
             try await bootstrap()
+            LoginDiagnostics.shared.record(category: "WEB_COMPLETE", message: "bootstrap 成功 semesters=\(semesters.count)")
             try Task.checkCancellation()
             guard session == webLoginSessionID else { return }
             if selectedSemesterID.isEmpty {
@@ -435,6 +445,7 @@ final class AppState: ObservableObject {
             }
             await calibrateFromServer()
             try await loadTable()
+            LoginDiagnostics.shared.record(category: "WEB_COMPLETE", message: "loadTable 成功 occurrences=\(officialOccurrences.count)")
 
             try Task.checkCancellation()
             guard session == webLoginSessionID else { return }
@@ -449,14 +460,19 @@ final class AppState: ObservableObject {
             showsWebLogin = false
             dismissNotice()
             isLoggedIn = true
+            LoginDiagnostics.shared.clearPasswordSecret()
+            LoginDiagnostics.shared.record(category: "WEB_COMPLETE", message: "网页登录全流程完成")
             await rescheduleNotifications()
         } catch {
             guard !Task.isCancelled, session == webLoginSessionID else { return }
-            presentLoginFailure()
+            LoginDiagnostics.shared.record(category: "WEB_COMPLETE", message: "网页登录后同步失败", error: error)
+            presentLoginFailure(reason: error)
         }
     }
 
     func cancelWebLogin() {
+        LoginDiagnostics.shared.record(category: "WEB", message: "用户关闭网页登录弹窗")
+        LoginDiagnostics.shared.clearPasswordSecret()
         webLoginSessionID = UUID()
         showsWebLogin = false
         pendingCredentials = nil
@@ -464,11 +480,33 @@ final class AppState: ObservableObject {
         if inAppNotice?.kind == .loginFailure { dismissNotice() }
     }
 
-    private func presentLoginFailure() {
+    private func presentLoginFailure(reason: Error? = nil) {
         errorMessage = nil
         webLoginSessionID = UUID()
         showsWebLogin = true
+        LoginDiagnostics.shared.record(category: "WEB", message: "弹出网页登录弹窗 session=\(webLoginSessionID.uuidString.prefix(8))", error: reason)
         showNotice(InAppNotice(kind: .loginFailure, message: "可能是因为密码错误、触发验证码等原因"))
+    }
+
+    func buildLoginDiagnosticReport(webSnapshot: WebLoginLiveSnapshot?) async -> String {
+        LoginDiagnostics.shared.registerKnownStudentID(pendingCredentials?.student ?? studentID)
+        let summary = [
+            "isLoggedIn=\(isLoggedIn), isLoading=\(isLoading), showsWebLogin=\(showsWebLogin)",
+            "webLoginSession=\(webLoginSessionID.uuidString.prefix(8))",
+            "hasSavedStudentID=\(!(Preferences.studentID ?? "").isEmpty), hasPendingCredentials=\(pendingCredentials != nil), pendingPasswordVerified=\(pendingPasswordVerified)",
+            "semesters=\(semesters.count), hasStudentTableID=\(studentTableID != nil), hasClassTableID=\(classTableID != nil)"
+        ]
+        return await LoginDiagnostics.shared.buildReport(
+            webSnapshot: webSnapshot,
+            appSummary: summary,
+            eamsShellStatus: EamsService.lastShellStatus,
+            eamsShellURL: EamsService.lastShellURL,
+            eamsShellHTML: EamsService.lastShellRaw,
+            eamsTableStatus: EamsService.lastTableStatus,
+            eamsTableURL: EamsService.lastTableURL,
+            eamsTableHTML: EamsService.lastTableRaw,
+            eamsLastError: EamsService.lastError
+        )
     }
 
     func refresh() async {
@@ -1435,6 +1473,8 @@ final class AppState: ObservableObject {
             if case .needCaptcha = appError {
                 // 这种错不该在界面上干挂着，直接开网页
                 errorMessage = nil
+                LoginDiagnostics.shared.beginAttempt(trigger: "needCaptchaRelogin", studentID: studentID, password: nil)
+                LoginDiagnostics.shared.record(category: "WEB", message: "触发 needCaptcha，弹出网页登录")
                 showsWebLogin = true
                 return
             }
