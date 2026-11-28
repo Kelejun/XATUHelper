@@ -112,33 +112,219 @@ struct EamsService {
         var projectID: String
     }
 
-    /// 拉课表页外壳，取出学生记录 ID、班级 ID、当前学期 ID、学期控件的 tagId
-    func loadShell() async throws -> Shell {
-        guard let url = URL(string: base + "/eams/courseTableForStd.action") else {
-            throw AppError.badURL
+    struct ProjectTab: Equatable {
+        var name: String
+        var href: String?
+        var projectID: String?
+        var isSelected: Bool
+    }
+
+    struct MultiProjectWrapper: Equatable {
+        var tabs: [ProjectTab]
+        /// 当前选中的不是首选项目（「本科」/主修）时，需先请求该 `!index.action?projectId=...` 切换服务端会话项目
+        var switchHref: String?
+        /// 需进一步拉取的内页 `!innerIndex.action` 地址
+        var innerPath: String
+        /// 若已识别出目标项目 ID，可供兜底
+        var projectID: String?
+    }
+
+    /// 识别树维多培养项目（如「本科 / 微专业」）外层切换壳页。
+    /// 单项目页面与已进入 `!innerIndex.action` 的内页均不含多项目 `.navmenu`，返回 `nil`。
+    static func parseMultiProjectWrapper(_ html: String, modulePath: String) -> MultiProjectWrapper? {
+        guard let navBlock = html.firstMatch(
+            #"(?is)<div[^>]*class\s*=\s*["'][^"']*\bnavmenu\b[^"']*["'][^>]*>([\s\S]*?)</div>"#
+        ) else {
+            return nil
         }
+
+        let tabs: [ProjectTab] = navBlock.regexGroups(#"(?is)<a\b([^>]*)>([\s\S]*?)</a>"#).compactMap { groups in
+            guard groups.count >= 2 else { return nil }
+            let attrs = groups[0]
+            let name = groups[1].strippingTags
+                .replacingOccurrences(of: "&nbsp;", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let isSelected = attrs.range(of: #"(?i)\bselected\b"#, options: .regularExpression) != nil
+            let rawHref = attrs.firstMatch(#"(?i)\bhref\s*=\s*["']([^"']+)["']"#)?
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let href: String?
+            if let rawHref, !rawHref.isEmpty,
+               !rawHref.lowercased().hasPrefix("javascript:"),
+               !rawHref.hasPrefix("#") {
+                href = rawHref
+            } else {
+                href = nil
+            }
+            let projectID = href?.firstMatch(#"(?i)(?:projectId|project\.id)=([0-9]+)"#)
+            return ProjectTab(name: name, href: href, projectID: projectID, isSelected: isSelected)
+        }
+
+        let hasProjectSwitchLink = tabs.contains { tab in
+            guard let href = tab.href else { return false }
+            return href.contains("projectId=") || href.contains("project.id=") || href.contains("!index.action")
+        }
+        guard hasProjectSwitchLink else { return nil }
+
+        let preferredTab = tabs.first(where: { $0.name == "本科" })
+            ?? tabs.first(where: { $0.name.contains("本科") })
+            ?? tabs.first(where: { $0.name.contains("主修") })
+        let switchHref: String?
+        if let preferredTab, !preferredTab.isSelected, let href = preferredTab.href {
+            switchHref = href
+        } else {
+            switchHref = nil
+        }
+
+        let extractedInner = html.firstMatch(
+            #"["']((?:https?://[^"'\s<>()]+)?[^"'\s<>()'"]*!innerIndex\.action(?:\?[^"'\s<>()'"]*)?)["']"#
+        )?
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?&"))
+        let switchProjectID = switchHref?.firstMatch(#"(?i)(?:projectId|project\.id)=([0-9]+)"#)
+        let innerPath = (extractedInner?.isEmpty == false ? extractedInner! : nil)
+            ?? innerIndexPath(for: modulePath, projectID: switchProjectID ?? preferredTab?.projectID)
+        let projectID = switchProjectID
+            ?? innerPath.firstMatch(#"(?i)(?:projectId|project\.id)=([0-9]+)"#)
+            ?? preferredTab?.projectID
+
+        return MultiProjectWrapper(
+            tabs: tabs,
+            switchHref: switchHref,
+            innerPath: innerPath,
+            projectID: projectID
+        )
+    }
+
+    private static func innerIndexPath(for modulePath: String, projectID: String?) -> String {
+        let barePath = modulePath.split(separator: "?", maxSplits: 1).first.map(String.init) ?? modulePath
+        let inner: String
+        if barePath.hasSuffix("!index.action") {
+            inner = String(barePath.dropLast("!index.action".count)) + "!innerIndex.action"
+        } else if barePath.hasSuffix(".action") {
+            inner = String(barePath.dropLast(".action".count)) + "!innerIndex.action"
+        } else {
+            inner = barePath
+        }
+        if let projectID, !projectID.isEmpty {
+            return "\(inner)?projectId=\(projectID)"
+        }
+        return inner
+    }
+
+    private func resolveURL(_ raw: String, relativeTo baseURL: URL) -> URL? {
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?&"))
+        guard !cleaned.isEmpty else { return nil }
+        if cleaned.hasPrefix("http://") || cleaned.hasPrefix("https://") {
+            return URL(string: cleaned)
+        }
+        if cleaned.hasPrefix("/eams/") {
+            return URL(string: base + cleaned)
+        }
+        if cleaned.hasPrefix("/") {
+            return URL(string: base + "/eams" + cleaned)
+        }
+        return URL(string: cleaned, relativeTo: baseURL)?.absoluteURL
+    }
+
+    private func appendingQueryItems(_ items: [URLQueryItem], to url: URL) -> URL {
+        guard !items.isEmpty, var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+            return url
+        }
+        var existing = components.queryItems ?? []
+        let existingNames = Set(existing.map(\.name))
+        let missing = items.filter { !existingNames.contains($0.name) }
+        guard !missing.isEmpty else { return url }
+        existing.append(contentsOf: missing)
+        components.queryItems = existing
+        return components.url ?? url
+    }
+
+    private func fetchHTML(url: URL, label: String) async throws -> (html: String, finalURL: URL) {
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await Net.session.data(from: url)
         } catch {
-            EamsService.lastError = "课表外壳页请求失败：\(Net.describe(error))\(Net.redirectTrail)"
+            EamsService.lastError = "\(label)请求失败：\(Net.describe(error))\(Net.redirectTrail)"
             if EamsService.isRedirectLoop(error) { throw AppError.sessionExpired }
             throw AppError.network(Net.describe(error))
         }
-        let host = response.url?.host ?? ""
+        let finalURL = response.url ?? url
+        let host = finalURL.host ?? ""
         let html = String(data: data, encoding: .utf8) ?? ""
-        EamsService.lastShellRaw = html
-        EamsService.lastError = ""
-
         if host.contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
             throw AppError.sessionExpired
         }
-        // 树维自己的登录页（不是金智那张），说明会话已经没了
         if html.contains("loginExt.action") || html.contains("name=\"password\"") {
-            EamsService.lastError = "课表外壳页回到了树维登录页"
+            EamsService.lastError = "\(label)回到了树维登录页"
             throw AppError.sessionExpired
         }
+        return (html, finalURL)
+    }
+
+    /// 若页面是「本科 / 微专业」等多项目外层壳页，自动切回首选项目（优先本科）并拉取 `!innerIndex.action` 内页。
+    private func resolveMultiProjectIfNeeded(
+        html: String,
+        finalURL: URL,
+        modulePath: String,
+        query: [URLQueryItem],
+        label: String
+    ) async throws -> (html: String, projectID: String?) {
+        guard let wrapper = Self.parseMultiProjectWrapper(html, modulePath: modulePath) else {
+            return (html, nil)
+        }
+
+        var currentURL = finalURL
+        var targetInnerPath = wrapper.innerPath
+        var resolvedProjectID = wrapper.projectID
+
+        // 若服务端会话当前停留在非首选项目（例如上次看的是微专业），必须先调 !index.action 切回首选项目。
+        if let switchHref = wrapper.switchHref,
+           let switchURL = resolveURL(switchHref, relativeTo: currentURL) {
+            let switched = try await fetchHTML(url: switchURL, label: "\(label)切换项目")
+            currentURL = switched.finalURL
+            if let updated = Self.parseMultiProjectWrapper(switched.html, modulePath: modulePath) {
+                targetInnerPath = updated.innerPath
+                resolvedProjectID = updated.projectID ?? resolvedProjectID
+            } else {
+                return (switched.html, resolvedProjectID)
+            }
+        }
+
+        guard let rawInnerURL = resolveURL(targetInnerPath, relativeTo: currentURL) else {
+            throw AppError.badURL
+        }
+        var extraQuery = query
+        if let resolvedProjectID, !resolvedProjectID.isEmpty,
+           !targetInnerPath.contains("projectId="), !targetInnerPath.contains("project.id=") {
+            extraQuery.insert(URLQueryItem(name: "projectId", value: resolvedProjectID), at: 0)
+        }
+        let innerURL = appendingQueryItems(extraQuery, to: rawInnerURL)
+        let inner = try await fetchHTML(url: innerURL, label: "\(label)内页")
+        return (inner.html, resolvedProjectID)
+    }
+
+    /// 拉课表页外壳，取出学生记录 ID、班级 ID、当前学期 ID、学期控件的 tagId
+    func loadShell() async throws -> Shell {
+        let modulePath = "/eams/courseTableForStd.action"
+        guard let url = URL(string: base + modulePath) else {
+            throw AppError.badURL
+        }
+        let initial = try await fetchHTML(url: url, label: "课表外壳页")
+        EamsService.lastShellRaw = initial.html
+        EamsService.lastError = ""
+
+        let resolved = try await resolveMultiProjectIfNeeded(
+            html: initial.html,
+            finalURL: initial.finalURL,
+            modulePath: modulePath,
+            query: [],
+            label: "课表外壳页"
+        )
+        let html = resolved.html
+        EamsService.lastShellRaw = html
 
         // searchTable() 里两个分支：学生课表传学生记录 ID，班级课表传班级 ID，顺序固定
         let ids = html.regexGroups(#""ids"\s*,\s*"(\d+)""#).compactMap { $0.first }
@@ -149,7 +335,8 @@ struct EamsService {
             throw AppError.parseFailed
         }
         let tagID = html.firstMatch(#"id="(semesterBar\d+Semester)""#) ?? "semesterCalendar_target"
-        let project = await fetchProjectID()
+        let fetchedProject = await fetchProjectID()
+        let project = fetchedProject.isEmpty ? (resolved.projectID ?? "") : fetchedProject
 
         return Shell(
             studentTableID: studentID,
@@ -329,28 +516,21 @@ struct EamsService {
         return collected
     }
 
-    /// 统一的文字请求，顺便判掉登录页
+    /// 统一的文字请求，顺便判掉登录页与多项目外层切换页
     private func examText(path: String, query: [URLQueryItem], label: String) async throws -> String {
         var components = URLComponents(string: base + path)
         if !query.isEmpty { components?.queryItems = query }
         guard let url = components?.url else { throw AppError.badURL }
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await Net.session.data(from: url)
-        } catch {
-            EamsService.lastError = "\(label)请求失败：\(Net.describe(error))\(Net.redirectTrail)"
-            // 重定向打转基本都是登录态坏了：清掉 cookie 重登一次就好了
-            if EamsService.isRedirectLoop(error) { throw AppError.sessionExpired }
-            throw AppError.network(Net.describe(error))
-        }
-
-        let html = String(data: data, encoding: .utf8) ?? ""
-        if (response.url?.host ?? "").contains("authserver") || html.contains("id=\"pwdEncryptSalt\"") {
-            throw AppError.sessionExpired
-        }
-        return html
+        let initial = try await fetchHTML(url: url, label: label)
+        let resolved = try await resolveMultiProjectIfNeeded(
+            html: initial.html,
+            finalURL: initial.finalURL,
+            modulePath: path,
+            query: query,
+            label: label
+        )
+        return resolved.html
     }
 
     /// 拉培养计划完成情况：myPlanCompl.action 这张表就是「模块 / 要求学分 / 已修学分」。

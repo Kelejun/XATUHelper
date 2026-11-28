@@ -103,6 +103,162 @@ struct RepositoryRegressionTests {
                 check(true, "invalid table response rejected")
             }
         }
+
+        // 多培养项目（本科 / 微专业）页面适配回归测试
+        let normalShellHTML = """
+        <input id="semesterBar15145952571Semester" />
+        <script>
+        bg.form.addInput(form,"ids","10001");
+        bg.form.addInput(form,"ids","20002");
+        semesterCalendar({value:"102"});
+        </script>
+        """
+        let majorSelectedWrapper = """
+        <div class="navmenu">
+        <ul>
+            <li><a class="selected" href="javascript:void(0);">本科</a></li>
+            <li><a onclick="return bg.Go(this,null)" href="/eams/courseTableForStd!index.action?projectId=82">微专业</a></li>
+        </ul>
+        </div>
+        <div id="div1" class="ajax_container"></div>
+        <script>bg.Go('/eams/courseTableForStd!innerIndex.action?projectId=1','div1');</script>
+        """
+        let minorSelectedWrapper = """
+        <div class="navmenu">
+        <ul>
+            <li><a onclick="return bg.Go(this,null)" href="/eams/courseTableForStd!index.action?projectId=1">本科</a></li>
+            <li><a class="selected" href="javascript:void(0);">微专业</a></li>
+        </ul>
+        </div>
+        <div id="div1" class="ajax_container"></div>
+        <script>bg.Go('/eams/courseTableForStd!innerIndex.action?projectId=82','div1');</script>
+        """
+
+        check(EamsService.parseMultiProjectWrapper(normalShellHTML, modulePath: "/eams/courseTableForStd.action") == nil,
+              "single-project shell is not treated as multi-project wrapper")
+        let parsedMajorWrapper = EamsService.parseMultiProjectWrapper(majorSelectedWrapper, modulePath: "/eams/courseTableForStd.action")
+        check(parsedMajorWrapper?.switchHref == nil && parsedMajorWrapper?.innerPath == "/eams/courseTableForStd!innerIndex.action?projectId=1" && parsedMajorWrapper?.projectID == "1",
+              "major-selected wrapper resolves directly to innerIndex")
+        let parsedMinorWrapper = EamsService.parseMultiProjectWrapper(minorSelectedWrapper, modulePath: "/eams/courseTableForStd.action")
+        check(parsedMinorWrapper?.switchHref == "/eams/courseTableForStd!index.action?projectId=1" && parsedMinorWrapper?.projectID == "1",
+              "minor-selected wrapper requests switch back to 本科")
+
+        // 1. 本科已选中时的多项目课表外壳加载
+        var sessionProject = "1"
+        var requestedPaths: [String] = []
+        FixtureProtocol.handler = { request in
+            let url = request.url!
+            let pathWithQuery = url.query.map { "\(url.path)?\($0)" } ?? url.path
+            requestedPaths.append(pathWithQuery)
+            if url.path == "/eams/courseTableForStd.action" {
+                return (200, sessionProject == "1" ? majorSelectedWrapper : minorSelectedWrapper)
+            }
+            if url.path == "/eams/courseTableForStd!index.action" {
+                if url.query?.contains("projectId=1") == true { sessionProject = "1" }
+                return (200, majorSelectedWrapper)
+            }
+            if url.path == "/eams/courseTableForStd!innerIndex.action" {
+                return (200, sessionProject == "1" ? normalShellHTML : "<p>empty minor</p>")
+            }
+            if url.path == "/eams/dataQuery.action" {
+                return (200, sessionProject)
+            }
+            return (404, "")
+        }
+        let majorShell = try await EamsService().loadShell()
+        check(majorShell.studentTableID == "10001" && majorShell.classTableID == "20002"
+              && majorShell.currentSemesterID == "102" && majorShell.projectID == "1",
+              "loadShell resolves multi-project wrapper when 本科 is selected")
+        check(requestedPaths.contains("/eams/courseTableForStd!innerIndex.action?projectId=1"),
+              "loadShell fetches innerIndex when 本科 is selected")
+
+        // 2. 服务端会话停留在微专业时，必须先调 !index.action?projectId=1 再进内页
+        sessionProject = "82"
+        requestedPaths = []
+        let switchedShell = try await EamsService().loadShell()
+        check(switchedShell.studentTableID == "10001" && switchedShell.projectID == "1",
+              "loadShell switches session from 微专业 back to 本科")
+        check(requestedPaths.firstIndex(of: "/eams/courseTableForStd!index.action?projectId=1") != nil,
+              "loadShell calls !index.action?projectId=1 before innerIndex")
+        if let switchIndex = requestedPaths.firstIndex(of: "/eams/courseTableForStd!index.action?projectId=1"),
+           let innerIndex = requestedPaths.firstIndex(of: "/eams/courseTableForStd!innerIndex.action?projectId=1") {
+            check(switchIndex < innerIndex, "project switch precedes innerIndex fetch")
+        } else {
+            check(false, "missing switch or innerIndex request")
+        }
+
+        // 3. 考试 / 成绩 / 培养计划 / 教学计划的多项目外壳均能透传参数并进入内页
+        requestedPaths = []
+        FixtureProtocol.handler = { request in
+            let url = request.url!
+            let pathWithQuery = url.query.map { "\(url.path)?\($0)" } ?? url.path
+            requestedPaths.append(pathWithQuery)
+            switch url.path {
+            case "/eams/stdExamTable.action":
+                return (200, """
+                <div class="navmenu"><ul>
+                <li><a class="selected" href="javascript:void(0);">本科</a></li>
+                <li><a href="/eams/stdExamTable!index.action?projectId=82">微专业</a></li>
+                </ul></div><script>bg.Go('/eams/stdExamTable!innerIndex.action?projectId=1','d');</script>
+                """)
+            case "/eams/stdExamTable!innerIndex.action":
+                return (200, #"<select name="examBatch.id"><option value="0">全部</option><option value="9">期末</option></select>"#)
+            case "/eams/stdExamTable!examTable.action":
+                return (200, "<tr><th>课程名称</th><th>考试时间</th><th>考场</th></tr><tr><td>编译原理</td><td>2027-01-12 09:00-11:00</td><td>教1-101</td></tr>")
+            case "/eams/teach/grade/course/person.action":
+                return (200, """
+                <div class="navmenu"><ul>
+                <li><a class="selected" href="javascript:void(0);">本科</a></li>
+                <li><a href="/eams/teach/grade/course/person!index.action?projectId=82">微专业</a></li>
+                </ul></div><script>bg.Go('/eams/teach/grade/course/person!innerIndex.action?projectId=1','d');</script>
+                """)
+            case "/eams/teach/grade/course/person!innerIndex.action":
+                return (200, #"semesterCalendar({value:"102"})"#)
+            case "/eams/teach/grade/course/person!search.action":
+                return (200, header + math)
+            case "/eams/myPlanCompl.action":
+                return (200, """
+                <div class="navmenu"><ul>
+                <li><a class="selected" href="javascript:void(0);">本科</a></li>
+                <li><a href="/eams/myPlanCompl!index.action?projectId=82">微专业</a></li>
+                </ul></div><div class="ajax_container"></div>
+                """)
+            case "/eams/myPlanCompl!innerIndex.action":
+                return (200, """
+                姓名: 测试 专业/专业方向: 软件工程 要求学分/实修学分: 179 / 20
+                <table><tr class="darkColumn"><td colspan="3">一 通识教育</td><td>40</td><td>20</td></tr></table>
+                """)
+            case "/eams/myPlan.action":
+                return (200, """
+                <div class="navmenu"><ul>
+                <li><a class="selected" href="javascript:void(0);">本科</a></li>
+                <li><a href="/eams/myPlan!index.action?projectId=82">微专业</a></li>
+                </ul></div><script>bg.Go('/eams/myPlan!innerIndex.action?projectId=1','d');</script>
+                """)
+            case "/eams/myPlan!innerIndex.action":
+                return (200, """
+                <table class="planInfoTable"><tr>
+                <td>C001</td><td class="course">1 编译原理</td><td>3.0</td><td>48</td>
+                <td></td><td></td><td></td><td></td><td></td><td>5</td><td></td><td>是</td>
+                </tr></table>
+                """)
+            default:
+                return (404, "")
+            }
+        }
+        let exams = try await EamsService().fetchExams(semesterID: "102")
+        check(exams.count == 1 && exams[0].course == "编译原理", "fetchExams resolves multi-project wrapper")
+        check(requestedPaths.contains("/eams/stdExamTable!innerIndex.action?projectId=1&semester.id=102"),
+              "fetchExams preserves semester.id when loading innerIndex")
+        let grades = try await EamsService().fetchGrades(semesterID: "102")
+        check(grades.count == 1 && grades[0].course == "数学", "fetchGrades resolves multi-project wrapper")
+        check(requestedPaths.contains("/eams/teach/grade/course/person!innerIndex.action?projectId=1&semester.id=102"),
+              "fetchGrades preserves semester.id when loading innerIndex")
+        let plan = try await EamsService().fetchPlan()
+        check(plan.sections.count == 1 && plan.totalRequired == 179, "fetchPlan resolves multi-project wrapper without inline script URL")
+        let catalog = try await EamsService().fetchPlanCatalog()
+        check(catalog.count == 1 && catalog[0].name == "编译原理", "fetchPlanCatalog resolves multi-project wrapper")
+        FixtureProtocol.handler = nil
         print("Passed \(count) repository regression checks")
     }
 }
@@ -110,13 +266,15 @@ struct RepositoryRegressionTests {
 private final class FixtureProtocol: URLProtocol {
     static var status = 200
     static var html = ""
+    static var handler: ((URLRequest) -> (Int, String))?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status,
+        let (statusCode, body) = Self.handler?(request) ?? (Self.status, Self.html)
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode,
                                        httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/html"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(Self.html.utf8))
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

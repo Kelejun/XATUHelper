@@ -412,6 +412,8 @@ final class AppState: ObservableObject {
             if generation == sessionGeneration, !Task.isCancelled {
                 if (error as NSError).domain == NSOSStatusErrorDomain {
                     errorMessage = "无法保存登录凭证，请稍后重试。"
+                } else if pendingPasswordVerified, case AppError.parseFailed = error {
+                    presentPostAuthFailure(error)
                 } else { presentLoginFailure() }
             }
         }
@@ -452,7 +454,11 @@ final class AppState: ObservableObject {
             await rescheduleNotifications()
         } catch {
             guard !Task.isCancelled, session == webLoginSessionID else { return }
-            presentLoginFailure()
+            if case AppError.parseFailed = error {
+                presentPostAuthFailure(error)
+            } else {
+                presentLoginFailure()
+            }
         }
     }
 
@@ -469,6 +475,13 @@ final class AppState: ObservableObject {
         webLoginSessionID = UUID()
         showsWebLogin = true
         showNotice(InAppNotice(kind: .loginFailure, message: "可能是因为密码错误、触发验证码等原因"))
+    }
+
+    private func presentPostAuthFailure(_ error: Error) {
+        errorMessage = nil
+        webLoginSessionID = UUID()
+        showsWebLogin = false
+        showNotice(InAppNotice(kind: .loginFailure, message: error.localizedDescription))
     }
 
     func refresh() async {
